@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supervisión — Bio-Fix</title>
+<!-- Solo para el usuario "tecnica": auditoría, historia de lote y control estadístico de cotas -->
+<script>window.BIOFIX_PANTALLA = 'supervision';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --az:#0284c7; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; color:var(--tx); margin:0; padding:16px; }
+  .container{ max-width:1100px; margin:0 auto; }
+  h1{ font-size:18px; color:#0369a1; margin:0 0 12px; }
+  .tabs{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab{ flex:1; min-width:150px; padding:11px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
+  .tab.active{ background:var(--az); color:#fff; border-color:var(--az); }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .fila{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  input, select{ padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:8px; }
+  .btn{ background:var(--az); color:#fff; border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+  .btn.gris{ background:#fff; color:#475569; border:1px solid #cbd5e1; }
+  .tabla-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  th{ background:#f1f5f9; text-align:left; padding:6px 8px; border:1px solid var(--bx); font-size:12px; position:sticky; top:0; }
+  td{ padding:5px 8px; border:1px solid var(--bx); vertical-align:top; }
+  td.r{ text-align:right; font-variant-numeric:tabular-nums; }
+  tr.click{ cursor:pointer; } tr.click:hover td{ background:#f0f9ff; }
+  .pill{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; white-space:nowrap; }
+  .alta{ background:#fee2e2; color:#b91c1c; } .media{ background:#fef3c7; color:#92400e; } .baja{ background:#f1f5f9; color:#475569; }
+  .ok{ background:#dcfce7; color:#15803d; } .mal{ background:#fee2e2; color:#b91c1c; } .reg{ background:#fef3c7; color:#92400e; }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+  .kpi{ background:#fff; border:1px solid var(--bx); border-radius:10px; padding:10px 12px; }
+  .kpi .l{ font-size:11px; color:var(--mut); } .kpi .v{ font-size:22px; font-weight:800; margin-top:2px; }
+  .mut{ color:var(--mut); font-size:12px; }
+  .hide{ display:none; }
+  h2{ font-size:14px; margin:4px 0 8px; }
+  svg text{ font-size:10px; fill:#64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Supervisión</h1>
+  <div class="tabs">
+    <div class="tab active" id="tb_aud" onclick="ver('aud')">Auditoría</div>
+    <div class="tab" id="tb_lote" onclick="ver('lote')">Historia de lote</div>
+    <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
+  </div>
+
+  <!-- ================= AUDITORÍA ================= -->
+  <div id="p_aud">
+    <div class="fila">
+      <select id="audTipo" onchange="renderAud()"><option value="">Todos los tipos</option></select>
+      <input id="audBuscar" placeholder="Buscar lote / producto…" oninput="renderAud()">
+      <label class="mut"><input type="checkbox" id="audRev" onchange="cargarAud()"> Ver también revisados</label>
+      <button class="btn gris" onclick="cargarAud()">↻ Actualizar</button>
+    </div>
+    <div class="kpis" id="audKpis"></div>
+    <div class="card"><div class="tabla-wrap" id="audLista"><p class="mut">Cargando…</p></div></div>
+  </div>
+
+  <!-- ================= HISTORIA DE LOTE ================= -->
+  <div id="p_lote" class="hide">
+    <div class="fila">
+      <input id="loteNum" placeholder="N° de lote (ej: 1134)" onkeydown="if(event.key==='Enter') cargarLote()">
+      <button class="btn" onclick="cargarLote()">Buscar</button>
+    </div>
+    <div id="loteRes"><p class="mut">Ingresá un número de lote.</p></div>
+  </div>
+
+  <!-- ================= COTAS ================= -->
+  <div id="p_cotas" class="hide">
+    <div class="fila">
+      <select id="cOrigen" onchange="renderCotas()"><option value="">Máquina y Control</option><option>Máquina</option><option>Control de Calidad</option></select>
+      <select id="cProd" onchange="renderCotas()"><option value="">Todos los productos</option></select>
+      <input id="cMedida" placeholder="Medida…" oninput="renderCotas()">
+      <label class="mut"><input type="checkbox" id="cMin" checked onchange="renderCotas()"> Solo con 10+ valores numéricos</label>
+    </div>
+    <p class="mut">Cp/Cpk aparecen cuando cargás la tolerancia de esa cota (tabla <b>cotas_tolerancia</b> en Supabase). Tocá una fila para ver el gráfico de control.</p>
+    <div class="card" id="cGrafico" style="display:none"></div>
+    <div class="card"><div class="tabla-wrap" id="cLista"><p class="mut">Cargando…</p></div></div>
+  </div>
+</div>
+
+<script>
+var AUD = [], COTAS = [], ACT = 'aud';
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function fecha(f){ if(!f) return ''; var d = new Date(f); return isNaN(d) ? esc(f) : d.toLocaleString('es-AR', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'}); }
+function num(x, d){ if (x == null || x === '') return ''; var n = Number(x); return isNaN(n) ? esc(x) : n.toLocaleString('es-AR', {maximumFractionDigits: d == null ? 3 : d}); }
+function rpc(nombre, args){
+  return BIOFIX.sesion.then(function(){ return BIOFIX.supabase.rpc(nombre, args || {}); })
+    .then(function(r){ if (r.error) throw new Error(r.error.message); return r.data; });
+}
+function ver(t){
+  ACT = t;
+  ['aud','lote','cotas'].forEach(function(x){ $('p_'+x).className = x===t ? '' : 'hide'; $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
+  if (t === 'cotas' && !COTAS.length) cargarCotas();
+}
+
+/* ---------------- Auditoría ---------------- */
+function cargarAud(){
+  $('audLista').innerHTML = '<p class="mut">Cargando…</p>';
+  rpc('auditoria', { p_incluir_revisados: $('audRev').checked }).then(function(d){
+    AUD = d || [];
+    var tipos = {}; AUD.forEach(function(a){ tipos[a.tipo] = (tipos[a.tipo]||0) + 1; });
+    var sel = $('audTipo'), act = sel.value;
+    sel.innerHTML = '<option value="">Todos los tipos (' + AUD.length + ')</option>' +
+      Object.keys(tipos).map(function(t){ return '<option'+(t===act?' selected':'')+' value="'+esc(t)+'">'+esc(t)+' ('+tipos[t]+')</option>'; }).join('');
+    $('audKpis').innerHTML = ['alta','media','baja'].map(function(g){
+      var n = AUD.filter(function(a){ return a.gravedad === g && !a.revisado; }).length;
+      return '<div class="kpi"><div class="l">Gravedad '+g+'</div><div class="v">'+n+'</div></div>';
+    }).join('');
+    renderAud();
+  }).catch(function(e){ $('audLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+function renderAud(){
+  var t = $('audTipo').value, q = $('audBuscar').value.toLowerCase().trim();
+  var lista = AUD.filter(function(a){
+    return (!t || a.tipo === t) && (!q || ((a.lote||'')+' '+(a.producto||'')+' '+(a.detalle||'')).toLowerCase().indexOf(q) >= 0);
+  });
+  if (!lista.length){ $('audLista').innerHTML = '<p class="mut">Sin observaciones 🎉</p>'; return; }
+  $('audLista').innerHTML = '<table><thead><tr><th>Gravedad</th><th>Tipo</th><th>Lote</th><th>Producto</th><th>Medida</th><th>Detalle</th><th>Fecha</th><th></th></tr></thead><tbody>' +
+    lista.map(function(a, i){
+      return '<tr><td><span class="pill '+a.gravedad+'">'+a.gravedad+'</span></td><td>'+esc(a.tipo)+'</td>' +
+        '<td>'+(a.lote ? '<a href="#" onclick="irLote(\''+esc(a.lote)+'\');return false;">'+esc(a.lote)+'</a>' : '')+'</td>' +
+        '<td>'+esc(a.producto)+'</td><td>'+esc(a.medida)+'</td><td>'+esc(a.detalle)+(a.nota?'<div class="mut">Nota: '+esc(a.nota)+'</div>':'')+'</td><td>'+fecha(a.fecha)+'</td>' +
+        '<td>'+(a.revisado ? '<span class="pill ok">Revisado</span>' : '<button class="btn gris" onclick="marcar(\''+encodeURIComponent(a.clave)+'\')">Marcar revisado</button>')+'</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+function marcar(claveEnc){
+  var nota = prompt('Nota (opcional): qué se revisó o por qué está bien');
+  if (nota === null) return;
+  BIOFIX.supabase.from('auditoria_revisados').upsert({ clave: decodeURIComponent(claveEnc), nota: nota || null })
+    .then(function(r){ if (r.error) alert(r.error.message); else cargarAud(); });
+}
+function irLote(l){ ver('lote'); $('loteNum').value = l; cargarLote(); }
+
+/* ---------------- Historia de lote ---------------- */
+function cargarLote(){
+  var l = $('loteNum').value.trim(); if (!l) return;
+  $('loteRes').innerHTML = '<p class="mut">Buscando…</p>';
+  rpc('lote_historia', { p_lote: l }).then(function(h){
+    var r = h.resumen || {};
+    if (!r.movimientos){ $('loteRes').innerHTML = '<p class="mut">No hay movimientos para '+esc(h.lote)+'.</p>'; return; }
+    var prods = (h.productos||[]).map(function(p){ return esc(p.producto)+' · '+esc(p.medida)+' · '+esc(p.teton); }).join('<br>');
+    var html = '<div class="card"><h2>'+esc(h.lote)+'</h2><div class="mut">'+prods+'</div>' +
+      '<div class="mut" style="margin-top:6px">Primer movimiento '+fecha(r.primero)+' · último '+fecha(r.ultimo)+' · '+r.movimientos+' movimientos</div></div>';
+    html += '<div class="kpis">' + [['Ingresado', r.ingresado], ['Descarte calidad', r.descarte_calidad], ['Setup / excedente', r.descarte_setup_excedente],
+      ['Piezas de prueba', r.prueba], ['A Sala Blanca', r.sala_blanca], ['Salida', r.salida]].map(function(k){
+      return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+num(k[1],0)+'</div></div>'; }).join('') + '</div>';
+    html += '<div class="card"><h2>Dónde está hoy</h2>' + ((h.stock_actual||[]).length
+      ? '<table><thead><tr><th>Etapa</th><th>Producto</th><th>Medida</th><th>Tetón</th><th>Cant.</th></tr></thead><tbody>' +
+        h.stock_actual.map(function(s){ return '<tr><td>'+esc(s.etapa)+'</td><td>'+esc(s.producto)+'</td><td>'+esc(s.medida)+'</td><td>'+esc(s.teton)+'</td><td class="r">'+num(s.cantidad,0)+'</td></tr>'; }).join('') + '</tbody></table>'
+      : '<p class="mut">No queda stock de este lote en las etapas del Depósito.</p>') + '</div>';
+    html += '<div class="card"><h2>Movimientos</h2><div class="tabla-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Rech.</th><th>Responsable</th><th>Observación</th><th>Fila</th></tr></thead><tbody>' +
+      (h.movimientos||[]).map(function(m){
+        return '<tr'+(m.nulo?' style="opacity:.5"':'')+'><td>'+fecha(m.fecha)+'</td><td>'+esc(m.origen)+'</td><td>'+esc(m.destino)+'</td><td class="r">'+num(m.cantidad,0)+'</td><td class="r">'+(Number(m.rechazadas)?num(m.rechazadas,0):'')+'</td><td>'+esc(m.responsable)+'</td><td>'+esc(m.observacion)+'</td><td class="r">'+esc(m.fila)+'</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+    if ((h.cierres_maquina||[]).length) html += '<div class="card"><h2>Cierres de máquina</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Buenas</th><th>Rech.</th><th>Perdidas</th><th>Setup</th><th>Excedente</th></tr></thead><tbody>' +
+      h.cierres_maquina.map(function(c){ return '<tr><td>'+fecha(c.fecha)+'</td><td>'+esc(c.tipo)+'</td><td class="r">'+num(c.buenas,0)+'</td><td class="r">'+num(c.rechazadas,0)+'</td><td class="r">'+num(c.perdidas,0)+'</td><td class="r">'+num(c.setup,0)+'</td><td class="r">'+num(c.excedente,0)+'</td></tr>'; }).join('') + '</tbody></table></div>';
+    if ((h.control_calidad||[]).length) html += '<div class="card"><h2>Control de Calidad</h2><table><thead><tr><th>Inicio</th><th>Fin</th><th>Original</th><th>OK</th><th>Rech.</th><th>Responsable</th><th>Estado</th></tr></thead><tbody>' +
+      h.control_calidad.map(function(c){ return '<tr><td>'+fecha(c.inicio)+'</td><td>'+fecha(c.fin)+'</td><td class="r">'+num(c.cantidad_original,0)+'</td><td class="r">'+num(c.ok,0)+'</td><td class="r">'+num(c.rechazadas,0)+'</td><td>'+esc(c.responsable)+'</td><td>'+esc(c.subestado)+'</td></tr>'; }).join('') + '</tbody></table></div>';
+    $('loteRes').innerHTML = html;
+  }).catch(function(e){ $('loteRes').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+
+/* ---------------- Cotas ---------------- */
+function cargarCotas(){
+  rpc('cotas_estadistica').then(function(d){
+    COTAS = d || [];
+    var prods = {}; COTAS.forEach(function(c){ if (c.producto) prods[c.producto] = 1; });
+    $('cProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+    renderCotas();
+  }).catch(function(e){ $('cLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+function pillCpk(v){ if (v == null) return ''; var c = v >= 1.33 ? 'ok' : (v >= 1 ? 'reg' : 'mal'); return '<span class="pill '+c+'">'+num(v,2)+'</span>'; }
+function renderCotas(){
+  var o = $('cOrigen').value, p = $('cProd').value, m = $('cMedida').value.toLowerCase().trim(), min = $('cMin').checked;
+  var lista = COTAS.filter(function(c){
+    return (!o || c.origen === o) && (!p || c.producto === p) && (!m || String(c.medida||'').toLowerCase().indexOf(m) >= 0) && (!min || c.numericas >= 10);
+  });
+  if (!lista.length){ $('cLista').innerHTML = '<p class="mut">Sin cotas para ese filtro.</p>'; return; }
+  window._CL = lista;
+  $('cLista').innerHTML = '<table><thead><tr><th>Origen</th><th>Producto</th><th>Medida</th><th>Cota</th><th>Valores</th><th>Media</th><th>Desvío</th><th>Mín</th><th>Máx</th><th>LCI</th><th>LCS</th><th>Tol.</th><th>Cp</th><th>Cpk</th><th>Fuera tol.</th><th>Atributo OK / No OK</th></tr></thead><tbody>' +
+    lista.map(function(c, i){
+      var tol = (c.lsl != null && c.usl != null) ? num(c.lsl)+' – '+num(c.usl) : '<span class="mut">sin cargar</span>';
+      return '<tr class="click" onclick="grafico('+i+')"><td>'+esc(c.origen)+'</td><td>'+esc(c.producto)+'</td><td>'+esc(c.medida)+'</td><td><b>'+esc(c.letra)+'</b></td>' +
+        '<td class="r">'+c.numericas+'</td><td class="r">'+num(c.media,4)+'</td><td class="r">'+num(c.desvio,4)+'</td><td class="r">'+num(c.minimo)+'</td><td class="r">'+num(c.maximo)+'</td>' +
+        '<td class="r">'+num(c.lci,4)+'</td><td class="r">'+num(c.lcs,4)+'</td><td>'+tol+'</td><td class="r">'+pillCpk(c.cp)+'</td><td class="r">'+pillCpk(c.cpk)+'</td>' +
+        '<td class="r">'+(c.fuera_tolerancia ? '<span class="pill mal">'+c.fuera_tolerancia+'</span>' : '')+'</td><td class="r">'+(c.atributo_ok||c.atributo_no_ok ? c.atributo_ok+' / '+c.atributo_no_ok : '')+'</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+function grafico(i){
+  var c = window._CL[i], box = $('cGrafico');
+  box.style.display = ''; box.innerHTML = '<p class="mut">Cargando serie…</p>';
+  box.scrollIntoView({behavior:'smooth', block:'start'});
+  rpc('cotas_serie', { p_origen: c.origen, p_producto: c.producto, p_medida: c.medida, p_letra: c.letra }).then(function(s){
+    if (!s.length){ box.innerHTML = '<p class="mut">Sin valores numéricos.</p>'; return; }
+    var W = Math.max(640, box.clientWidth - 32), H = 260, pl = 50, pr = 70, pt = 14, pb = 26;
+    var vals = s.map(function(x){ return Number(x.valor); });
+    var refs = [c.lci, c.lcs, c.lsl, c.usl].filter(function(v){ return v != null; }).map(Number);
+    var lo = Math.min.apply(null, vals.concat(refs)), hi = Math.max.apply(null, vals.concat(refs));
+    var pad = (hi - lo) * 0.08 || 0.01; lo -= pad; hi += pad;
+    var X = function(k){ return pl + (s.length === 1 ? 0 : k * (W - pl - pr) / (s.length - 1)); };
+    var Y = function(v){ return pt + (hi - v) * (H - pt - pb) / (hi - lo); };
+    var linea = function(v, color, dash, txt){ if (v == null) return ''; var y = Y(Number(v));
+      return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" stroke="'+color+'" stroke-width="1.2" '+(dash?'stroke-dasharray="5 4"':'')+'/><text x="'+(W-pr+4)+'" y="'+(y+3)+'">'+txt+' '+num(v,3)+'</text>'; };
+    var fuera = function(v){ return (c.lsl != null && (v < c.lsl || v > c.usl)) || v < c.lci || v > c.lcs; };
+    var pts = s.map(function(x, k){ return X(k)+','+Y(Number(x.valor)); }).join(' ');
+    var dots = s.map(function(x, k){ var v = Number(x.valor), f = fuera(v);
+      return '<circle cx="'+X(k)+'" cy="'+Y(v)+'" r="'+(f?3.5:2.2)+'" fill="'+(f?'#dc2626':'#0284c7')+'"><title>'+esc(x.lote)+' · '+num(v,4)+' · '+fecha(x.fecha)+'</title></circle>'; }).join('');
+    var ticks = [lo, (lo+hi)/2, hi].map(function(v){ return '<text x="4" y="'+(Y(v)+3)+'">'+num(v,3)+'</text>'; }).join('');
+    box.innerHTML = '<h2>'+esc(c.producto)+' · '+esc(c.medida)+' · cota '+esc(c.letra)+' <span class="mut">('+esc(c.origen)+', '+s.length+' valores)</span></h2>' +
+      '<svg width="100%" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="max-height:300px">' + ticks +
+      linea(c.media, '#0f172a', false, 'Media') + linea(c.lci, '#f59e0b', true, 'LCI') + linea(c.lcs, '#f59e0b', true, 'LCS') +
+      linea(c.lsl, '#dc2626', false, 'LIE') + linea(c.usl, '#dc2626', false, 'LSE') +
+      '<polyline points="'+pts+'" fill="none" stroke="#93c5fd" stroke-width="1"/>' + dots + '</svg>' +
+      '<p class="mut">Puntos rojos: fuera de los límites de control (±3σ) o de tolerancia. Pasá el dedo o el mouse sobre un punto para ver lote y fecha.</p>';
+  }).catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+
+cargarAud();
+</script>
+</body>
+</html>
