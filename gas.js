@@ -114,7 +114,26 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
 
   /* ---------------- llamada al Apps Script ---------------- */
+  /** Guarda cuánto tardó cada llamada (tabla api_tiempos) para saber qué conviene acelerar.
+   *  No espera la respuesta: no agrega demora a la pantalla. */
+  function medir(fn, t0, ok) {
+    try {
+      sb.from('api_tiempos').insert({ pantalla: PANTALLA || 'inicio', fn: fn, ms: Math.round(performance.now() - t0), ok: ok })
+        .then(function () {}, function () {});
+    } catch (e) { /* nunca romper la pantalla por la medición */ }
+  }
+
   function llamar(fn, args) {
+    return sesionLista.then(function () {
+      var t0 = performance.now();   // se mide desde que hay sesión (no cuenta el tiempo de login)
+      return llamarSinMedir(fn, args).then(
+        function (d) { medir(fn, t0, true); return d; },
+        function (e) { medir(fn, t0, false); throw e; }
+      );
+    });
+  }
+
+  function llamarSinMedir(fn, args) {
     return sesionLista.then(function () { return sb.auth.getSession(); }).then(function (r) {
       var s = r.data && r.data.session;
       if (!s) { mostrarLogin(); throw new Error('Sesión vencida. Volvé a ingresar.'); }
