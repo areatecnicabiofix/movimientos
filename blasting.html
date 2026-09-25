@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blasting — Bio-Fix</title>
+<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
+<script>window.BIOFIX_PANTALLA = 'blasting';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:960px; margin:0 auto; }
+  h1{ font-size:18px; margin-bottom:16px; color:#0369a1; font-weight:600; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2{ font-size:14px; margin:0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
+  .grid-3{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+  label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
+  select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  select:focus, input:focus{ border-color:var(--acc); outline:none; }
+  .badge-stock{ background:#e0f2fe; color:#0369a1; font-weight:700; padding:4px; border-radius:4px; text-align:center; font-size:14px; border:1px solid #93c5fd; }
+  .btn{ color:#fff; border:none; padding:10px 18px; font-size:14px; font-weight:600; border-radius:6px; cursor:pointer; margin-top:12px; }
+  .btn-borrador{ background:#fff; color:#b45309; border:1px solid #f59e0b; }
+  .btn-final{ background:#16a34a; }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .lote-card{ border:1px solid #fde68a; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
+  .lote-card-header{ font-weight:700; font-size:13px; color:#92400e; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .badge-sub{ display:inline-block; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700; background:#fef3c7; color:#92400e; }
+  .hint{ font-size:11px; color:var(--mut); margin:4px 0 0 0; }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{ flex:1; padding:11px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
+  .tab.active{ background:#0284c7; color:#fff; border-color:#0284c7; }
+  .hide{ display:none; }
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th{ background:#f1f5f9; text-align:left; padding:5px 7px; border:1px solid #e2e8f0; }
+  td{ padding:4px 7px; border:1px solid #e2e8f0; }
+  .aviso50{ font-size:12px; font-weight:700; margin-top:4px; }
+   
+  .estado-actual{ font-size:16px; font-weight:800; padding:10px 14px; border-radius:10px; text-align:center; margin-bottom:14px; }
+  .paso{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
+  .paso.activo{ border-color:#7c3aed; background:#faf5ff; box-shadow:0 0 0 2px #ede9fe; }
+  .paso.hecho{ border-color:#bbf7d0; background:#f0fdf4; }
+  .paso-titulo{ font-weight:700; font-size:13px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .horas{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .horas > div{ flex:1; min-width:120px; }
+  .btn-accion{ background:#7c3aed; color:#fff; border:none; padding:12px 18px; font-size:15px; font-weight:800; border-radius:10px; cursor:pointer; width:100%; margin-top:8px; }
+  .btn-mini{ border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+  .chip{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Blasting / Blastinado — Bio-Fix</h1>
+
+
+  <div class="tabs">
+    <div class="tab active" id="tb_bla" onclick="verTab('bla')">Blasting</div>
+    <div class="tab" id="tb_ind" onclick="verTab('ind')">Indicadores / Bandejas</div>
+  </div>
+
+
+  
+  <div id="paneBla">
+    <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+      <h2>1. Seleccionar lote para blastinar </h2>
+      <div class="grid-3">
+        <div><label>Lotes disponibles</label><select id="comboLotes" onchange="seleccionarLote()"></select></div>
+        <div><label>Cantidad disponible</label><div id="lblDisponible" class="badge-stock">0 u.</div></div>
+      </div>
+      <p class="hint">Cada ítem ya viene sumado por Lote, sin importar quién hizo el Control de Calidad: podés enviar la totalidad del lote de una sola vez.</p>
+    </div>
+    <div class="card">
+      <h2>2. Registrar blasting</h2>
+      <input type="hidden" id="hidFila" value="">
+      <div class="grid-3">
+        <div><label>Producto</label><input id="txtProducto" readonly style="background:#f1f5f9;"></div>
+        <div><label>Medida</label><input id="txtMedida" readonly style="background:#f1f5f9;"></div>
+        <div><label>Lote</label><input id="txtLote" readonly style="background:#f1f5f9;"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div><label>Con / Sin Teton (viene del proceso anterior)</label><input id="txtTeton" readonly style="background:#f1f5f9;" placeholder="Se completa solo"></div>
+        <div><label>Cantidad OK</label><input id="txtCantidad" type="number" min="1"></div>
+        <div><label>Rechazadas</label><input id="txtRechazadas" type="number" min="0" value="0"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div><label>Responsable (quien controla esta partida)</label>
+          <select id="responsable"><option value="">— Seleccionar —</option><option value="Javier">Javier</option><option value="Miguel">Miguel</option><option value="Marcos">Marcos</option></select>
+        </div>
+      </div>
+      <div style="margin-top:12px;"><label>Observaciones</label><textarea id="txtObservaciones" rows="2" placeholder="Notas sobre el lote..."></textarea></div>
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+        <span id="msg" style="font-size:13px;"></span>
+        <button class="btn btn-borrador" id="btnBorrador" onclick="guardarBlasting('borrador')">Agregar a blasting (borrador)</button>
+      </div>
+    </div>
+    <div class="card" id="cardEnProceso" style="border-color:#fde68a; background:#fffbeb;">
+      <h2>En blasting (borradores) <span id="cntBorr" style="font-size:12px; background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:8px;">0</span></h2>
+      <p class="hint" style="margin-bottom:10px;">Piezas que se estan blastinando. El borrador se cierra solo cuando se finaliza el Control del lote (pestaña Indicadores/Bandejas); acá solo guardás avances o eliminás por error.</p>
+      <div id="listaBorradores"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
+    </div>
+  </div>
+
+
+  
+  <div id="paneInd" class="hide">
+    <div id="indControl"></div>
+    <div id="indZona"><p class="hint">Cargando…</p></div>
+    <div class="card">
+      <h2>Progreso de lotes en blasting</h2>
+      <div id="listaInd"><p class="hint">Cargando…</p></div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  var DATA = [];
+  var BORRADORES = [];
+
+
+  function verTab(cual){
+    var b = (cual === 'bla');
+    document.getElementById('paneBla').className = b ? '' : 'hide';
+    document.getElementById('paneInd').className = b ? 'hide' : '';
+    document.getElementById('tb_bla').className = b ? 'tab active' : 'tab';
+    document.getElementById('tb_ind').className = b ? 'tab' : 'tab active';
+    if (!b) cargarBandejaActual();
+  }
+
+
+   
+  function actualizar() {
+    
+    refrescarBorradores();
+    
+    google.script.run
+      .withSuccessHandler(function(res){
+        DATA = res || [];
+        try { poblarCombo(); } catch (err) {
+          var cb = document.getElementById('comboLotes');
+          if (cb) cb.innerHTML = '<option value="">Error al armar la lista</option>';
+        }
+      })
+      .withFailureHandler(function(e){ msg('Error al leer inventario: ' + e.message, false); })
+      .blaObtenerDisponibles();
+  }
+  function poblarCombo() {
+    var combo = document.getElementById('comboLotes');
+    if (!DATA.length) { combo.innerHTML = '<option value="">No hay lotes esperando blasting</option>'; limpiar(); return; }
+    
+    
+    combo.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
+  DATA.map(function(x, i){
+    return '<option value="' + i + '">' + x.producto + ' — ' + x.medida + ' (' + x.lote + ') · ' +
+      (x.disponible || 0) + 'u. disponibles</option>';
+  }).join('');
+    limpiar();
+  }
+  function seleccionarLote() {
+    var idx = document.getElementById('comboLotes').value;
+    if (idx === '' || !DATA[idx]) { limpiar(); return; }
+    var it = DATA[idx];
+    document.getElementById('hidFila').value     = it.fila || '';
+    document.getElementById('txtProducto').value = it.producto || '';
+    document.getElementById('txtMedida').value   = it.medida || '';
+    document.getElementById('txtLote').value     = it.lote || '';
+    document.getElementById('txtTeton').value    = it.teton || '';
+    document.getElementById('txtCantidad').value = it.disponible || '';
+    document.getElementById('lblDisponible').textContent = (it.disponible || 0) + ' u.';
+  }
+  function limpiar() {
+    document.getElementById('hidFila').value = '';
+    ['txtProducto','txtMedida','txtLote','txtTeton','txtCantidad'].forEach(function(id){ document.getElementById(id).value = ''; });
+    document.getElementById('txtRechazadas').value = 0;
+    document.getElementById('lblDisponible').textContent = '0 u.';
+  }
+  function guardarBlasting(modo) {
+    var producto = document.getElementById('txtProducto').value;
+    var lote     = document.getElementById('txtLote').value;
+    var cantidad = document.getElementById('txtCantidad').value;
+    var resp     = document.getElementById('responsable').value;
+    
+    if ((!producto || !lote)) {
+      var cb = document.getElementById('comboLotes');
+      var iSel = cb ? cb.value : '';
+      if (iSel !== '' && DATA[iSel]) {
+        var X = DATA[iSel];
+        document.getElementById('txtProducto').value = X.producto;
+        document.getElementById('txtMedida').value   = X.medida || '';
+        document.getElementById('txtLote').value     = X.lote;
+        document.getElementById('txtTeton').value    = X.teton || '';
+        producto = X.producto; lote = X.lote;
+      }
+    }
+    if (!producto || !lote) { msg('Elegí un lote en la lista de arriba.', false); return; }
+    if (!resp) { msg('Tenés que seleccionar un Responsable.', false); return; }
+    if (!cantidad || Number(cantidad) <= 0) { msg('Completá la cantidad.', false); return; }
+    var datos = {
+      fila: Number(document.getElementById('hidFila').value) || 0, producto: producto,
+      medida: document.getElementById('txtMedida').value, lote: lote, teton: document.getElementById('txtTeton').value,
+      cantidad: Number(cantidad) || 0, rechazadas: Number(document.getElementById('txtRechazadas').value) || 0,
+      responsable: resp, observaciones: document.getElementById('txtObservaciones').value, modo: modo
+    };
+    var btnB = document.getElementById('btnBorrador');
+    if (btnB) btnB.disabled = true;
+    msg('Guardando…', true);
+    var listo = false;
+    
+    var guard = setTimeout(function(){
+      if (!listo) { if (btnB) btnB.disabled = false; msg('El servidor no respondió. Probá de nuevo o recargá la página.', false); }
+    }, 20000);
+    google.script.run
+      .withSuccessHandler(function(r){
+        listo = true; clearTimeout(guard);
+        if (btnB) btnB.disabled = false;
+        msg((r && r.msg) ? r.msg : 'Guardado.', true);
+        document.getElementById('txtObservaciones').value = ''; actualizar();
+      })
+      .withFailureHandler(function(e){
+        listo = true; clearTimeout(guard);
+        if (btnB) btnB.disabled = false;
+        msg(e.message, false);
+      })
+      .blaRegistrar(datos);
+  }
+  function refrescarBorradores() {
+    google.script.run
+      .withSuccessHandler(function(list){
+        BORRADORES = list || [];
+        try { renderBorradores(BORRADORES); } catch (err) {
+          document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">Error al mostrar los borradores: ' + err.message + '</p>';
+        }
+      })
+      .withFailureHandler(function(e){ document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + e.message + '</p>'; })
+      .blaListar();
+  }
+ function renderBorradores(list) {
+    document.getElementById('cntBorr').textContent = list.length;
+    var cont = document.getElementById('listaBorradores');
+    if (!list.length) { cont.innerHTML = '<p style="color:var(--mut);font-size:13px;">No hay piezas en blasting.</p>'; return; }
+   
+    cont.innerHTML = list.map(function(b){
+      var f = b.fila;
+     
+      
+      
+      var estaEnProceso = (b.estado === "En proceso");
+     
+      
+      var attrEliminar = estaEnProceso
+        ? 'disabled title="No se puede eliminar un lote que ya está en proceso" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;cursor:not-allowed;margin:0;padding:7px 12px;font-size:12px;"'
+        : 'style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminar(' + f + ')"';
+
+
+      return '<div class="lote-card">' +
+        '<div class="lote-card-header">' +
+          '<span>' + b.producto + ' · ' + b.medida + '  <span style="color:#94a3b8;font-weight:400;">(' + b.lote + ')</span></span>' +
+          '<span class="badge-sub">en blasting</span>' +
+        '</div>' +
+        '<div class="grid-3">' +
+          '<div><label>Con/Sin Teton</label><input value="' + (b.teton || '—') + '" readonly style="background:#f1f5f9;"></div>' +
+          '<div><label>Cantidad OK</label><input type="number" min="0" id="bcant_' + f + '" value="' + b.cantidad + '"></div>' +
+          '<div><label>Rechazadas</label><input type="number" min="0" id="brech_' + f + '" value="' + (b.rechazadas || 0) + '"></div>' +
+        '</div>' +
+        '<div class="grid-3" style="margin-top:10px;">' +
+          '<div><label>Responsable</label><input id="bresp_' + f + '" value="' + (b.responsable || '') + '"></div>' +
+          '<div style="grid-column:span 2;"><label>Observaciones</label><input id="bobs_' + f + '" value="' + (b.observaciones || '') + '"></div>' +
+        '</div>' +
+        '<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center; margin-top:10px;">' +
+          
+          '<button class="btn" ' + attrEliminar + '>🗑 Eliminar</button>' +
+          '<button class="btn" style="background:#0284c7;color:#fff;margin:0;padding:7px 14px;font-size:12px;" onclick="guardarAvance(' + f + ')">💾 Guardar avance</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+}
+  function datosCard(f) {
+    return {
+      fila: f, cantidad: Number(document.getElementById('bcant_' + f).value) || 0,
+      rechazadas: Number(document.getElementById('brech_' + f).value) || 0,
+      responsable: document.getElementById('bresp_' + f).value, observaciones: document.getElementById('bobs_' + f).value
+    };
+  }
+  function guardarAvance(f) {
+    var d = datosCard(f);
+    google.script.run.withSuccessHandler(function(r){ msg(r.msg, true); actualizar(); }).withFailureHandler(function(e){ msg(e.message, false); }).blaActualizar(d);
+  }
+  function eliminar(f) {
+    if (!confirm('¿Eliminar este borrador? El lote vuelve a la lista de espera de blasting.')) return;
+    google.script.run.withSuccessHandler(function(r){ msg(r.msg, true); actualizar(); }).withFailureHandler(function(e){ msg(e.message, false); }).blaEliminar({ fila: f });
+  }
+  function msg(t, ok) {
+    var m = document.getElementById('msg'); if(!m) return; m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
+    if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent = ''; }, 4000);
+  }
+
+
+   
+  var BND_LOTES = [];
+  var BND_COMPLETOS = [];
+  var PROXIMA_BANDEJA = '—';
+  function horaAhora(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function imsg(t, ok){ var m=document.getElementById('imsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
+  function tl(v){ return (v===''||v==null)?'—':v; }
+
+
+  
+  
+  
+  function cargarBandejaActual(){
+    document.getElementById('indZona').innerHTML = '<p class="hint">Cargando…</p>';
+    document.getElementById('indControl').innerHTML = '';
+    cargarControlLote();
+    google.script.run
+      .withSuccessHandler(function(d){
+        if (d) { renderEnCurso(d); cargarPanel(); return; }
+        google.script.run
+          .withSuccessHandler(function(lotes){
+            BND_LOTES = lotes || [];
+            google.script.run
+              .withSuccessHandler(function(comp){ BND_COMPLETOS = comp || []; renderIniciar(); cargarPanel(); })
+              .withFailureHandler(function(e){ BND_COMPLETOS = []; renderIniciar(); cargarPanel(); })
+              .bndLotesCompletos();
+          })
+          .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+          .bndLotes();
+      })
+      .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+      .bndActual();
+  }
+  function cargarControlLote(){
+    google.script.run
+      .withSuccessHandler(function(ctrl){ if (ctrl) renderControlLote(ctrl); else document.getElementById('indControl').innerHTML = ''; })
+      .withFailureHandler(function(e){ document.getElementById('indControl').innerHTML = '<p style="color:#b91c1c;font-size:12px;">'+e.message+'</p>'; })
+      .bndControlEnCurso();
+  }
+
+
+   
+  function renderIniciar(){
+    var htmlCompletos='';
+    if (BND_COMPLETOS && BND_COMPLETOS.length){
+      htmlCompletos = BND_COMPLETOS.map(function(L,i){
+        return '<div class="card" style="border-color:#86efac; background:#f0fdf4; margin-bottom:14px;">'+
+          '<h2 style="color:#15803d;">✅ Lote 100% blastinado — listo para Control</h2>'+
+          '<p style="font-size:13px; color:#166534; margin:0 0 10px;"><b>'+L.producto+' · '+L.medida+'</b> ('+L.lote+') — <b>'+L.cantidad+' blastinadas</b></p>'+
+          '<button class="btn btn-final" style="background:#0284c7;width:100%;" onclick="iniciarControlLote('+i+')">🔍 Iniciar Control de '+L.lote+'</button>'+
+          '<div style="margin-top:6px;"><span id="fmsg'+i+'" style="font-size:13px;"></span></div>'+
+        '</div>';
+      }).join('');
+    }
+
+
+    var hoy=new Date(); var fh=hoy.getFullYear()+'-'+('0'+(hoy.getMonth()+1)).slice(-2)+'-'+('0'+hoy.getDate()).slice(-2);
+    if (!BND_LOTES.length){
+      var avisoSinLotes = BND_COMPLETOS.length
+        ? ''
+        : '<div class="card" style="border-color:#fca5a5; background:#fef2f2;"><h2 style="color:#b91c1c;">No hay lotes en blasting</h2><p style="font-size:13px; color:#7f1d1d; margin:0;">No hay lotes esperando blastinar. En la pestaña <b>Blasting</b> tiene que haber un lote en <b>PARA BLASTING</b>.</p></div>';
+      document.getElementById('indZona').innerHTML = htmlCompletos + avisoSinLotes;
+      return;
+    }
+    var opts='<option value="">— Elegí el lote en blasting —</option>'+BND_LOTES.map(function(x,i){
+      return '<option value="'+i+'">'+x.producto+' · '+x.medida+' ('+x.lote+' · '+(x.teton||'')+') — disponible '+x.cantidad+'</option>';
+    }).join('');
+    document.getElementById('indZona').innerHTML = htmlCompletos +
+      '<div class="card" style="border-color:#c4b5fd; background:#faf5ff;">'+
+        '<h2 style="color:#6d28d9;">Iniciar bandeja (armado)</h2>'+
+        '<div style="margin-bottom:12px;"><label>Lote en blasting</label><select id="iLote" onchange="onLote()">'+opts+'</select></div>'+
+        '<div class="grid-3">'+
+          '<div><label>Fecha</label><input id="iFecha" type="date" value="'+fh+'" disabled style="background:#f1f5f9;"></div>'+
+          '<div><label>N° Bandeja (automático)</label><input id="iBandeja" value="'+PROXIMA_BANDEJA+'" readonly style="background:#f1f5f9;"></div>'+
+          '<div><label>Operario</label><select id="iOperario"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel</option><option>Marcos</option></select></div>'+
+        '</div>'+
+        '<div class="grid-3" style="margin-top:12px;">'+
+          '<div><label>Cuántas piezas van en esta bandeja (máx 50)</label><input id="iCant" type="number" min="1" placeholder="Ej: 50" oninput="chequear50()"><div id="aviso50" style="font-size:12px;font-weight:700;margin-top:4px;"></div></div>'+
+          '<div><label>Hora inicio armado (+ orings)</label><input id="iHora" type="time" value="'+horaAhora()+'"></div>'+
+          '<div style="display:flex;align-items:flex-end;"><button class="btn btn-final" style="background:#7c3aed;width:100%;" onclick="iniciarBandeja()">Iniciar armado ▶</button></div>'+
+        '</div>'+
+        '<div style="margin-top:8px;"><span id="imsg" style="font-size:13px;"></span></div>'+
+      '</div>';
+  }
+  function iniciarControlLote(i){
+    var L=BND_COMPLETOS[i]; if(!L) return;
+    var fm=document.getElementById('fmsg'+i);
+    if(fm){ fm.textContent='Iniciando control…'; fm.style.color='#15803d'; }
+    google.script.run.withSuccessHandler(function(r){ cargarBandejaActual(); })
+      .withFailureHandler(function(e){ if(fm){fm.textContent=e.message; fm.style.color='#b91c1c';} })
+      .bndIniciarControlLote({ producto:L.producto, medida:L.medida, lote:L.lote, teton:L.teton, hora:horaAhora() });
+  }
+  function onLote(){
+    chequear50();
+    var idx = document.getElementById('iLote').value;
+    var elB = document.getElementById('iBandeja');
+    if (idx === '' || !BND_LOTES[idx]) { if (elB) elB.value = '—'; return; }
+    var L = BND_LOTES[idx];
+    if (elB) elB.value = '…';
+    google.script.run
+      .withSuccessHandler(function(n){ if (elB) elB.value = n || 1; })
+      .withFailureHandler(function(){ if (elB) elB.value = 1; })
+      .bndProximoNumero(L.producto, L.medida, L.lote);
+  }
+  function chequear50(){
+    var idx=document.getElementById('iLote').value, el=document.getElementById('iCant'), a=document.getElementById('aviso50');
+    if(!el||!a) return; var v=Number(el.value)||0;
+    if(idx!=='' && BND_LOTES[idx]){ var disp=BND_LOTES[idx].cantidad||0; if(v>disp){ a.textContent='⚠ No hay más de '+disp+' disponibles en ese lote.'; a.style.color='#b91c1c'; return; } }
+    if(v>50){ a.textContent='⚠ Máximo 50 por bandeja.'; a.style.color='#b91c1c'; }
+    else if(v===50){ a.textContent='Bandeja llena (50).'; a.style.color='#b45309'; }
+    else a.textContent='';
+  }
+  function iniciarBandeja(){
+    var idx=document.getElementById('iLote').value;
+    if(idx==='' || !BND_LOTES[idx]){ imsg('Elegí el lote en blasting.', false); return; }
+    var L=BND_LOTES[idx], cant=Number(document.getElementById('iCant').value)||0;
+    if(cant<=0){ imsg('Cargá cuántas piezas van.', false); return; }
+    if(cant>50){ imsg('Máximo 50 por bandeja.', false); return; }
+    if(cant>(L.cantidad||0)){ imsg('Supera lo disponible del lote.', false); return; }
+    var fv=document.getElementById('iFecha').value;
+    var p={ fecha:(fv?fv.split('-')[2]+'/'+fv.split('-')[1]+'/'+fv.split('-')[0]:''), bandeja:document.getElementById('iBandeja').value,
+      operario:document.getElementById('iOperario').value, producto:L.producto, lote:L.lote, medida:L.medida, teton:L.teton,
+      cantidad:cant, hora:document.getElementById('iHora').value||horaAhora() };
+    if(!p.operario){ imsg('Elegí el operario.', false); return; }
+    google.script.run.withSuccessHandler(function(){ cargarBandejaActual(); }).withFailureHandler(function(e){ imsg(''+e.message, false); }).bndIniciar(p);
+  }
+
+
+   
+  function selResp(id, def){ var ops=['Javier','Miguel','Marcos']; var o=ops.map(function(x){return '<option'+(x===def?' selected':'')+'>'+x+'</option>';}).join(''); return '<select id="'+id+'">'+o+'</select>'; }
+  function renderEnCurso(d){
+    var enPausa = !!(d.pausaDesde && String(d.pausaDesde).trim());
+    var est = String(d.estado||'').toLowerCase();
+    var carteles = {
+      'armando':['ARMANDO LA BANDEJA','#ede9fe','#6d28d9'],
+      'armado listo':['Armado listo — empezá el blastinado','#fef9c3','#854d0e'],
+      'blastinando':['BLASTINANDO','#dbeafe','#1d4ed8']
+    };
+    var c = enPausa ? ['⏸ EN PAUSA','#fde68a','#92400e'] : (carteles[est] || ['—','#f1f5f9','#334155']);
+ 
+    function fila(label, val){ return '<div style="flex:1;min-width:120px;"><label>'+label+'</label><input value="'+tl(val)+'" readonly style="background:#f1f5f9;"></div>'; }
+    function pasoBox(cls, titulo, chip, cuerpo){ return '<div style="border:1px solid '+(cls==='act'?'#7c3aed':(cls==='ok'?'#bbf7d0':'#e2e8f0'))+';background:'+(cls==='act'?'#faf5ff':(cls==='ok'?'#f0fdf4':'#fff'))+';border-radius:10px;padding:12px;margin-bottom:10px;"><div style="font-weight:700;font-size:13px;display:flex;justify-content:space-between;margin-bottom:8px;"><span>'+titulo+'</span>'+(chip||'')+'</div>'+cuerpo+'</div>'; }
+    function chipOK(t){ return '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:7px;background:#dcfce7;color:#15803d;">✓ '+t+' min</span>'; }
+    function btn(txt,color,onclick){ return '<button style="background:'+color+';color:#fff;border:none;padding:12px 18px;font-size:15px;font-weight:800;border-radius:10px;cursor:pointer;width:100%;margin-top:8px;" onclick="'+onclick+'">'+txt+'</button>'; }
+    function botonesPausa(){
+      if(enPausa) return btn('▶ Reanudar (volví)','#16a34a','reanudar()');
+      return '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">'+
+        '<select id="eMotivo" style="width:auto;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Fin de Jornada</option></select>'+
+        '<button style="background:#b45309;color:#fff;border:none;padding:9px 14px;font-weight:700;border-radius:8px;cursor:pointer;" onclick="pausar()">⏸ Pausa</button></div>';
+    }
+ 
+    var cuA = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'+fila('Inicio', d.hIniArm)+fila('Fin', d.hFinArm)+fila('Pausa (min)', d.pausaArm||0)+'</div>';
+    if(est==='armando'){ cuA += botonesPausa(); if(!enPausa){ cuA += '<div class="grid-3" style="margin-top:8px;"><div><label>Responsable armado</label>'+selResp('respArmado',d.operario)+'</div><div style="grid-column:2/4;"><label>Observación del armado (opcional)</label><input id="obsArmado" placeholder="Ej: faltaban orings..."></div></div>'; cuA += btn('Terminé el armado ✓','#7c3aed',"marcar('finArmado')"); } }
+    var pA = pasoBox(d.hFinArm?'ok':(est==='armando'?'act':''), '1) Armado (+ orings)', d.tArm!==''&&d.hFinArm?chipOK(d.tArm):'', cuA);
+ 
+    var cuB = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'+fila('Inicio', d.hIniBla)+fila('Fin', d.hFinBla)+fila('Pausa (min)', d.pausaBla||0)+'</div>';
+    if(est==='armado listo') cuB += btn('Empezar el blastinado ▶','#1d4ed8',"marcar('iniBlast')");
+    if(est==='blastinando'){ cuB += botonesPausa(); if(!enPausa){ cuB += '<div class="grid-3" style="margin-top:8px;"><div><label>Responsable blastinado</label>'+selResp('respBlast',d.operario)+'</div><div style="grid-column:2/4;"><label>Observación del blastinado (opcional)</label><input id="obsBlast" placeholder="Ej: ..."></div></div>'; cuB += btn('Terminé el blastinado ✓ (bandeja lista)','#1d4ed8',"marcar('finBlast')"); } }
+    var pB = pasoBox(d.hFinBla?'ok':(est==='blastinando'||est==='armado listo'?'act':''), '2) Blastinado', d.tBla!==''&&d.hFinBla?chipOK(d.tBla):'', cuB);
+ 
+    document.getElementById('indZona').innerHTML =
+      '<div class="card" style="border-color:#a78bfa;">'+
+        '<div style="font-size:16px;font-weight:800;padding:10px 14px;border-radius:10px;text-align:center;margin-bottom:12px;background:'+c[1]+';color:'+c[2]+';">'+c[0]+'</div>'+
+        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;text-align:center;">'+tl(d.lote)+' · '+tl(d.producto)+' · '+tl(d.medida)+' · Bandeja '+tl(d.bandeja)+' · <span style="color:#6d28d9;">'+d.cantidad+' implantes</span> · '+tl(d.operario)+'</div>'+
+        '<div id="panelPromedio" style="text-align:center;margin-bottom:12px;font-size:12px;color:#64748b;">…</div>'+
+        pA + pB +
+        (d.motivos?'<div style="font-size:11px;color:#92400e;margin-top:8px;">Pausas: '+d.motivos+'</div>':'')+
+        '<div style="margin-top:8px;"><span id="imsg" style="font-size:13px;"></span></div>'+
+      '</div>';
+    
+    google.script.run.withSuccessHandler(function(pr){
+      var el=document.getElementById('panelPromedio'); if(!el) return;
+      if(pr && pr.hay){
+        el.innerHTML='<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 10px;color:#1d4ed8;">📊 Tiempo estimado ('+pr.n+' bandejas) — Armado: <b>'+pr.armado+'</b> min · Blastinado: <b>'+pr.blastinado+'</b> min</span>';
+      } else {
+        el.innerHTML='<span style="color:#94a3b8;">📊 Promedio: faltan datos ('+((pr&&pr.n)||0)+'/'+((pr&&pr.minimo)||20)+' bandejas de este tipo+medida)</span>';
+      }
+    }).bndPromedio(d.producto, d.medida);
+  }
+
+
+   
+  function renderControlLote(ctrl){
+    var enPausa = !!ctrl.enPausa;
+    var estadoTxt = enPausa ? '⏸ CONTROL EN PAUSA' : '🔍 CONTROL EN CURSO';
+    var estadoColor = enPausa ? '#92400e;background:#fde68a;' : '#0369a1;background:#e0f2fe;';
+    var botonPausa = enPausa
+      ? '<button class="btn-mini" style="background:#16a34a;color:#fff;" onclick="reanudarControl()">▶ Reanudar</button>'
+      : '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
+          '<select id="ctrlMotivo" style="width:auto;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>'+
+          '<button class="btn-mini" style="background:#b45309;color:#fff;" onclick="pausarControl()">⏸ Pausa</button>'+
+        '</div>';
+    document.getElementById('indControl').innerHTML =
+      '<div class="card" style="border-color:#0ea5e9; background:#f0f9ff;">'+
+        '<div style="font-size:15px;font-weight:800;padding:8px 14px;border-radius:10px;text-align:center;margin-bottom:10px;color:'+estadoColor+'">'+estadoTxt+'</div>'+
+        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;">'+tl(ctrl.producto)+' · '+tl(ctrl.medida)+' ('+tl(ctrl.lote)+') · '+ctrl.cantidad+' piezas'+(ctrl.teton?' · '+ctrl.teton:'')+'</div>'+
+        '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Inicio: <b>'+tl(ctrl.horaInicio)+'</b> · Pausas: <b>'+(ctrl.pausaMin||0)+' min</b>'+(enPausa?' · <span style="color:#b45309;font-weight:700;">en pausa desde '+ctrl.pausaDesde+'</span>':'')+'</div>'+
+        botonPausa +
+        (enPausa ? '' :
+          '<div class="grid-3" style="margin-top:12px;">'+
+            '<div><label>Resultado</label><select id="clRes" onchange="toggleReblast()"><option value="">— Seleccionar —</option><option>OK</option><option>Re-blastinar</option></select></div>'+
+            '<div><label>Rechazadas (se descartan)</label><input id="clRech" type="number" min="0" value="0"></div>'+
+            '<div><label>Pérdidas (se descartan)</label><input id="clPerd" type="number" min="0" value="0"></div>'+
+          '</div>'+
+          '<div id="clReblastWrap" style="display:none;margin-top:12px;">'+
+            '<label>¿Cuántas piezas van a Re-blastinar? (el resto sigue de largo como OK)</label>'+
+            '<input id="clReblast" type="number" min="0" value="0">'+
+          '</div>'+
+          '<div class="grid-3" style="margin-top:12px;">'+
+            '<div><label>Responsable del control</label>'+selResp('clResp','')+'</div>'+
+            '<div style="grid-column:2/4;"><label>Observaciones</label><input id="clObs" placeholder="Notas..."></div>'+
+          '</div>'+
+          '<button class="btn-accion" style="background:#16a34a;" onclick="finalizarControlLote()">Finalizar Control ✓</button>'
+        ) +
+        '<div style="margin-top:8px;"><span id="cmsg" style="font-size:13px;"></span></div>'+
+      '</div>';
+  }
+  function toggleReblast(){
+    var res = document.getElementById('clRes') ? document.getElementById('clRes').value : '';
+    var wrap = document.getElementById('clReblastWrap');
+    if (!wrap) return;
+    wrap.style.display = (res === 'Re-blastinar') ? 'block' : 'none';
+  }
+  function cmsg(t, ok){ var m=document.getElementById('cmsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
+  function pausarControl(){
+    var mot = document.getElementById('ctrlMotivo') ? document.getElementById('ctrlMotivo').value : '';
+    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
+  }
+  function reanudarControl(){
+    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndReanudarControl({ hora:horaAhora() });
+  }
+  function finalizarControlLote(){
+    var res=document.getElementById('clRes')?document.getElementById('clRes').value:'';
+    if(!res){ cmsg('Elegí el resultado (OK o Re-blastinar) antes de cerrar.', false); return; }
+    if (res === 'Re-blastinar') {
+      var rb = document.getElementById('clReblast') ? Number(document.getElementById('clReblast').value) || 0 : 0;
+      if (rb <= 0) { cmsg('Indicá cuántas piezas van a Re-blastinar.', false); return; }
+    }
+    var p={ resultado:res, rechazadas:document.getElementById('clRech')?document.getElementById('clRech').value:0,
+      perdidas:document.getElementById('clPerd')?document.getElementById('clPerd').value:0,
+      cantidadReblast: document.getElementById('clReblast') ? document.getElementById('clReblast').value : 0,
+      responsable:document.getElementById('clResp')?document.getElementById('clResp').value:'',
+      observaciones:document.getElementById('clObs')?document.getElementById('clObs').value:'',
+      hora: horaAhora() };
+    cmsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ cmsg(e.message,false); }).bndFinalizarControlLote(p);
+  }
+
+
+ function marcar(paso) {
+    var obs = ''; 
+    var id = {finArmado: 'obsArmado', finBlast: 'obsBlast'}[paso];
+    if (id && document.getElementById(id)) obs = document.getElementById(id).value || '';
+    
+    var resp = ''; 
+    var idr = {finArmado: 'respArmado', finBlast: 'respBlast'}[paso];
+    if (idr && document.getElementById(idr)) resp = document.getElementById(idr).value || '';
+
+    
+    var etiquetaFase = '';
+    if (paso === 'finArmado') etiquetaFase = 'ARMADO FINALIZADO';
+    if (paso === 'finBlast') etiquetaFase = 'BLASTINADO FINALIZADO';
+    
+    
+    var observacionFinal = etiquetaFase + (obs ? ' - ' + obs : '');
+
+    google.script.run
+        .withSuccessHandler(function(r) { 
+            cmsg(r.msg, true); 
+            cargarBandejaActual(); 
+        })
+        .withFailureHandler(function(e) { 
+            cmsg(e.message, false); 
+        })
+        .bndMarcar({ 
+            paso: paso, 
+            hora: horaAhora(), 
+            obs: observacionFinal, 
+            resp: resp 
+        });
+}
+  function pausar(){ var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:''; google.script.run.withSuccessHandler(renderEnCurso).withFailureHandler(function(e){ imsg(e.message,false); }).bndPausar({ motivo:mot, hora:horaAhora() }); }
+  function reanudar(){ google.script.run.withSuccessHandler(renderEnCurso).withFailureHandler(function(e){ imsg(e.message,false); }).bndReanudar({ hora:horaAhora() }); }
+
+
+  function cargarPanel(){
+    google.script.run.withSuccessHandler(renderPanel).withFailureHandler(function(e){ var c=document.getElementById('listaInd'); if(c) c.innerHTML='<p style="color:#b91c1c;font-size:12px;">Error: '+e.message+'</p>'; }).bndPanel();
+  }
+  function renderPanel(arr){
+    var c=document.getElementById('listaInd'); if(!c) return;
+    if(!arr || !arr.length){ c.innerHTML='<p class="hint">No hay lotes en blasting.</p>'; return; }
+    var filas=arr.map(function(L){
+      var pedido=L.pedido||0, hecho=L.hecho||0, enProc=L.enProceso||0;
+      var estado, color;
+      if(pedido>0 && hecho>=pedido && enProc===0){ estado='✅ 100% blastinado — pasa a Control'; color='#0369a1'; }
+      else if(enProc>0){ estado='⏳ '+enProc+' en proceso'; color='#1d4ed8'; }
+      else { estado='En blasting'; color='#64748b'; }
+      return '<tr><td>'+(L.lote||'')+'</td><td>'+(L.producto||'')+'</td><td>'+(L.medida||'')+'</td><td style="text-align:right;font-weight:700;">'+hecho+' / '+pedido+'</td><td style="color:'+color+';font-weight:600;">'+estado+'</td></tr>';
+    }).join('');
+    c.innerHTML='<table><thead><tr><th>Lote</th><th>Producto</th><th>Medida</th><th>Blastinado</th><th>Estado del lote</th></tr></thead><tbody>'+filas+'</tbody></table>';
+  }
+  
+
+
+window.onload = actualizar;
+
+
+</script>
+</body>
+</html>
