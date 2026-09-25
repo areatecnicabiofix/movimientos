@@ -150,6 +150,45 @@
     });
   }
 
+  /* ---------------- lecturas rápidas desde Supabase ----------------
+   * Una página puede definir window.BIOFIX_LOCAL = { nombreFuncion: function (args...) { return Promise } }
+   * para que esa función se resuelva en Supabase en vez de Apps Script (mismo resultado, más rápido).
+   * Con ?modo=hoja en la dirección se desactiva y todo vuelve a ir por Apps Script (plan B). */
+  var MODO_HOJA = /[?&]modo=hoja\b/.test(location.search);
+  function local(fn) {
+    var L = window.BIOFIX_LOCAL;
+    return (!MODO_HOJA && L && typeof L[fn] === 'function') ? L[fn] : null;
+  }
+
+  /* Funciones que casi no cambian (ej. catálogo): se muestran al instante desde la tablet
+   * y se actualizan en segundo plano para la próxima vez. window.BIOFIX_CACHE = ['mecCatalogo'] */
+  function cacheable(fn) { return (window.BIOFIX_CACHE || []).indexOf(fn) >= 0; }
+  function cacheKey(fn, args) { return 'bfcache:' + PANTALLA + ':' + fn + ':' + JSON.stringify(args); }
+
+  function ejecutar(fn, args) {
+    var L = local(fn);
+    if (L) {
+      return sesionLista.then(function () {
+        var t0 = performance.now();
+        return Promise.resolve().then(function () { return L.apply(null, args); }).then(
+          function (d) { medir(fn + ' [supabase]', t0, true); return d; },
+          function (e) { medir(fn + ' [supabase]', t0, false); throw e; }
+        );
+      });
+    }
+    if (cacheable(fn)) {
+      var k = cacheKey(fn, args), guardado = null;
+      try { guardado = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+      var fresco = llamar(fn, args).then(function (d) {
+        try { localStorage.setItem(k, JSON.stringify(d)); } catch (e) {}
+        return d;
+      });
+      if (guardado != null) { fresco.catch(function () {}); return Promise.resolve(guardado); }
+      return fresco;
+    }
+    return llamar(fn, args);
+  }
+
   function runner(ok, fail, user) {
     return new Proxy({}, {
       get: function (_, prop) {
@@ -159,7 +198,7 @@
         if (typeof prop !== 'string') return undefined;
         return function () {
           var args = Array.prototype.slice.call(arguments);
-          llamar(prop, args)
+          ejecutar(prop, args)
             .then(function (d) { if (ok) ok(d, user); })
             .catch(function (e) {
               var err = e instanceof Error ? e : new Error(String(e));
