@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bio-Fix — Producción</title>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --az:#0284c7; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; color:var(--tx); margin:0; padding:16px; }
+  .container{ max-width:720px; margin:0 auto; }
+  h1{ font-size:20px; color:#0369a1; margin:8px 0 4px; }
+  .sub{ font-size:13px; color:var(--mut); margin-bottom:18px; }
+  h2{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:22px 0 8px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; }
+  a.card{ display:block; background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px;
+          text-decoration:none; color:var(--tx); transition:border-color .15s, box-shadow .15s; }
+  a.card:hover{ border-color:#93c5fd; box-shadow:0 2px 8px rgba(2,132,199,.12); }
+  .t{ font-weight:700; font-size:15px; }
+  .d{ font-size:12px; color:var(--mut); margin-top:4px; }
+  .tag{ display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; margin-top:8px; }
+  .tag.nuevo{ background:#dcfce7; color:#15803d; }
+  .tag.as{ background:#f1f5f9; color:#64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Bio-Fix — Producción</h1>
+  <div class="sub">Elegí la pantalla del puesto.</div>
+
+  <h2>Nuevas (rápidas)</h2>
+  <div class="grid">
+    <a class="card" href="deposito.html">
+      <div class="t">Depósito</div>
+      <div class="d">Semielaborado, Sala Blanca y Componentes</div>
+      <span class="tag nuevo">GitHub + Supabase</span>
+    </a>
+  </div>
+
+  <h2>Sectores</h2>
+  <div class="grid" id="sectores"></div>
+</div>
+
+<script>
+  // URL /exec del Apps Script de trazabilidad (la misma que usa deposito.html)
+  var APPS_SCRIPT = 'https://script.google.com/macros/s/AKfycbx7DxmjIMa0SJvFf1vHkdpxS4LFwG5NG61LvjsqETlBtw-iE0bw0TYcurNTDuL2tpU9tg/exec';
+
+  var SECTORES = [
+    { t: 'Mecanizado',             d: 'Máquina, cierres y control de piezas', v: '' },
+    { t: 'Lavado',                 d: 'Primario, Abrillantado, Vaporeado, Secundario', v: 'lavado' },
+    { t: 'Control de Calidad',     d: 'Control por cotas',                    v: 'control' },
+    { t: 'Lavados Grueso / Final', d: 'Lavado Grueso y Lavado Final',         v: 'lavados' },
+    { t: 'Blasting',               d: 'Bandejas, blastinado y control',       v: 'blasting' },
+    { t: 'Depósito — Lavado Final',d: 'Envío a Lavado Final',                 v: 'depositolf' },
+    { t: 'Grabado Láser',          d: 'Componentes a grabar',                 v: 'grabado' },
+    { t: 'Depósito (versión anterior)', d: 'Respaldo mientras se prueba la nueva', v: 'deposito' }
+  ];
+
+  document.getElementById('sectores').innerHTML = SECTORES.map(function (s) {
+    var url = APPS_SCRIPT + (s.v ? '?v=' + s.v : '');
+    return '<a class="card" href="' + url + '" target="_top">' +
+             '<div class="t">' + s.t + '</div><div class="d">' + s.d + '</div>' +
+             '<span class="tag as">Apps Script</span></a>';
+  }).join('');
+</script>
+</body>
+</html>
