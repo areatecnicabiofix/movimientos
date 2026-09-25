@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lavado — Bio-Fix</title>
+<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
+<script>window.BIOFIX_PANTALLA = 'lavado';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --warn:#b45309; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 18px; margin-bottom: 16px; color: #0369a1; font-weight:600; }
+  .card { background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
+
+
+  .grid-3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+  label { font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
+  select, input, textarea { width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  select:focus, input:focus { border-color:var(--acc); outline:none; }
+
+
+  .ciclo-container { border:1px solid #cbd5e1; background:#f8fafc; padding:10px; border-radius:8px; text-align:center; }
+  .ciclo-title { font-size:11px; font-weight:700; color:var(--mut); margin-bottom:8px; text-transform:uppercase; }
+  .ciclo-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .ciclo-row span { font-size:12px; color:var(--mut); width:40px; text-align:left; }
+  .time-selects { display:flex; gap:4px; width:100%; }
+  .time-selects select { padding:4px; font-size:13px; text-align:center; }
+
+
+  .total-tiempo { margin-top:10px; background:#e2e8f0; padding:6px 12px; display:inline-block; font-weight:700; font-size:14px; border-radius:4px; }
+
+
+  .btn-submit { background:var(--acc); color:#fff; border:none; padding:10px 20px; font-size:14px; font-weight:600; border-radius:6px; cursor:pointer; margin-top:12px; }
+  .btn-submit:disabled { opacity:0.5; }
+  .badge-stock { background:#e0f2fe; color:#0369a1; font-weight:700; padding:4px; border-radius:4px; text-align:center; font-size:14px; border:1px solid #93c5fd; }
+  .toggle-parciales { display:none; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:#0369a1; font-weight:700; }
+  .toggle-parciales input { width:auto; }
+
+
+   
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { padding:10px; text-align:left; border-bottom:1px solid #cbd5e1; }
+  th { font-size:12px; text-transform:uppercase; color:var(--mut); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+  <h1 style="margin:0;">Lavado Primario</h1>
+</div>
+
+
+  <div class="card" style="border-color:#fbbf24; background:#fffbeb;">
+    <h2 style="color:#92400e;">0. Ingreso de Tapones desde Afuera (MP / HI / HE)</h2>
+    <p style="font-size:12px; color:var(--mut); margin:-6px 0 12px 0;">
+      Los tapones no se producen acá: registrá acá qué llegó (tipo, lote y cantidad) y quedan
+      directo en la cola "Esperando Lavado Primario" de abajo, como cualquier otra pieza.
+    </p>
+    <div class="grid-3">
+      <div>
+        <label>Tipo de Tapón</label>
+        <select id="ingTipoTapon">
+          <option value="">Elegir...</option>
+          <option value="Tapon Porta Implante MP">Tapón Porta Implante MP</option>
+          <option value="Tapon Porta Implante HI">Tapón Porta Implante HI</option>
+          <option value="Tapon Porta Implante HE">Tapón Porta Implante HE</option>
+        </select>
+      </div>
+      <div>
+        <label>Número de Lote</label>
+        <input id="ingLote" type="text" placeholder="Ej: 9001">
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input id="ingCantidad" type="number" min="1" placeholder="Ej: 100">
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+      <button class="btn-submit" id="btnIngreso" style="background:#d97706;" onclick="registrarIngresoTapon()">Registrar Ingreso</button>
+    </div>
+  </div>
+
+
+  <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+    <h2>1. Seleccionar Lote Disponible de Cola de Espera</h2>
+    <div class="grid-3">
+      <div>
+        <label>Origen / Estado Actual</label>
+        <select id="filtroCola" onchange="cambiarCola()">
+          <option value="tieneQueEmpezar"> Esperando Lavado Primario</option>
+          <option value="paraAbrillantar"> Esperando Abrillantado (Desde Lavado Primario)</option>
+          <option value="paraVaporeado"> Esperando Vaporeado</option>
+          <option value="paraLavadoSecundario"> Esperando Lavado Secundario</option>
+        </select>
+        <label class="toggle-parciales" id="wrapParciales">
+          <input type="checkbox" id="chkParciales" onchange="cambiarCola()"> Ver / procesar por parciales
+        </label>
+      </div>
+      <div>
+        <label>Piezas Disponibles en Cola</label>
+        <select id="comboLotes" onchange="seleccionarLote()"></select>
+      </div>
+      <div>
+        <label>Cantidad Disponible Real</label>
+        <div id="lblDisponible" class="badge-stock">0u</div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="card">
+    <h2>2. Registrar Tarea Ejecutada</h2>
+    <div class="grid-3">
+      <div><label>Producto Seleccionado</label><input id="txtProducto" readonly style="background:#f1f5f9;"></div>
+      <div><label>Tetón</label><input id="txtTeton" readonly style="background:#f1f5f9;" placeholder="Se completa solo"></div>
+      <div><label>Medida</label><input id="txtMedida" readonly style="background:#f1f5f9;"></div>
+      <div><label>Número de Lote</label><input id="txtLote" readonly style="background:#f1f5f9;"></div>
+    </div>
+
+
+    <div class="grid-3" style="margin-top:12px;">
+      <div>
+        <label>Responsable del Proceso</label>
+        
+        <input id="responsable" value="Javier" readonly style="background:#e2e8f0; font-weight:700;">
+      </div>
+      <div><label>Cantidad Procesada OK</label><input id="txtCantidadProcesar" type="number" min="1"></div>
+      <div><label>Cantidad Vacía / Rechazada</label><input id="txtRechazadas" type="number" value="0"></div>
+    </div>
+
+
+    <div id="seccionAbrillantado" style="margin-top:16px; display:none; border-top:1px dashed #cbd5e1; padding-top:12px;">
+      <h2 style="color:#6b21a8;">Especificaciones de Tiempo (Abrillantado — 3 Ciclos)</h2>
+      <div class="grid-3">
+        <div class="ciclo-container">
+          <div class="ciclo-title">Ciclo 1</div>
+          <div class="ciclo-row">
+            <span>INICIO</span>
+            <div class="time-selects">
+              <select id="h_i1" onchange="calcularTiempos()"></select><select id="m_i1" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+          <div class="ciclo-row">
+            <span>FIN</span>
+            <div class="time-selects">
+              <select id="h_f1" onchange="calcularTiempos()"></select><select id="m_f1" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+        </div>
+        <div class="ciclo-container">
+          <div class="ciclo-title">Ciclo 2</div>
+          <div class="ciclo-row">
+            <span>INICIO</span>
+            <div class="time-selects">
+              <select id="h_i2" onchange="calcularTiempos()"></select><select id="m_i2" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+          <div class="ciclo-row">
+            <span>FIN</span>
+            <div class="time-selects">
+              <select id="h_f2" onchange="calcularTiempos()"></select><select id="m_f2" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+        </div>
+        <div class="ciclo-container">
+          <div class="ciclo-title">Ciclo 3</div>
+          <div class="ciclo-row">
+            <span>INICIO</span>
+            <div class="time-selects">
+              <select id="h_i3" onchange="calcularTiempos()"></select><select id="m_i3" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+          <div class="ciclo-row">
+            <span>FIN</span>
+            <div class="time-selects">
+              <select id="h_f3" onchange="calcularTiempos()"></select><select id="m_f3" onchange="calcularTiempos()"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px; margin-top:6px; color:var(--mut);">TIEMPO TOTAL</div>
+      <div class="total-tiempo" id="lblTiempoTotal">0h 00min</div>
+    </div>
+
+
+    <div style="margin-top:12px;">
+      <label>Observaciones</label>
+      <textarea id="txtObservaciones" rows="2" placeholder="Notas sobre el lote..."></textarea>
+    </div>
+
+
+    <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+      <span id="msg" style="font-size:13px;"></span>
+      <button class="btn-submit" id="btnBorrador" style="display:none;" onclick="guardarBorradorAbrillantado()">Agregar a abrillantado</button>
+      
+      <button class="btn-submit" id="btnGrupo" style="background:#64748b;" onclick="agregarAlGrupo()">Agregar al Grupo de Lotes</button>
+      <button class="btn-submit" id="btnGuardar" style="background:var(--acc);" onclick="guardarLavado()">Registrar Operación Solo</button>
+    </div>
+  </div>
+
+
+  
+  <div class="card" id="seccionGrupo" style="display:none; border-color:#0284c7; background:#f0f9ff;">
+    <h2 style="color:#0284c7; border-bottom:1px solid #bae6fd;">Grupo de Procesamiento (Lotes Agrupados para enviar)</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Producto / Lote</th>
+            <th style="text-align:center;">Medida</th>
+            <th style="text-align:center;">Cant. a Procesar</th>
+            <th style="text-align:center;">Rechazadas</th>
+            <th style="text-align:center;">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="bodyGrupo"></tbody>
+      </table>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+      <button class="btn-submit" style="background:#64748b; margin:0;" onclick="limpiarGrupo()">Limpiar Grupo</button>
+      <button class="btn-submit" id="btnEnviarGrupo" style="background:#16a34a; margin:0;" onclick="guardarGrupo()">Registrar Grupo Completo</button>
+    </div>
+  </div>
+
+
+  <div class="card" id="cardBorradores" style="display:none; border-color:#d8b4fe; background:#faf5ff;">
+    <h2 style="color:#6b21a8;">Abrillantado en proceso (borradores) <span id="cntBorr" style="font-size:12px; background:#f3e8ff; color:#6b21a8; padding:2px 10px; border-radius:8px;">0</span></h2>
+    <div id="listaBorradores"></div>
+  </div>
+</div>
+
+
+<script>
+  var DATA_LAVADO = { tieneQueEmpezar: [], tieneQueEmpezarParciales: [], paraAbrillantar: [], paraVaporeado: [], paraLavadoSecundario: [] };
+  var PIEZAS_VAPOREADO = [];
+  var LISTA_ACTUAL = [];   
+  var LOTES_AGRUPADOS = []; 
+
+  
+  
+  
+  
+  
+  
+  function esTaponLavado_(producto) {
+    return /^tapon porta implante (mp|hi|he)$/i.test(String(producto || '').trim());
+  }
+  function tetonMostrar_(item) {
+    if (esTaponLavado_(item && item.producto)) return '-';
+    return (item && item.teton) || 'Sin teton';
+  }
+
+  
+  
+  
+  function estaEnGrupo(item, tipoCola) {
+    return LOTES_AGRUPADOS.some(function(g){
+      return g.lote === item.lote && g.producto === item.producto && g.tipoCola === tipoCola;
+    });
+  }
+
+
+  function initSelectoresTiempo() {
+    var horas = ""; var minutos = "";
+    for(var i=0; i<24; i++) horas += '<option value="'+i+'">'+(i<10?'0':'')+i+'</option>';
+    for(var i=0; i<60; i+=5) minutos += '<option value="'+i+'">'+(i<10?'0':'')+i+'</option>';
+    for(var c=1; c<=3; c++) {
+      document.getElementById('h_i'+c).innerHTML = horas;
+      document.getElementById('h_f'+c).innerHTML = horas;
+      document.getElementById('m_i'+c).innerHTML = minutos;
+      document.getElementById('m_f'+c).innerHTML = minutos;
+    }
+  }
+
+
+  function cargarInicial() {
+    initSelectoresTiempo();
+    google.script.run.withSuccessHandler(function(c){
+      PIEZAS_VAPOREADO = c.piezasVaporeado || [];
+      actualizarInventarios();
+    }).withFailureHandler(function(e){ msg('Error al cargar catálogo: '+e.message, false); })
+      .mecCatalogo('Lavado Primario');
+  }
+
+
+  function actualizarInventarios() {
+    google.script.run.withSuccessHandler(function(res) {
+      DATA_LAVADO = res;
+      cambiarCola();
+    }).withFailureHandler(function(e){ msg('Error al leer inventario: '+e.message, false); })
+      .obtenerTotalesLavado();
+  }
+function refrescarTodo(silencioso) {
+  var btn = document.getElementById('btnActualizar');
+  if (!silencioso && btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      DATA_LAVADO = res;
+      cambiarCola();
+      if (document.getElementById('filtroCola').value === 'paraAbrillantar') refrescarBorradores();
+      if (btn) { btn.disabled = false; btn.textContent = '⟳ Actualizar'; }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '⟳ Actualizar'; }
+      msg('Error al actualizar: ' + e.message, false);
+    })
+    .obtenerTotalesLavado();
+}
+
+  function cambiarCola() {
+    var tipo = document.getElementById('filtroCola').value;
+    var combo = document.getElementById('comboLotes');
+    actualizarTablaGrupo();
+
+
+    var esInicio = (tipo === 'tieneQueEmpezar');
+    document.getElementById('wrapParciales').style.display = esInicio ? 'inline-flex' : 'none';
+
+    var verParciales = esInicio && document.getElementById('chkParciales').checked;
+    var lista = verParciales ? (DATA_LAVADO.tieneQueEmpezarParciales || []) : (DATA_LAVADO[tipo] || []);
+    LISTA_ACTUAL = lista;
+
+    var esAbr = (tipo === 'paraAbrillantar');
+    document.getElementById('seccionAbrillantado').style.display = 'none';
+    document.getElementById('btnBorrador').style.display = esAbr ? 'inline-block' : 'none';
+    document.getElementById('btnGuardar').style.display = esAbr ? 'none' : 'inline-block';
+    document.getElementById('btnGrupo').style.display = esAbr ? 'none' : 'inline-block';
+    document.getElementById('cardBorradores').style.display = esAbr ? 'block' : 'none';
+    if (esAbr) refrescarBorradores();
+
+    
+    document.getElementById('responsable').value = "Javier";
+
+
+    if (lista.length === 0) {
+      combo.innerHTML = '<option value="">No hay piezas en espera</option>';
+      limpiarCampos();
+      return;
+    }
+
+    
+    var opciones = lista.map(function(x, index) {
+      if (estaEnGrupo(x, tipo)) return '';
+      var tet = ' · ' + tetonMostrar_(x);
+      if (verParciales) {
+        return '<option value="' + index + '">' + x.producto + ' (' + x.lote + ')' + tet + ' · ' + x.disponible + 'u</option>';
+      } else {
+        var et = x.etiqueta ? ' · ' + x.etiqueta + ' · ' + x.disponible + 'u' : ' · ' + x.disponible + 'u';
+        return '<option value="' + index + '">' + x.producto + ' (' + x.lote + ')' + tet + et + '</option>';
+      }
+    }).filter(function(s){ return s !== ''; }).join('');
+    combo.innerHTML = opciones || '<option value="">No hay piezas en espera (el resto ya está en el grupo)</option>';
+
+    seleccionarLote();
+  }
+
+
+  function seleccionarLote() {
+    var index = document.getElementById('comboLotes').value;
+    if(index === "" || !LISTA_ACTUAL[index]) {
+      limpiarCampos();
+      return;
+    }
+    var item = LISTA_ACTUAL[index];
+    document.getElementById('txtProducto').value = item.producto;
+    document.getElementById('txtTeton').value = tetonMostrar_(item);
+    document.getElementById('txtMedida').value = item.medida;
+    document.getElementById('txtLote').value = item.lote;
+    document.getElementById('txtCantidadProcesar').value = item.disponible;
+    document.getElementById('lblDisponible').textContent = item.disponible + "u";
+  }
+
+
+  function limpiarCampos() {
+    document.getElementById('txtProducto').value = '';
+    document.getElementById('txtTeton').value = '';
+    document.getElementById('txtMedida').value = '';
+    document.getElementById('txtLote').value = '';
+    document.getElementById('txtCantidadProcesar').value = '';
+    document.getElementById('lblDisponible').textContent = "0u";
+  }
+
+
+  
+  function agregarAlGrupo() {
+    var producto = document.getElementById('txtProducto').value;
+    if (!producto) { msg('Seleccioná un lote primero.', false); return; }
+
+
+    var lote = document.getElementById('txtLote').value;
+    var medida = document.getElementById('txtMedida').value;
+    var teton = document.getElementById('txtTeton').value;
+    var disponible = parseFloat(document.getElementById('lblDisponible').textContent) || 0;
+    var cantProcesar = parseFloat(document.getElementById('txtCantidadProcesar').value) || 0;
+    var rechazadas = parseFloat(document.getElementById('txtRechazadas').value) || 0;
+    var obs = document.getElementById('txtObservaciones').value;
+
+
+    if (cantProcesar <= 0) { msg('La cantidad a procesar debe ser mayor a 0.', false); return; }
+    if (cantProcesar + rechazadas > disponible) {
+      msg('La cantidad a procesar + rechazadas no puede superar la disponible (' + disponible + 'u).', false);
+      return;
+    }
+
+
+    
+    var existe = LOTES_AGRUPADOS.find(function(x) { return x.lote === lote && x.producto === producto; });
+    if (existe) {
+      msg('Este lote ya está en el grupo de envío.', false);
+      return;
+    }
+
+
+    LOTES_AGRUPADOS.push({
+      producto: producto,
+      teton: teton,
+      medida: medida,
+      lote: lote,
+      disponible: disponible,
+      cantidadProcesada: cantProcesar,
+      rechazadas: rechazadas,
+      observaciones: obs,
+      tipoCola: document.getElementById('filtroCola').value,
+      ciclos: [{ini:'',fin:''},{ini:'',fin:''},{ini:'',fin:''}]
+    });
+
+
+    actualizarTablaGrupo();
+    msg('Lote agregado al grupo.', true);
+    limpiarCampos();
+    cambiarCola();
+  }
+
+
+  
+  
+  function itemsGrupoActual_() {
+    var tipo = document.getElementById('filtroCola').value;
+    var out = [];
+    LOTES_AGRUPADOS.forEach(function (item, idx) {
+      if (item.tipoCola === tipo) out.push({ item: item, idx: idx });
+    });
+    return out;
+  }
+
+  function actualizarTablaGrupo() {
+    var container = document.getElementById('seccionGrupo');
+    var tbody = document.getElementById('bodyGrupo');
+    var visibles = itemsGrupoActual_();
+    if (visibles.length === 0) {
+      container.style.display = 'none';
+      tbody.innerHTML = '';
+      return;
+    }
+    container.style.display = 'block';
+    tbody.innerHTML = visibles.map(function(v) {
+      var x = v.item, idx = v.idx;
+      var filaPrincipal = '<tr>' +
+        '<td><b>' + x.producto + '</b> ('+ x.lote + ')' + ' <span style="color:#94a3b8;">· '+tetonMostrar_(x)+'</span>' + '</td>' +
+        '<td style="text-align:center;">' + x.medida + '</td>' +
+        '<td style="text-align:center; font-weight:700;">' + x.cantidadProcesada + 'u</td>' +
+        '<td style="text-align:center; color:#b91c1c;">' + x.rechazadas + 'u</td>' +
+        '<td style="text-align:center;">' +
+          '<button class="btn-submit" style="background:#ef4444; padding:4px 8px; font-size:11px; margin:0;" onclick="quitarDelGrupo(' + idx + ')">Quitar</button>' +
+        '</td>' +
+        '</tr>';
+      if (x.tipoCola !== 'paraAbrillantar') return filaPrincipal;
+      function campo(n, k, label) {
+        var v = (x.ciclos[n] && x.ciclos[n][k]) || '';
+        return '<div style="display:inline-block; margin-right:10px;"><label style="font-size:10px; color:var(--mut); display:block;">'+label+'</label>' +
+          '<input type="time" style="padding:4px; font-size:12px;" value="'+v+'" onchange="actualizarCicloGrupo('+idx+','+n+',\''+k+'\',this.value)"></div>';
+      }
+      var filaCiclos = '<tr><td colspan="5" style="background:#faf5ff; border-top:none;">' +
+        '<div style="font-size:11px; font-weight:700; color:#6b21a8; margin-bottom:6px;">CICLOS DE ABRILLANTADO</div>' +
+        campo(0,'ini','C1 Inicio') + campo(0,'fin','C1 Fin') +
+        campo(1,'ini','C2 Inicio') + campo(1,'fin','C2 Fin') +
+        campo(2,'ini','C3 Inicio') + campo(2,'fin','C3 Fin') +
+        '<span style="font-size:12px; margin-left:8px;">Tiempo total: <b id="gtot_'+idx+'">'+tiempoCiclosTxt(x.ciclos)+'</b></span>' +
+        '</td></tr>';
+      return filaPrincipal + filaCiclos;
+    }).join('');
+  }
+  function tiempoCiclosTxt(ciclos) {
+    var tot = 0;
+    ciclos.forEach(function(c){
+      var ini = toMin(c.ini), fin = toMin(c.fin);
+      if (ini != null && fin != null && fin >= ini) tot += fin - ini;
+    });
+    return fmtMin(tot);
+  }
+  function actualizarCicloGrupo(idx, n, k, val) {
+    LOTES_AGRUPADOS[idx].ciclos[n][k] = val;
+    var el = document.getElementById('gtot_'+idx);
+    if (el) el.textContent = tiempoCiclosTxt(LOTES_AGRUPADOS[idx].ciclos);
+  }
+
+
+  function quitarDelGrupo(idx) {
+    LOTES_AGRUPADOS.splice(idx, 1);
+    actualizarTablaGrupo();
+    cambiarCola();
+  }
+
+
+  function limpiarGrupo() {
+    var tipo = document.getElementById('filtroCola').value;
+    LOTES_AGRUPADOS = LOTES_AGRUPADOS.filter(function (g) { return g.tipoCola !== tipo; });
+    actualizarTablaGrupo();
+    msg('Grupo de procesamiento vaciado (esta pestaña).', true);
+    cambiarCola();
+  }
+
+
+  function guardarGrupo() {
+    var tipoCola = document.getElementById('filtroCola').value;
+    var itemsActuales = LOTES_AGRUPADOS.filter(function (g) { return g.tipoCola === tipoCola; });
+
+    if (itemsActuales.length === 0) {
+      msg('Agrega lotes al grupo antes de registrar.', false);
+      return;
+    }
+
+    document.getElementById('btnEnviarGrupo').disabled = true;
+
+    if (tipoCola === 'paraAbrillantar') {
+      procesarBorradorSecuencial(itemsActuales, 0, 0, 0);
+    } else {
+      procesarGrupoSecuencial(itemsActuales, 0, 0, 0);
+    }
+  }
+
+
+  
+  function procesarGrupoSecuencial(items, index, totalExitos, totalErrores) {
+    if (index >= items.length) {
+      msg('Se procesaron ' + totalExitos + ' lotes con éxito.' + (totalErrores > 0 ? ' (' + totalErrores + ' errores)' : ''), totalErrores === 0);
+      var tipoProcesado = document.getElementById('filtroCola').value;
+      LOTES_AGRUPADOS = LOTES_AGRUPADOS.filter(function (g) { return g.tipoCola !== tipoProcesado; });
+      actualizarTablaGrupo();
+      document.getElementById('btnEnviarGrupo').disabled = false;
+      actualizarInventarios();
+      return;
+    }
+
+
+    var item = items[index];
+    var tipoCola = document.getElementById('filtroCola').value;
+    var responsable = document.getElementById('responsable').value;
+
+
+    var orig, dest;
+    if (tipoCola === 'tieneQueEmpezar')           { orig = 'ESPERANDO LAVADO PRIMARIO'; dest = 'EN LAVADO PRIMARIO'; }
+    else if (tipoCola === 'paraAbrillantar')      { orig = 'LAVADO PRIMARIO - ABRILLANTADO'; dest = 'LAVADO SECUNDARIO'; }
+    else if (tipoCola === 'paraVaporeado')        { orig = 'LAVADO PRIMARIO - EN VAPOREADO'; dest = 'LAVADO PRIMARIO - YA VAPOREADO'; }
+    else if (tipoCola === 'paraLavadoSecundario') { orig = 'EN LAVADO SECUNDARIO'; dest = 'LAVADO SECUNDARIO - YA LAVADO'; }
+
+
+    var datos = {
+      producto: item.producto,
+      teton: item.teton,
+      medida: item.medida,
+      lote: item.lote,
+      responsable: responsable,
+      cantidadProcesada: item.cantidadProcesada,
+      rechazadas: item.rechazadas,
+      observaciones: item.observaciones,
+      procesoOrigen: orig,
+      procesoDestino: dest
+    };
+
+
+    msg('Procesando lote ' + (index + 1) + ' de ' + items.length + '...', true);
+
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        procesarGrupoSecuencial(items, index + 1, totalExitos + 1, totalErrores);
+      })
+      .withFailureHandler(function(e) {
+        procesarGrupoSecuencial(items, index + 1, totalExitos, totalErrores + 1);
+      })
+      .lavGuardarProceso(datos);
+  }
+
+
+  
+  function procesarBorradorSecuencial(items, index, totalExitos, totalErrores) {
+    if (index >= items.length) {
+      msg('Se agregaron ' + totalExitos + ' borradores de abrillantado.' + (totalErrores > 0 ? ' (' + totalErrores + ' errores)' : ''), totalErrores === 0);
+      var tipoProcesado = document.getElementById('filtroCola').value;
+      LOTES_AGRUPADOS = LOTES_AGRUPADOS.filter(function (g) { return g.tipoCola !== tipoProcesado; });
+      actualizarTablaGrupo();
+      document.getElementById('btnEnviarGrupo').disabled = false;
+      actualizarInventarios();
+      refrescarBorradores();
+      return;
+    }
+
+
+    var item = items[index];
+    var responsable = document.getElementById('responsable').value;
+
+
+    var datos = {
+      producto: item.producto,
+      teton: item.teton,
+      medida: item.medida,
+      lote: item.lote,
+      cantidad: item.cantidadProcesada,
+      responsable: responsable,
+      ciclos: item.ciclos || [{ini:'',fin:''},{ini:'',fin:''},{ini:'',fin:''}],
+      tiempoTotal: item.ciclos ? tiempoCiclosTxt(item.ciclos) : '',
+      observaciones: item.observaciones
+    };
+
+
+    msg('Agregando borrador ' + (index + 1) + ' de ' + items.length + '...', true);
+
+
+    google.script.run
+      .withSuccessHandler(function(r) {
+        procesarBorradorSecuencial(items, index + 1, totalExitos + 1, totalErrores);
+      })
+      .withFailureHandler(function(e) {
+        procesarBorradorSecuencial(items, index + 1, totalExitos, totalErrores + 1);
+      })
+      .abrGuardarBorrador(datos);
+  }
+
+
+  function sincronizarResponsable() {
+    var resp = document.getElementById('responsable').value;
+    var tarjetas = document.querySelectorAll('[id^="bresp_"]');
+    tarjetas.forEach(function(input) {
+      if (!input.value) input.value = resp;
+    });
+  }
+
+
+  function calcularTiempos() {
+    var minutosTotales = 0;
+    for(var c=1; c<=3; c++) {
+      var hi = parseInt(document.getElementById('h_i'+c).value) || 0;
+      var mi = parseInt(document.getElementById('m_i'+c).value) || 0;
+      var hf = parseInt(document.getElementById('h_f'+c).value) || 0;
+      var mf = parseInt(document.getElementById('m_f'+c).value) || 0;
+      var inicio = (hi * 60) + mi;
+      var fin = (hf * 60) + mf;
+      if (fin >= inicio) minutosTotales += (fin - inicio);
+    }
+    var h = Math.floor(minutosTotales / 60);
+    var m = minutosTotales % 60;
+    document.getElementById('lblTiempoTotal').textContent = h + "h " + (m < 10 ? '0' : '') + m + "min";
+  }
+
+
+  
+  function guardarLavado() {
+    var tipoCola = document.getElementById('filtroCola').value;
+    var responsable = document.getElementById('responsable').value;
+    var cantidadProcesada = document.getElementById('txtCantidadProcesar').value;
+    var producto = document.getElementById('txtProducto').value;
+
+
+    if (!producto) { msg('Seleccioná un lote antes de continuar.', false); return; }
+    if (!responsable) { msg('Falta definir el responsable.', false); return; }
+    if (!cantidadProcesada) { msg('Completá la Cantidad Procesada.', false); return; }
+
+
+    var orig, dest;
+    if (tipoCola === 'tieneQueEmpezar')           { orig = 'ESPERANDO LAVADO PRIMARIO'; dest = 'EN LAVADO PRIMARIO'; }
+    else if (tipoCola === 'paraAbrillantar')      { orig = 'LAVADO PRIMARIO - ABRILLANTADO'; dest = 'LAVADO SECUNDARIO'; }
+    else if (tipoCola === 'paraVaporeado')        { orig = 'LAVADO PRIMARIO - EN VAPOREADO'; dest = 'LAVADO PRIMARIO - YA VAPOREADO'; }
+    else if (tipoCola === 'paraLavadoSecundario') { orig = 'EN LAVADO SECUNDARIO'; dest = 'LAVADO SECUNDARIO - YA LAVADO'; }
+
+
+    var obs = document.getElementById('txtObservaciones').value;
+    if (tipoCola === 'paraAbrillantar') {
+      obs = (obs ? obs + ' | ' : '') + 'Tiempo abrillantado: ' + document.getElementById('lblTiempoTotal').textContent;
+    }
+
+
+    var datos = {
+      producto: producto,
+      teton: document.getElementById('txtTeton').value,
+      medida: document.getElementById('txtMedida').value,
+      lote: document.getElementById('txtLote').value,
+      responsable: responsable,
+      cantidadProcesada: cantidadProcesada,
+      rechazadas: document.getElementById('txtRechazadas').value,
+      observaciones: obs,
+      procesoOrigen: orig,
+      procesoDestino: dest
+    };
+
+    document.getElementById('btnGuardar').disabled = true;
+    google.script.run
+      .withSuccessHandler(function(r) {
+        msg(r.msg, true);
+        document.getElementById('btnGuardar').disabled = false;
+        document.getElementById('txtRechazadas').value = 0;
+        document.getElementById('txtObservaciones').value = '';
+        actualizarInventarios();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('btnGuardar').disabled = false;
+        msg('Error al registrar: ' + e.message, false);
+      })
+      .lavGuardarProceso(datos);
+  }
+
+
+  
+  function registrarIngresoTapon() {
+    var producto = document.getElementById('ingTipoTapon').value;
+    var lote = document.getElementById('ingLote').value;
+    var cantidad = document.getElementById('ingCantidad').value;
+
+    if (!producto) { msg('Elegí el tipo de tapón.', false); return; }
+    if (!lote) { msg('Ingresá el número de lote.', false); return; }
+    if (!cantidad) { msg('Ingresá la cantidad.', false); return; }
+
+    var datos = { producto: producto, lote: lote, cantidad: cantidad, responsable: 'Javier' };
+
+    document.getElementById('btnIngreso').disabled = true;
+    google.script.run
+      .withSuccessHandler(function(r) {
+        msg(r.msg, true);
+        document.getElementById('btnIngreso').disabled = false;
+        document.getElementById('ingTipoTapon').value = '';
+        document.getElementById('ingLote').value = '';
+        document.getElementById('ingCantidad').value = '';
+        actualizarInventarios();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('btnIngreso').disabled = false;
+        msg('Error al registrar ingreso: ' + e.message, false);
+      })
+      .lavIngresoTapon(datos);
+  }
+
+
+  function msg(t, ok){
+    var m = document.getElementById('msg');
+    m.textContent = t;
+    m.style.color = ok ? '#15803d' : '#b91c1c';
+    if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent = ''; }, 4000);
+  }
+
+
+  function guardarBorradorAbrillantado(){
+    var responsable = document.getElementById('responsable').value;
+    var lote = document.getElementById('txtLote').value;
+    var cantidad = document.getElementById('txtCantidadProcesar').value;
+
+
+    if (!responsable) { msg('Falta definir el responsable.', false); return; }
+    if (!lote || !cantidad) { msg('Elegí un lote con cantidad.', false); return; }
+
+
+    var datos = {
+      producto: document.getElementById('txtProducto').value,
+      teton: document.getElementById('txtTeton').value,
+      medida: document.getElementById('txtMedida').value,
+      lote: lote,
+      cantidad: cantidad,
+      responsable: responsable,
+      ciclos: [{ini:'',fin:''},{ini:'',fin:''},{ini:'',fin:''}],
+      tiempoTotal: '',
+      observaciones: document.getElementById('txtObservaciones').value
+    };
+    document.getElementById('btnBorrador').disabled = true;
+    google.script.run
+      .withSuccessHandler(function(r){
+        document.getElementById('btnBorrador').disabled = false;
+        msg(r.msg, true);
+        document.getElementById('txtObservaciones').value = '';
+        actualizarInventarios();
+        refrescarBorradores();
+      })
+      .withFailureHandler(function(e){
+        document.getElementById('btnBorrador').disabled = false;
+        msg('Error al agregar: ' + e.message, false);
+      })
+      .abrGuardarBorrador(datos);
+  }
+
+
+  function refrescarBorradores(){
+    google.script.run
+      .withSuccessHandler(renderBorradores)
+      .withFailureHandler(function(e){
+        document.getElementById('listaBorradores').innerHTML =
+          '<p style="color:#b91c1c; font-size:13px;">Error al leer borradores: '+e.message+'</p>';
+      })
+      .abrListarBorradores();
+  }
+
+
+  var BOR_CRONOS = {}; 
+  var BOR_C2_CONSULTADO = {}; 
+  var BOR_SIN_CICLO3 = {};    
+
+  function cicloDuracionSeg(n){ return n===1 ? 3600 : 900; } 
+  function cicloIdCrono(f,n){ return 'bccrono'+n+'_'+f; }
+  function cicloIdBtn(f,n){ return 'bcbtn'+n+'_'+f; }
+  function cicloFmt(seg){
+    seg = Math.max(0, Math.round(seg));
+    var m = Math.floor(seg/60), s = seg%60;
+    return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }
+  function horaAhoraLav_(){
+    var d = new Date();
+    return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  }
+  function bcMarcarListo_(f, n){
+    var e = document.getElementById(cicloIdCrono(f,n));
+    if (e) { e.textContent = 'Listo ✓'; e.style.background = '#dcfce7'; e.style.color = '#15803d'; }
+    localStorage.removeItem('crono_abs_' + f + '_' + n);
+  }
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  function bcTodosCiclosListos_(f) {
+    for (var i = 1; i <= 3; i++) {
+      var ini = document.getElementById('bc'+i+'i_'+f);
+      var fin = document.getElementById('bc'+i+'f_'+f);
+      if (!ini || !fin || !ini.value || !fin.value) return false;
+    }
+    return true;
+  }
+  function bcAutoFinalizarSiCorresponde_(f) {
+    if (!bcTodosCiclosListos_(f)) return;
+    
+    
+    
+    
+    setTimeout(function () { finalizarBorrador(f); }, 300);
+  }
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  function bcConsultarCicloTres_(f) {
+    if (BOR_C2_CONSULTADO[f] || BOR_SIN_CICLO3[f]) return;
+    var ini3 = document.getElementById('bc3i_' + f);
+    var fin3 = document.getElementById('bc3f_' + f);
+    if (!ini3 || !fin3) return; 
+    if (ini3.value || fin3.value) return; 
+    BOR_C2_CONSULTADO[f] = true;
+    var haceFalta = confirm('¿Hace falta el Ciclo 3 de Abrillantado para este lote?');
+    if (haceFalta) return; 
+    BOR_SIN_CICLO3[f] = true;
+    var elBtn = document.getElementById(cicloIdBtn(f, 3));
+    if (elBtn) elBtn.style.display = 'none';
+    var elCrono = document.getElementById(cicloIdCrono(f, 3));
+    if (elCrono) { elCrono.textContent = 'No aplica'; elCrono.style.background = '#f1f5f9'; elCrono.style.color = 'var(--mut)'; }
+    setTimeout(function () { finalizarBorrador(f); }, 300);
+  }
+
+  function bcIniciarCiclo(f, n){
+    var key = f+'_'+n;
+    if (BOR_CRONOS[key] && BOR_CRONOS[key].id) return; 
+
+    var ini = document.getElementById('bc'+n+'i_'+f);
+  if (ini && !ini.value) ini.value = horaAhoraLav_();
+    calcTotalCard(f);
+  bcGuardarParcial_(f);
+
+    var elBtn = document.getElementById(cicloIdBtn(f,n));
+    if (elBtn) elBtn.style.display = 'none';
+
+    
+    var storageKey = 'crono_abs_' + f + '_' + n;
+    var tiempoInicioReal = new Date().getTime();
+    localStorage.setItem(storageKey, tiempoInicioReal);
+
+    var duracionTotalSeg = cicloDuracionSeg(n);
+
+    BOR_CRONOS[key] = {
+      id: setInterval(function(){
+        var ahora = new Date().getTime();
+        var transcurridoSeg = Math.floor((ahora - tiempoInicioReal) / 1000);
+        var restante = duracionTotalSeg - transcurridoSeg;
+
+        var e = document.getElementById(cicloIdCrono(f,n));
+        if (e) e.textContent = cicloFmt(restante);
+
+        if (restante <= 0){
+        clearInterval(BOR_CRONOS[key].id);
+       BOR_CRONOS[key].id = null;
+       localStorage.removeItem(storageKey);
+
+        var fin = document.getElementById('bc'+n+'f_'+f).value = horaAhoraLav_();
+        calcTotalCard(f);
+       bcMarcarListo_(f, n);
+       bcGuardarParcial_(f);   
+      alert('¡Listo! Ya pasó el tiempo del Ciclo ' + n + '.');
+      bcAutoFinalizarSiCorresponde_(f); 
+      if (n === 2) bcConsultarCicloTres_(f); 
+      }
+      }, 1000)
+    };
+  }
+
+  
+  function bcResumir_(f, n, iniStr){
+    var key = f+'_'+n;
+    if (BOR_CRONOS[key] && BOR_CRONOS[key].id) return;
+    var iniMin = toMin(iniStr);
+    if (iniMin == null) return;
+    var ahoraMin = toMin(horaAhoraLav_());
+    var elapsedSeg = ((ahoraMin - iniMin + 1440) % 1440) * 60;
+    var restante = cicloDuracionSeg(n) - elapsedSeg;
+    var elBtn = document.getElementById(cicloIdBtn(f,n));
+    if (elBtn) elBtn.style.display = 'none';
+    if (restante <= 0) {
+      var fin = document.getElementById('bc'+n+'f_'+f);
+      if (fin && !fin.value) { fin.value = horaAhoraLav_(); calcTotalCard(f); }
+      bcMarcarListo_(f, n);
+      bcAutoFinalizarSiCorresponde_(f); 
+      if (n === 2) bcConsultarCicloTres_(f); 
+      return;
+    }
+    BOR_CRONOS[key] = { seg: restante };
+    var elCrono = document.getElementById(cicloIdCrono(f,n));
+    if (elCrono) elCrono.textContent = cicloFmt(restante);
+    BOR_CRONOS[key].id = setInterval(function(){
+      BOR_CRONOS[key].seg--;
+      var e = document.getElementById(cicloIdCrono(f,n));
+      if (e) e.textContent = cicloFmt(BOR_CRONOS[key].seg);
+      if (BOR_CRONOS[key].seg <= 0){
+      clearInterval(BOR_CRONOS[key].id); BOR_CRONOS[key].id = null;
+      var finEl = document.getElementById('bc'+n+'f_'+f);
+      if (finEl) finEl.value = horaAhoraLav_();
+      calcTotalCard(f);
+      bcMarcarListo_(f, n);
+      bcGuardarParcial_(f);   
+      alert('¡Listo! Ya pasó el tiempo del Ciclo ' + n + '.');
+      bcAutoFinalizarSiCorresponde_(f); 
+      if (n === 2) bcConsultarCicloTres_(f); 
+    }
+    }, 1000);
+  }
+
+
+  function renderBorradores(list){
+    document.getElementById('cntBorr').textContent = list.length;
+    var cont = document.getElementById('listaBorradores');
+    var respPrincipal = document.getElementById('responsable').value;
+    if(!list.length){ cont.innerHTML = '<p style="color:var(--mut); font-size:13px;">No hay lotes en proceso.</p>'; return; }
+    cont.innerHTML = list.map(function(b){
+      var f = b.fila;
+      var respTarjeta = b.responsable || respPrincipal || 'Javier';
+      function ciclo(n){
+        var c = b.ciclos[n-1] || {ini:'',fin:''};
+        var dur = cicloDuracionSeg(n);
+        var yaTermino = !!(c.ini && c.fin);
+        var enCurso = !!(c.ini && !c.fin);
+        var textoInicial = cicloFmt(dur);
+
+  if (yaTermino) {
+  textoInicial = 'Listo ✓';
+  } else if (enCurso) {
+  
+      var storageKey = 'crono_abs_' + f + '_' + n;
+      var tiempoInicioReal = localStorage.getItem(storageKey);
+      if (tiempoInicioReal) {
+        var transcurridoSeg = Math.floor((new Date().getTime() - parseInt(tiempoInicioReal, 10)) / 1000);
+      var restante = dur - transcurridoSeg;
+      if (restante <= 0) {
+      textoInicial = 'Listo ✓';
+    } else {
+      textoInicial = cicloFmt(restante);
+    }
+  }
+}
+        return '<div class="ciclo-container"><div class="ciclo-title">Ciclo '+n+' ('+Math.round(dur/60)+' min)</div>'+
+          '<input type="hidden" id="bc'+n+'i_'+f+'" value="'+(c.ini||'')+'">'+
+          '<input type="hidden" id="bc'+n+'f_'+f+'" value="'+(c.fin||'')+'">'+
+          '<div id="'+cicloIdCrono(f,n)+'" style="font-family:monospace; font-weight:700; font-size:16px; padding:5px 8px; border-radius:6px; margin-bottom:6px; background:'+(yaTermino?'#dcfce7':'#f1f5f9')+'; color:'+(yaTermino?'#15803d':'#0f172a')+';">'+textoInicial+'</div>'+
+          (yaTermino
+            ? '<div style="font-size:11px; color:var(--mut);">'+c.ini+' → '+c.fin+'</div>'
+            : '<button class="btn-submit" id="'+cicloIdBtn(f,n)+'" style="margin:0; padding:6px 10px; font-size:12px;'+(enCurso?' display:none;':'')+'" onclick="bcIniciarCiclo('+f+','+n+')">▶ Iniciar</button>'
+          ) +
+          (enCurso ? '<div style="font-size:11px; color:#0369a1; margin-top:4px;">Iniciado '+c.ini+'</div>' : '') +
+        '</div>';
+      }
+      return '<div style="border:1px solid #e9d5ff; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff;">'+
+        '<div style="font-weight:700; font-size:13px;">'+b.producto+' · '+(b.teton || 'Sin teton')+' · '+b.medida+'  <span style="color:#94a3b8; font-weight:400;">('+b.lote+')</span></div>'+
+        '<div class="grid-3" style="margin-top:8px;">'+ciclo(1)+ciclo(2)+ciclo(3)+'</div>'+
+        '<div style="margin-top:6px; font-size:12px; color:var(--mut);">Tiempo total: <b id="btot_'+f+'">'+(b.tiempoTotal||'0h 00min')+'</b></div>'+
+        '<div class="grid-3" style="margin-top:10px;">'+
+          '<div><label>Cantidad OK</label><input type="number" min="0" id="bcant_'+f+'" value="'+b.cantidad+'"></div>'+
+          '<div><label>Rechazadas</label><input type="number" min="0" id="brech_'+f+'" value="0"></div>'+
+          '<div><label>Responsable</label><input id="bresp_'+f+'" value="'+respTarjeta+'" readonly style="background:#e2e8f0; font-weight:700;"></div>'+
+        '</div>'+
+        '<div style="margin-top:10px; display:flex; gap:8px; justify-content:space-between; align-items:center;">'+
+          '<button class="btn-submit" style="background:#fff; color:#b91c1c; border:1px solid #fecaca; margin:0;" onclick="eliminarBorrador('+f+')">Eliminar</button>'+
+          '<div style="display:flex; gap:8px;">'+
+            '<button class="btn-submit" style="background:#fff; color:#6b21a8; border:1px solid #c084fc; margin:0;" onclick="guardarBorrador('+f+')">Guardar cambios</button>'+
+          '</div>'+
+        '</div></div>';
+    }).join('');
+    
+    list.forEach(function(b){
+      var f = b.fila;
+      (b.ciclos||[]).forEach(function(c, idx){
+        var n = idx+1;
+        if (c.ini && !c.fin) bcResumir_(f, n, c.ini);
+      });
+      
+      
+      
+      
+      var c1 = (b.ciclos||[])[0] || {}, c2 = (b.ciclos||[])[1] || {}, c3 = (b.ciclos||[])[2] || {};
+      if (c1.ini && c1.fin && c2.ini && c2.fin && !c3.ini && !c3.fin) {
+        bcConsultarCicloTres_(f);
+      }
+    });
+  }
+
+
+  function ciclosDesdeCard(f){
+    var c = [];
+    for(var i=1;i<=3;i++) c.push({ ini: document.getElementById('bc'+i+'i_'+f).value, fin: document.getElementById('bc'+i+'f_'+f).value });
+    return c;
+  }
+
+
+  function datosCard(f){
+    return {
+      fila: f,
+      ciclos: ciclosDesdeCard(f),
+      tiempoTotal: document.getElementById('btot_'+f).textContent,
+      cantidad: document.getElementById('bcant_'+f).value,
+      responsable: document.getElementById('bresp_'+f).value
+    };
+  }
+
+
+  function guardarBorrador(f){
+    google.script.run
+      .withSuccessHandler(function(r){ msg(r.msg, true); })
+      .withFailureHandler(function(e){ msg('Error: '+e.message, false); })
+      .abrActualizar(datosCard(f));
+  }
+
+
+function finalizarBorrador(f){
+    var respCard = document.getElementById('bresp_'+f);
+    if (!respCard.value) { respCard.value = document.getElementById('responsable').value; }
+
+    var d = datosCard(f);
+    d.cantidadProcesada = document.getElementById('bcant_'+f).value;
+    d.rechazadas = document.getElementById('brech_'+f).value;
+
+    google.script.run
+      .withSuccessHandler(function(r){
+        
+        for(var i=1; i<=3; i++) {
+          localStorage.removeItem('crono_abs_' + f + '_' + i);
+        }
+        msg(r.msg, true);
+        actualizarInventarios();
+        refrescarBorradores();
+      })
+      .withFailureHandler(function(e){ msg('Error: '+e.message, false); })
+      .abrFinalizar(d);
+  }
+
+
+ function eliminarBorrador(f){
+    google.script.run
+      .withSuccessHandler(function(r){
+        
+        for(var i=1; i<=3; i++) {
+          localStorage.removeItem('crono_abs_' + f + '_' + i);
+        }
+        msg(r.msg, true);
+        actualizarInventarios();
+        refrescarBorradores();
+      })
+      .withFailureHandler(function(e){ msg('Error: '+e.message, false); })
+      .abrEliminar({ fila: f });
+  }
+
+
+  function toMin(hora) {
+    if (!hora) return null;
+    var p = hora.split(':');
+    if (p.length < 2) return null;
+    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+  }
+
+
+  function fmtMin(minutos) {
+    var h = Math.floor(minutos / 60);
+    var m = minutos % 60;
+    return h + "h " + ("0" + m).slice(-2) + "min";
+  }
+
+
+  function calcTotalCard(f){
+    var tot = 0;
+    for(var i=1;i<=3;i++){
+      var ini = toMin(document.getElementById('bc'+i+'i_'+f).value);
+      var fin = toMin(document.getElementById('bc'+i+'f_'+f).value);
+      if(ini != null && fin != null && fin >= ini){ tot += fin - ini; }
+    }
+    document.getElementById('btot_'+f).textContent = fmtMin(tot);
+  }
+  function bcGuardarParcial_(f){
+  google.script.run
+    .withFailureHandler(function(e){ console.error('Error guardando ciclo: ' + e.message); })
+    .abrActualizar(datosCard(f));
+}
+
+window.onload = function() {
+  cargarInicial();
+  setInterval(function() { refrescarTodo(true); }, 15000); 
+};
+</script>
+</body>
+</html>
