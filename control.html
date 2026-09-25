@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de Calidad — Bio-Fix</title>
+<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
+<script>window.BIOFIX_PANTALLA = 'control';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --warn:#b45309; --ok:#15803d; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:1024px; width:100%; margin:0 auto; padding:0 20px; }
+  h1{ font-size:18px; margin-bottom:16px; color:#0369a1; font-weight:600; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2{ font-size:14px; margin:0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
+  .grid-3{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+  label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
+  select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  select:focus, input:focus{ border-color:var(--acc); outline:none; }
+  .badge-stock{ background:#e0f2fe; color:#0369a1; font-weight:700; padding:4px; border-radius:4px; text-align:center; font-size:14px; border:1px solid #93c5fd; }
+  .btn{ color:#fff; border:none; padding:10px 18px; font-size:14px; font-weight:600; border-radius:6px; cursor:pointer; margin-top:12px; }
+  .btn-final{ background:#16a34a; }
+  .btn:disabled{ opacity:0.5; cursor:default; }
+  .coas-table{ width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+  .coas-table th{ background:#f1f5f9; color:#1e293b; padding:6px 8px; text-align:left; border:1px solid #e2e8f0; font-weight:700; font-size:12px; }
+  .coas-table td{ padding:5px 8px; border:1px solid #e2e8f0; vertical-align:middle; }
+  .coas-table tr:nth-child(even) td{ background:#f8fafc; }
+  .coas-table input{ width:100%; padding:4px 6px; font-size:13px; border:1px solid var(--bx); border-radius:4px; text-align:right; }
+  .muestra-celda{ display:flex; gap:6px; align-items:center; }
+  .muestra-celda select{ width:auto; min-width:110px; }
+  .muestra-cnt{ font-size:11px; font-weight:700; white-space:nowrap; }
+  .muestra-cnt.completo{ color:#15803d; }
+  .muestra-cnt.incompleto{ color:#b45309; }
+  .lote-card{ border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
+  .lote-card.pausa{ border-color:#fbbf24; background:#fffbeb; }
+  .lote-card-header{ font-weight:700; font-size:13px; color:#1e3a5f; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .badge-sub{ display:inline-block; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700; }
+  .badge-en-control{ background:#fef3c7; color:#92400e; }
+  .badge-pausa{ background:#fde68a; color:#92400e; }
+  .badge-sucio{ font-size:11px; font-weight:700; color:#b45309; white-space:nowrap; }
+  .tiempos{ display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--mut); background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+  .tiempos b{ color:#1e293b; }
+  .hint{ font-size:11px; color:var(--mut); margin:4px 0 0 0; }
+  .aviso-cantidad{ background:#fef3c7; border:1px solid #fbbf24; border-radius:8px; padding:10px; font-size:13px; color:#92400e; margin-bottom:10px; }
+  .bloque-resp{ background:#f0f9ff; border:1px solid #93c5fd; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .bloque-resp label{ margin:0; white-space:nowrap; }
+  .bloque-resp select{ max-width:220px; }
+  #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:420px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
+  #msg.show{ display:block; }
+  #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
+  #msg.err{ background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+  @media (max-width: 1024px) {
+    body { padding: 12px; }
+    .container { padding: 0 12px; }
+    .grid-3 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .muestra-celda { flex-wrap: wrap; }
+    .muestra-celda select, .muestra-celda input { flex: 1 1 45%; }
+  }
+  @media (max-width: 720px) {
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1 style="margin:0;">Control de Calidad — Bio-Fix</h1>
+  </div>
+
+  
+  <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+    <h2>1. Poner un lote En Control</h2>
+    <p class="hint" style="margin-bottom:10px;">Elegí el lote y abrí el control. Los datos (cotas, responsables, cantidades) se cargan abajo, en <b>Lotes en Control</b>. El tiempo empieza a contar acá.</p>
+    <div class="grid-3">
+      <div>
+        <label>Lotes disponibles</label>
+        <select id="comboLotes" onchange="seleccionarLote()"></select>
+      </div>
+      <div>
+        <label>Cantidad disponible</label>
+        <div id="lblDisponible" class="badge-stock">0 u.</div>
+      </div>
+      <div>
+        <label>Responsable del control</label>
+        <select id="respInicial" onchange="validarBtnAbrir()"></select>
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn" style="background:#0284c7; width:100%; margin:0;" id="btnAbrir" onclick="abrirControl()" disabled>Empezar control ▶</button>
+      </div>
+    </div>
+    <p class="hint" id="hintResp" style="color:#b45309; margin-top:6px;">Elegí el lote y el responsable para poder empezar el control.</p>
+    <div class="grid-3" style="margin-top:12px;">
+      <div><label>Producto</label><input id="txtProducto" readonly style="background:#f1f5f9;"></div>
+      <div><label>Medida</label><input id="txtMedida" readonly style="background:#f1f5f9;"></div>
+      <div><label>Lote</label><input id="txtLote" readonly style="background:#f1f5f9;"></div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+      <span id="msg" style="font-size:13px;"></span>
+    </div>
+  </div>
+
+  
+  <div class="card" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
+    <h2>Lotes en Control (borradores) <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
+    <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
+    <div id="listaEnControl"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
+  </div>
+</div>
+
+<script>
+  var LETRAS_COA = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+  var RESP_QC = ['Gabriela','Javier','Miguel','Marcos'];
+  var DATA_CONTROL = [];
+  
+  var MUESTRAS = {};     
+  var TAM_MUESTRA = {};  
+  var SEL_IDX = {};      
+  var RESP_LOTE = {};    
+  var MANUAL = {};       
+  var CERRANDO = {};     
+
+  
+  var SAVE_EN_CURSO = {};
+  var SAVE_PENDIENTE = {};
+  var LOTES_SUCIOS = {};
+
+  function horaAhoraCdc(){
+    var d = new Date();
+    var ba = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+    function pad(n){ return ('0'+n).slice(-2); }
+    return pad(ba.getUTCDate())+'/'+pad(ba.getUTCMonth()+1)+'/'+ba.getUTCFullYear()+' '+pad(ba.getUTCHours())+':'+pad(ba.getUTCMinutes());
+  }
+
+  function tamanoMuestra(cantidad) {
+    var c = Number(cantidad) || 0;
+    return Math.max(1, Math.ceil(c * 0.15));
+  }
+
+   
+  function llamarConReintento_(nombreFuncion, args, onSuccess, onError, intentosRestantes) {
+    if (intentosRestantes === undefined) intentosRestantes = 2;
+    google.script.run
+      .withSuccessHandler(onSuccess)
+      .withFailureHandler(function (e) {
+        if (intentosRestantes > 0) {
+          setTimeout(function () {
+            llamarConReintento_(nombreFuncion, args, onSuccess, onError, intentosRestantes - 1);
+          }, 1500);
+        } else {
+          onError(e);
+        }
+      })[nombreFuncion].apply(null, args || []);
+  }
+  function actualizarInventarios() {
+    llamarConReintento_('ctlObtenerLotesParaControl', [], function (res) {
+      DATA_CONTROL = res || [];
+      poblarCombo();
+    }, _fallaActualizarInventarios_);
+    refrescarEnControl();
+  }
+  function _fallaActualizarInventarios_(e) {
+    var recargar = confirm(
+      'La pantalla estuvo un rato sin usarse y perdió la conexión con el servidor.\n' +
+      '¿Recargar la página ahora para reconectar? (No se pierde nada, es solo lectura de inventario.)'
+    );
+    if (recargar) {
+      location.reload();
+    } else {
+      msg('Error al leer inventario: ' + e.message, false);
+    }
+  }
+  function poblarCombo() {
+    var combo = document.getElementById('comboLotes');
+    var previo = combo.value;
+    if (!DATA_CONTROL.length) { combo.innerHTML = '<option value="">No hay lotes esperando control</option>'; limpiarCampos(); return; }
+    combo.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
+      DATA_CONTROL.map(function(x, i) { return '<option value="'+i+'">'+x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u</option>'; }).join('');
+    if (previo !== '' && DATA_CONTROL[previo]) { combo.value = previo; seleccionarLote(); }
+    else limpiarCampos();
+  }
+  function seleccionarLote() {
+    var idx = document.getElementById('comboLotes').value;
+    if (idx === '' || !DATA_CONTROL[idx]) { limpiarCampos(); return; }
+    var it = DATA_CONTROL[idx];
+    document.getElementById('txtProducto').value = it.producto || '';
+    document.getElementById('txtMedida').value   = it.medida   || '';
+    document.getElementById('txtLote').value     = it.lote     || '';
+    document.getElementById('lblDisponible').textContent = (it.disponible || 0) + ' u.';
+    validarBtnAbrir();
+  }
+  function limpiarCampos() {
+    ['txtProducto','txtMedida','txtLote'].forEach(function(id){ document.getElementById(id).value = ''; });
+    document.getElementById('lblDisponible').textContent = '0 u.';
+    validarBtnAbrir();
+  }
+
+  function poblarRespInicial() {
+    var sel = document.getElementById('respInicial');
+    sel.innerHTML = '<option value="">— Elegir responsable —</option>' + RESP_QC.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+  }
+  function validarBtnAbrir() {
+    var idx = document.getElementById('comboLotes').value;
+    var resp = document.getElementById('respInicial').value;
+    var b = document.getElementById('btnAbrir');
+    var hint = document.getElementById('hintResp');
+    var listo = (idx !== '' && !!resp);
+    if (b) b.disabled = !listo;
+    if (hint) hint.style.display = listo ? 'none' : '';
+  }
+
+   
+  function abrirControl() {
+    var idx = document.getElementById('comboLotes').value;
+    if (idx === '' || !DATA_CONTROL[idx]) { msg('Elegí un lote de la lista.', false); return; }
+    var resp = document.getElementById('respInicial').value;
+    if (!resp) { msg('Elegí el responsable antes de iniciar el control.', false); return; }
+    var it = DATA_CONTROL[idx];
+    var b = document.getElementById('btnAbrir'); if (b) b.disabled = true;
+    msg('Abriendo…', true);
+    google.script.run
+      .withSuccessHandler(function(r){
+        msg(r.msg, true);
+        document.getElementById('respInicial').value = '';
+        document.getElementById('comboLotes').value = '';
+        actualizarInventarios();
+      })
+      .withFailureHandler(function(e){ if(b) b.disabled = false; msg(e.message, false); })
+      .ctlCrearBorrador({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp });
+  }
+
+   
+  function refrescarEnControl() {
+    google.script.run
+      .withSuccessHandler(renderEnControl)
+      .withFailureHandler(function(e){ document.getElementById('listaEnControl').innerHTML = '<p style="color:#b91c1c; font-size:13px;">'+e.message+'</p>'; })
+      .ctlListarEnControl();
+  }
+
+  function prepararMuestras(id, letrasDeEsteLote, coas, tam) {
+    if (!MUESTRAS[id]) MUESTRAS[id] = {};
+    letrasDeEsteLote.forEach(function (l) {
+      var existentes = (coas && coas[l] && Array.isArray(coas[l].muestras)) ? coas[l].muestras.slice() : [];
+      var arr = MUESTRAS[id][l] || existentes;
+      while (arr.length < tam) arr.push({ v: '', r: '' });
+      if (arr.length > tam) arr = arr.slice(0, tam);
+      MUESTRAS[id][l] = arr;
+    });
+  }
+
+  function contarCompletas(id, l) {
+    var arr = (MUESTRAS[id] && MUESTRAS[id][l]) || [];
+    return arr.filter(function (m) {
+      return m && m.v !== '' && m.v !== null && m.v !== undefined && String(m.r || '').trim() !== '';
+    }).length;
+  }
+
+  function renderEnControl(lista) {
+    var cont = document.getElementById('listaEnControl');
+    
+    var ae = document.activeElement;
+    var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|respLote_)/.test(ae.id);
+    document.getElementById('cntEnControl').textContent = lista.length;
+    if (editando && cont.dataset.pintado === '1') { return; }
+    if (!lista.length) { cont.innerHTML = '<p style="color:var(--mut); font-size:13px;">No hay lotes en control.</p>'; return; }
+    cont.innerHTML = lista.map(function(b) {
+      var f = b.id;
+      if (RESP_LOTE[f] === undefined) {
+        RESP_LOTE[f] = String(b.responsable || '').split(',')[0].trim();
+      }
+      var cantidadVacia = !(Number(b.cantidadOriginal) > 0);
+      var tam = cantidadVacia ? 0 : tamanoMuestra(b.cantidadOriginal);
+      TAM_MUESTRA[f] = tam;
+
+      var letrasDeEsteLote = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      if (b.coas) {
+        letrasDeEsteLote.forEach(function (l) {
+          if (b.coas[l] && !Array.isArray(b.coas[l].muestras) && Array.isArray(b.coas[l].valores)) {
+            b.coas[l].muestras = b.coas[l].valores.map(function (v) { return { v: v, r: '' }; });
+          }
+        });
+      }
+      if (!cantidadVacia) prepararMuestras(f, letrasDeEsteLote, b.coas, tam);
+
+      var bloqueResponsable;
+      if (RESP_LOTE[f]) {
+        bloqueResponsable = '<div class="bloque-resp">'+
+          '<label>Responsable de este lote</label>'+
+          '<span style="font-weight:700; color:#0369a1;">'+RESP_LOTE[f]+'</span>'+
+        '</div>';
+      } else {
+        var respLoteOpts = '<option value="">— Elegir responsable —</option>' + RESP_QC.map(function(r){
+          return '<option value="'+r+'"'+(RESP_LOTE[f]===r?' selected':'')+'>'+r+'</option>';
+        }).join('');
+        bloqueResponsable = '<div class="bloque-resp">'+
+          '<label>Responsable de este lote</label>'+
+          '<select id="respLote_'+f+'" onchange="elegirResponsableLote(\''+f+'\')">'+respLoteOpts+'</select>'+
+          '<span class="hint" style="color:#b45309;">Elegilo antes de cargar valores de cotas.</span>'+
+        '</div>';
+      }
+
+      var filasCoa;
+      if (cantidadVacia) {
+        filasCoa = '<tr><td colspan="2" class="aviso-cantidad">Este lote no tiene Cantidad Original registrada (quedó de antes del cambio). Eliminá el borrador y volvé a abrirlo desde el paso 1.</td></tr>';
+      } else {
+        filasCoa = letrasDeEsteLote.map(function(l){
+          var completos = contarCompletas(f, l);
+          var claseCnt = (completos >= tam) ? 'completo' : 'incompleto';
+          var arrLetra = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+          var primerVacioL = arrLetra.findIndex(slotVacio_);
+          var idxSelGuardado = (SEL_IDX[f] && SEL_IDX[f][l] !== undefined) ? SEL_IDX[f][l] : (primerVacioL >= 0 ? primerVacioL : 0);
+          var opcionesMuestra = '';
+          for (var n = 1; n <= tam; n++) {
+            opcionesMuestra += '<option value="'+(n-1)+'"'+((n-1===idxSelGuardado)?' selected':'')+'>Muestra N° '+n+'</option>';
+          }
+          var args = '\''+f+'\',\''+l+'\'';
+          return '<tr>'+
+            '<td style="text-align:center;font-weight:700;color:#0369a1;">'+l+'</td>'+
+            '<td><div class="muestra-celda">'+
+              '<select id="qidx_'+l+'_'+f+'" onchange="cargarMuestra('+args+',true)">'+opcionesMuestra+'</select>'+
+              '<input type="text" id="qval_'+l+'_'+f+'" data-fila="'+f+'" placeholder="Valor (número o letra)"'+
+                ' onfocus="focoMuestra('+args+')"'+
+                ' onblur="blurMuestra('+args+')"'+
+                ' onkeydown="teclaMuestra(event,'+args+')"'+
+                ' oninput="guardarMuestraLocal('+args+')"'+(RESP_LOTE[f]?'':' disabled')+'>'+
+              '<span id="qcnt_'+l+'_'+f+'" class="muestra-cnt '+claseCnt+'">'+completos+'/'+tam+'</span>'+
+            '</div></td>'+
+          '</tr>';
+        }).join('');
+      }
+
+      var botonPausa = b.enPausa
+        ? '<button class="btn" style="background:#16a34a;margin:0;padding:7px 14px;font-size:12px;" onclick="reanudar(\''+f+'\')">▶ Reanudar</button>'
+        : '<select id="motivo_'+f+'" style="padding:7px;font-size:12px;border:1px solid var(--bx);border-radius:6px;">'+
+            '<option>Almuerzo</option><option>Baño</option><option>Otra tarea</option><option>Fin de Jornada</option>'+
+          '</select>'+
+          '<button class="btn" style="background:#b45309;margin:0;padding:7px 14px;font-size:12px;" onclick="pausar(\''+f+'\')">⏸ Pausa</button>';
+
+      var tiempos = '<div class="tiempos">'+
+        '<span>Inicio: <b>'+(b.inicio||'—')+'</b></span>'+
+        '<span>Pausas: <b>'+(b.pausaMin||0)+' min</b></span>'+
+        (b.enPausa ? '<span style="color:#b45309;font-weight:700;">EN PAUSA desde '+b.pausaDesde+'</span>' : '')+
+        (b.motivos ? '<span>Motivos: <b>'+b.motivos+'</b></span>' : '')+
+      '</div>';
+
+      var cerrando = !!CERRANDO[f];
+      return '<div class="lote-card'+(b.enPausa?' pausa':'')+'">'+
+        '<div class="lote-card-header">'+
+          '<span>'+b.producto+' · '+b.medida+'  <span style="color:#94a3b8; font-weight:400;">('+b.lote+')</span></span>'+
+          '<span class="badge-sub '+(b.enPausa?'badge-pausa':'badge-en-control')+'">'+(b.enPausa?'En pausa':'En control')+'</span>'+
+        '</div>'+
+        bloqueResponsable +
+        tiempos +
+        '<div class="grid-3" style="margin-bottom:10px;">'+
+          '<div><label>Con/Sin Tetón</label><input value="'+(b.teton||'—')+'" readonly style="background:#f1f5f9;"></div>'+
+          '<div><label>Cantidad (fija)</label><input type="number" id="tcant_'+f+'" value="'+b.cantidad+'" readonly style="background:#f1f5f9; font-weight:700;"></div>'+
+          '<div><label>Rechazadas</label><input type="number" min="0" id="trech_'+f+'" value="'+(b.rechazadas||0)+'" oninput="recalcCantidadFija(\''+f+'\')"><input type="hidden" id="torig_'+f+'" value="'+(b.cantidadOriginal||0)+'"></div>'+
+        '</div>'+
+        (cantidadVacia ? '' : '<div class="hint" style="margin-bottom:6px;">Muestra a controlar: <b>'+tam+'</b> por cota (15% de '+b.cantidadOriginal+', redondeado para arriba).</div>')+
+        '<table class="coas-table">'+
+          '<thead><tr><th style="width:40px;">Cota</th><th>Muestra (valor)</th></tr></thead>'+
+          '<tbody>'+filasCoa+'</tbody>'+
+        '</table>'+
+        '<div style="margin-top:10px;"><label>Observaciones</label><input id="tobs_'+f+'" value="'+(b.observaciones||'')+'" oninput="marcarSucio(\''+f+'\')"></div>'+
+        '<div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">'+
+          '<div style="display:flex; gap:8px; align-items:center;">'+
+            '<button class="btn" style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminarBorrador(\''+f+'\')"'+(cerrando?' disabled':'')+'>🗑 Eliminar</button>'+
+            botonPausa +
+            '<span id="sucio_'+f+'" class="badge-sucio" style="display:'+(LOTES_SUCIOS[f]?'inline':'none')+';">● Cambios sin guardar</span>'+
+          '</div>'+
+          '<div style="display:flex; gap:8px;">'+
+            '<button class="btn" style="background:#fff;color:#6b21a8;border:1px solid #c084fc;margin:0;padding:7px 14px;font-size:12px;" onclick="actualizarEnControl(\''+f+'\')"'+(cerrando?' disabled':'')+'>Guardar avance</button>'+
+            '<button class="btn btn-final" style="margin:0;padding:7px 14px;font-size:12px;" onclick="cerrarControl(\''+f+'\', this)"'+(cerrando?' disabled':'')+'>'+(cerrando?'Cerrando…':'Marcar Controlada ✓')+'</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+    cont.dataset.pintado = '1';
+    lista.forEach(function(b){
+      var f = b.id;
+      if (!(Number(b.cantidadOriginal) > 0)) return;
+      var letrasDeEsteLote = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      letrasDeEsteLote.forEach(function(l){ cargarMuestra(f, l, false); });
+    });
+  }
+
+  function recalcCantidadFija(f) {
+    var orig = Number(document.getElementById('torig_'+f).value) || 0;
+    var rech = Number(document.getElementById('trech_'+f).value) || 0;
+    var elCant = document.getElementById('tcant_'+f);
+    if (elCant) elCant.value = Math.max(0, orig - rech);
+    marcarSucio(f);
+  }
+
+  function marcarSucio(f) {
+    LOTES_SUCIOS[f] = true;
+    var el = document.getElementById('sucio_'+f);
+    if (el) el.style.display = 'inline';
+  }
+  function limpiarSucio(f) {
+    LOTES_SUCIOS[f] = false;
+    var el = document.getElementById('sucio_'+f);
+    if (el) el.style.display = 'none';
+  }
+
+  function actualizarContadorCota_(f, l) {
+    var completos = contarCompletas(f, l);
+    var tam = TAM_MUESTRA[f] || 0;
+    var cnt = document.getElementById('qcnt_'+l+'_'+f);
+    if (cnt) {
+      cnt.textContent = completos + '/' + tam;
+      cnt.className = 'muestra-cnt ' + (completos >= tam ? 'completo' : 'incompleto');
+    }
+  }
+
+  function elegirResponsableLote(f) {
+    var sel = document.getElementById('respLote_'+f);
+    if (!sel) return;
+    RESP_LOTE[f] = sel.value || '';
+    document.querySelectorAll('input[data-fila="'+f+'"]').forEach(function(inp){
+      inp.disabled = !RESP_LOTE[f];
+    });
+    if (!RESP_LOTE[f]) return;
+    var huboCambios = false;
+    if (MUESTRAS[f]) {
+      Object.keys(MUESTRAS[f]).forEach(function(l){
+        MUESTRAS[f][l].forEach(function(m){
+          if (m && m.v !== '' && m.v !== null && m.v !== undefined && m.r !== RESP_LOTE[f]) {
+            m.r = RESP_LOTE[f];
+            huboCambios = true;
+          }
+        });
+        actualizarContadorCota_(f, l);
+      });
+    }
+    if (huboCambios) marcarSucio(f);
+  }
+
+   
+  function slotVacio_(m) { return !m || m.v === '' || m.v === null || m.v === undefined; }
+
+  
+  function cargarMuestra(f, l, manual) {
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    var inp = document.getElementById('qval_'+l+'_'+f);
+    if (!sel || !inp) return;
+    var idx = Number(sel.value) || 0;
+    if (!SEL_IDX[f]) SEL_IDX[f] = {};
+    SEL_IDX[f][l] = idx;
+    if (manual) MANUAL[f+'|'+l] = true;
+    var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+    var m = arr[idx] || { v: '', r: '' };
+    inp.value = (m.v === '' || m.v === undefined || m.v === null) ? '' : m.v;
+  }
+
+  function irAMuestra_(f, l, idx) {
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    if (!sel) return;
+    sel.value = String(idx);
+    cargarMuestra(f, l, false);
+  }
+
+  
+  
+  
+  function focoMuestra(f, l) {
+    if (MANUAL[f+'|'+l]) return;
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+    var idx = sel ? (Number(sel.value) || 0) : 0;
+    if (!slotVacio_(arr[idx])) {
+      var vacia = arr.findIndex(slotVacio_);
+      if (vacia >= 0) irAMuestra_(f, l, vacia);
+    }
+  }
+  function blurMuestra(f, l) { MANUAL[f+'|'+l] = false; }
+
+  
+  function teclaMuestra(e, f, l) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    MANUAL[f+'|'+l] = false;
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+    var cur = sel ? (Number(sel.value) || 0) : 0;
+    var sig = -1;
+    for (var i = cur + 1; i < arr.length; i++) { if (slotVacio_(arr[i])) { sig = i; break; } }
+    if (sig < 0) sig = arr.findIndex(slotVacio_);
+    if (sig >= 0) irAMuestra_(f, l, sig);
+    else msg('Cota ' + l + ' completa (' + arr.length + '/' + arr.length + ').', true);
+  }
+
+  
+  
+  function guardarMuestraLocal(f, l) {
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    var inp = document.getElementById('qval_'+l+'_'+f);
+    if (!sel || !inp) return;
+    if (!RESP_LOTE[f]) { msg('Elegí primero el responsable de este lote.', false); inp.value = ''; return; }
+    var idx = Number(sel.value) || 0;
+    if (!MUESTRAS[f]) MUESTRAS[f] = {};
+    if (!MUESTRAS[f][l]) MUESTRAS[f][l] = [];
+    MUESTRAS[f][l][idx] = {
+      v: inp.value === '' ? '' : inp.value.trim(),
+      r: RESP_LOTE[f]
+    };
+    actualizarContadorCota_(f, l);
+    marcarSucio(f);
+  }
+
+   
+  function encolarGuardado(f) {
+    if (SAVE_EN_CURSO[f]) { SAVE_PENDIENTE[f] = true; return; }
+    SAVE_EN_CURSO[f] = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        SAVE_EN_CURSO[f] = false;
+        limpiarSucio(f);
+        if (r && r.msg) msg(r.msg, true);
+        var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
+        if (pend) encolarGuardado(f);
+      })
+      .withFailureHandler(function (e) {
+        SAVE_EN_CURSO[f] = false;
+        msg('No se pudo guardar: ' + e.message, false);
+        var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
+        if (pend) encolarGuardado(f);
+      })
+      .ctlActualizar(datosCard(f));
+  }
+
+  function datosCard(f) {
+    var coas = {};
+    LETRAS_COA.forEach(function(l){
+      var muestras = (MUESTRAS[f] && MUESTRAS[f][l]) ? MUESTRAS[f][l] : undefined;
+      if (muestras === undefined) return;
+      coas[l] = { muestras: muestras };
+    });
+    return {
+      id: f, coas: coas,
+      rechazadas: document.getElementById('trech_'+f) ? Number(document.getElementById('trech_'+f).value)||0 : 0,
+      observaciones: document.getElementById('tobs_'+f) ? document.getElementById('tobs_'+f).value : ''
+    };
+  }
+  function actualizarEnControl(f) {
+    if (CERRANDO[f]) return;
+    encolarGuardado(f);
+  }
+
+  function esperarLoteLibre_(f, cb, intentos) {
+    if (intentos === undefined) intentos = 50; 
+    if (!SAVE_EN_CURSO[f] || intentos <= 0) { cb(); return; }
+    setTimeout(function () { esperarLoteLibre_(f, cb, intentos - 1); }, 200);
+  }
+
+  function pausar(f) {
+    var sel = document.getElementById('motivo_'+f);
+    var motivo = sel ? sel.value : '';
+    google.script.run
+      .withSuccessHandler(function(r){ msg(r.msg, true); refrescarEnControl(); })
+      .withFailureHandler(function(e){ msg(e.message, false); })
+      .ctlPausar({ id: f, hora: horaAhoraCdc(), motivo: motivo });
+  }
+  function reanudar(f) {
+    google.script.run
+      .withSuccessHandler(function(r){ msg(r.msg, true); refrescarEnControl(); })
+      .withFailureHandler(function(e){ msg(e.message, false); })
+      .ctlReanudar({ id: f, hora: horaAhoraCdc() });
+  }
+
+  
+  
+  function cerrarControl(f, btn) {
+    if (CERRANDO[f]) return;
+    CERRANDO[f] = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Cerrando…'; }
+    msg('Marcando como Controlada… no cierres la pantalla.', true);
+    esperarLoteLibre_(f, function () {
+      var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
+      google.script.run
+        .withSuccessHandler(function(r){
+          msg(r.msg, true);
+          delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
+          actualizarInventarios();
+        })
+        .withFailureHandler(function(e){
+          delete CERRANDO[f];
+          msg(e.message, false);
+          if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
+          refrescarEnControl();
+        })
+        .ctlCerrar(d);
+    });
+  }
+  function eliminarBorrador(f) {
+    if (CERRANDO[f]) return;
+    if (!confirm('¿Eliminar este control? El lote vuelve a la lista de espera.')) return;
+    google.script.run
+      .withSuccessHandler(function(r){ msg(r.msg, true); delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; actualizarInventarios(); })
+      .withFailureHandler(function(e){ msg(e.message, false); })
+      .ctlEliminarBorrador({ id: f });
+  }
+
+  function msg(t, ok) {
+    var m = document.getElementById('msg');
+    m.textContent = t;
+    m.className = 'show ' + (ok ? 'ok' : 'err');
+    if (ok) setTimeout(function(){ if (m.textContent === t) m.className = ''; }, 4000);
+  }
+  function refrescarTodo(silencioso) {
+    actualizarInventarios();
+  }
+
+  window.onload = function() {
+    poblarRespInicial();
+    actualizarInventarios();
+    validarBtnAbrir();
+    setInterval(function() { refrescarTodo(true); }, 15000);
+  };
+
+  
+  window.addEventListener('beforeunload', function (e) {
+    var hayCambios = Object.keys(LOTES_SUCIOS).some(function (f) { return LOTES_SUCIOS[f]; });
+    if (hayCambios) {
+      e.preventDefault();
+      e.returnValue = '¿Salir sin guardar? Hay cambios cargados que todavía no se guardaron.';
+      return e.returnValue;
+    }
+  });
+</script>
+</body>
+</html>
