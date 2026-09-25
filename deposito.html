@@ -209,7 +209,8 @@ function mostrarApp(session) {
   }
   document.getElementById('vistaLogin').classList.add('hide');
   document.getElementById('vistaApp').classList.remove('hide');
-  document.getElementById('quien').textContent = 'Puesto: ' + emailAUsuario(session.user.email);
+  document.getElementById('quien').innerHTML = 'Puesto: ' + emailAUsuario(session.user.email) +
+    (ADMINS.indexOf(u) >= 0 ? ' · <a href="index.html" style="color:#0284c7;">Menú</a>' : '');
   cargarActual();
 }
 async function ingresar() {
