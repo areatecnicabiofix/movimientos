@@ -28,6 +28,44 @@
 
   var resolverSesion;
   var sesionLista = new Promise(function (r) { resolverSesion = r; });
+  var PANTALLA = String(window.BIOFIX_PANTALLA || '').toLowerCase();   // sector de esta página
+  var ADMINS = (CFG.admins || []).map(function (x) { return String(x).toLowerCase(); });
+
+  function sectorDe(session) {
+    return String((session && session.user && session.user.email) || '').split('@')[0].toLowerCase();
+  }
+  function permitido(session) {
+    var u = sectorDe(session);
+    return !PANTALLA || u === PANTALLA || ADMINS.indexOf(u) >= 0;
+  }
+  function salir() { return sb.auth.signOut().then(function () { location.reload(); }); }
+
+  /** Si el usuario es del sector de esta pantalla, sigue; si no, bloquea y ofrece salir. */
+  function verificar(session) {
+    if (permitido(session)) { mostrarChip(session); resolverSesion(session); return; }
+    var d = document.createElement('div');
+    d.id = 'bfBloqueo';
+    d.setAttribute('style', 'position:fixed;inset:0;background:#f8fafc;z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;');
+    d.innerHTML =
+      '<div style="width:340px;max-width:92vw;background:#fff;border:1px solid #fecaca;border-radius:12px;padding:22px;text-align:center;">' +
+        '<div style="font-size:16px;font-weight:700;color:#b91c1c;margin-bottom:10px;">Esta tablet está ingresada como "' + sectorDe(session) + '"</div>' +
+        '<div style="font-size:14px;color:#475569;margin-bottom:16px;">Esta pantalla es de <b>' + PANTALLA + '</b>. Para usarla hay que salir e ingresar con el usuario de ' + PANTALLA + '.</div>' +
+        '<button id="bfSalirB" style="width:100%;padding:11px;font-size:14px;font-weight:700;background:#0284c7;color:#fff;border:none;border-radius:8px;cursor:pointer;">Salir e ingresar con otro usuario</button>' +
+      '</div>';
+    document.body.appendChild(d);
+    document.getElementById('bfSalirB').onclick = salir;
+  }
+
+  /** Cartelito fijo abajo a la derecha: "Puesto: mecanizado · Salir". */
+  function mostrarChip(session) {
+    if (document.getElementById('bfChip')) return;
+    var c = document.createElement('div');
+    c.id = 'bfChip';
+    c.setAttribute('style', 'position:fixed;right:10px;bottom:10px;z-index:99998;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:6px 12px;font:12px Arial,sans-serif;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.08);');
+    c.innerHTML = 'Puesto: <b>' + sectorDe(session) + '</b> · <a href="#" id="bfSalirC" style="color:#0284c7;">Salir</a>';
+    document.body.appendChild(c);
+    document.getElementById('bfSalirC').onclick = function (e) { e.preventDefault(); salir(); };
+  }
 
   /* ---------------- ingreso ---------------- */
   function usuarioAEmail(u) {
@@ -43,7 +81,7 @@
     d.innerHTML =
       '<div style="width:320px;max-width:92vw;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:22px;">' +
         '<div style="font-size:18px;font-weight:600;color:#0369a1;margin-bottom:14px;">' + (CFG.titulo || 'Bio-Fix') + '</div>' +
-        '<input id="bfUser" type="text" placeholder="Usuario (ej: mecanizado)" autocapitalize="none" autocomplete="username" ' +
+        '<input id="bfUser" type="text" placeholder="Usuario (ej: ' + (PANTALLA || 'mecanizado') + ')" autocapitalize="none" autocomplete="username" ' +
           'style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px;font-size:14px;border:1px solid #e2e8f0;border-radius:6px;">' +
         '<input id="bfPass" type="password" placeholder="Contraseña" autocomplete="current-password" ' +
           'style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px;font-size:14px;border:1px solid #e2e8f0;border-radius:6px;">' +
@@ -61,7 +99,7 @@
         btn.disabled = false;
         if (r.error) { m.textContent = 'Usuario o contraseña incorrectos.'; return; }
         d.parentNode.removeChild(d);
-        resolverSesion(r.data.session);
+        verificar(r.data.session);
       });
     };
     document.getElementById('bfBtn').onclick = go;
@@ -70,7 +108,7 @@
 
   function arrancar() {
     sb.auth.getSession().then(function (r) {
-      if (r.data && r.data.session) resolverSesion(r.data.session); else mostrarLogin();
+      if (r.data && r.data.session) verificar(r.data.session); else mostrarLogin();
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
@@ -122,6 +160,8 @@
   window.BIOFIX = {
     supabase: sb,
     llamar: llamar,
-    salir: function () { return sb.auth.signOut().then(function () { location.reload(); }); }
+    sesion: sesionLista,          // promesa: se cumple cuando el puesto ya ingresó y tiene permiso
+    sectorDe: sectorDe,
+    salir: salir
   };
 })();
