@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lavados Grueso / Final — Bio-Fix</title>
+<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
+<script>window.BIOFIX_PANTALLA = 'lavados';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:900px; margin:0 auto; }
+  h1{ font-size:18px; margin-bottom:14px; color:#0369a1; font-weight:600; }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{ flex:1; padding:12px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
+  .tab.active{ background:#0284c7; color:#fff; border-color:#0284c7; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2{ font-size:14px; margin:0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
+  .grid-3{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+  label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
+  select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  select:focus, input:focus{ border-color:var(--acc); outline:none; }
+  .badge-stock{ background:#e0f2fe; color:#0369a1; font-weight:700; padding:4px; border-radius:4px; text-align:center; font-size:14px; border:1px solid #93c5fd; }
+  .badge-ref{ background:#fef9c3; color:#854d0e; font-weight:700; padding:4px; border-radius:4px; text-align:center; font-size:14px; border:1px solid #fde68a; }
+  .badge-ref:placeholder-shown{ border-color:#f59e0b; background:#fffbeb; color:#92400e; font-weight:600; }
+  .btn{ color:#fff; border:none; padding:10px 18px; font-size:14px; font-weight:600; border-radius:6px; cursor:pointer; margin-top:12px; background:#16a34a; }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .hide{ display:none; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ background:#f1f5f9; text-align:left; padding:6px 8px; border:1px solid #e2e8f0; font-size:12px; }
+  td{ padding:5px 8px; border:1px solid #e2e8f0; }
+  td input[type="number"], td input[type="text"]{ width:90px; padding:3px 5px; font-size:12px; }
+  .empty{ font-size:13px; color:var(--mut); font-style:italic; }
+  .btn-mini{ border:none; padding:6px 10px; font-size:12px; font-weight:700; border-radius:6px; cursor:pointer; }
+  .pasos-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; }
+  .paso-box{ border:1px solid #ddd6fe; background:#fff; border-radius:8px; padding:8px; }
+  .paso-box label{ color:#5b21b6; }
+  .paso-box input.invalido{ border-color:#ef4444; background:#fef2f2; }
+  .cond-titulo{ text-align:center; font-weight:700; font-size:13px; color:#1e293b; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-bottom:none; }
+  .cond-fuera{ border-color:#ef4444 !important; background:#fef2f2 !important; }
+  .cond-aviso{ display:none; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; margin-top:10px; }
+  .trabajo{ font-size:13px; padding:8px 10px; border-radius:8px; margin-top:8px; background:#f1f5f9; color:#334155; }
+  .trabajo.ok{ background:#dcfce7; color:#15803d; }
+  .trabajo.err{ background:#fee2e2; color:#b91c1c; }
+  .trabajo a{ color:#0369a1; font-weight:700; }
+  #diag{ display:none; margin-bottom:12px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:600; white-space:pre-wrap; }
+  #diag.suave{ background:#fef3c7; border-color:#fbbf24; color:#92400e; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Lavados — Bio-Fix</h1>
+  <div id="diag"></div>
+
+  <div class="tabs">
+    <div class="tab active" id="tabBtnGrueso" onclick="mostrar('grueso')">Lavado Grueso</div>
+    <div class="tab" id="tabBtnFinal" onclick="mostrar('final')">Lavado Final</div>
+  </div>
+
+  
+  <div id="tabGrueso">
+    <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+      <h2>1. Seleccionar lote (desde Control de Calidad)</h2>
+      <div class="grid-3">
+        <div><label>Lotes disponibles</label><select id="g_combo" onchange="g_sel()"><option value="">Cargando lotes...</option></select></div>
+        <div><label>Cantidad disponible</label><div id="g_disp" class="badge-stock">0 u.</div></div>
+        <div><label>REF (Control de Calidad)</label><div id="g_ref" class="badge-ref">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Registrar Lavado Grueso</h2>
+      <input type="hidden" id="g_fila">
+      <input type="hidden" id="g_refControl">
+      <input type="hidden" id="g_loteReal">
+      <div class="grid-3">
+        <div><label>Producto</label><input id="g_prod" readonly style="background:#f1f5f9;"></div>
+        <div><label>Medida</label><input id="g_med" readonly style="background:#f1f5f9;"></div>
+        <div><label>Lote (de origen)</label><input id="g_lote" readonly style="background:#f1f5f9;"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div><label>Con / Sin Tetón</label><input id="g_teton" readonly style="background:#f1f5f9;"></div>
+        <div><label>Lote de lavado grueso (nuevo, manual)</label><input id="g_lotelav" oninput="ggGuardarEstado()" placeholder="Ej: LG-001"></div>
+        <div><label>Fecha</label><input id="g_fecha" type="date" readonly style="background:#f1f5f9;"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div>
+          <label>Responsable</label>
+          <select id="g_resp" onchange="ggGuardarEstado()">
+            <option value="">— Seleccionar —</option>
+            <option>Lourdes Deasis</option><option>Gabriela Goritz</option>
+          </select>
+        </div>
+        <div><label>Cantidad</label><input id="g_cant" type="number" min="1" oninput="ggGuardarEstado()"></div>
+        <div><label>Rechazadas</label><input id="g_rech" type="number" value="0" min="0" oninput="ggGuardarEstado()"></div>
+      </div>
+      <div style="margin-top:12px;">
+        <label>Observaciones</label>
+        <textarea id="g_obs" rows="2" placeholder="Notas..." style="resize:none;" oninput="ggGuardarEstado()"></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+        <span id="g_msg" style="font-size:13px;"></span>
+        <button class="btn" style="background:#64748b;" onclick="g_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
+        <button class="btn" id="g_btn" onclick="g_registrarSolo()">Registrar Lavado Grueso (solo este)</button>
+      </div>
+    </div>
+
+    <div class="card" id="g_seccionGrupo" style="display:none; border-color:#0284c7; background:#f0f9ff;">
+      <h2 style="color:#0284c7;">Grupo de Lotes para Lavado Grueso</h2>
+      <p class="empty" style="margin-bottom:8px;">Cada lote necesita su propio "Lote de lavado grueso" (se escribe a mano por fila).</p>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>Producto / Lote origen</th><th>Medida</th><th style="text-align:center;">REF QC</th><th>Lote de lavado grueso</th><th>Responsable</th>
+            <th style="text-align:center;">Cant.</th><th style="text-align:center;">Rechaz.</th><th style="text-align:center;">Acción</th>
+          </tr></thead>
+          <tbody id="g_bodyGrupo"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+        <button class="btn" style="background:#64748b; margin:0;" onclick="g_limpiarGrupo()">Limpiar Grupo</button>
+        <button class="btn" id="g_btnGrupo" style="background:#16a34a; margin:0;" onclick="g_registrarGrupo()">Registrar Grupo Completo</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <div id="tabFinal" class="hide">
+    <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+      <h2>1. Seleccionar lote (desde Blasting)</h2>
+      <div class="grid-3">
+        <div><label>Lotes disponibles</label><select id="f_combo" onchange="f_sel()"><option value="">Cargando lotes...</option></select></div>
+        <div><label>Cantidad disponible</label><div id="f_disp" class="badge-stock">0 u.</div></div>
+        <div><label>REF (Control de Calidad)</label><input type="text" id="f_ref" class="badge-ref" placeholder="Sin REF — escribir" oninput="f_refManualChanged()"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Registrar Lavado Final</h2>
+      <input type="hidden" id="f_fila">
+      <input type="hidden" id="f_refControl">
+      <input type="hidden" id="f_loteReal">
+      <div class="grid-3">
+        <div><label>Producto</label><input id="f_prod" readonly style="background:#f1f5f9;"></div>
+        <div><label>Medida</label><input id="f_med" readonly style="background:#f1f5f9;"></div>
+        <div><label>Lote (de origen)</label><input id="f_lote" readonly style="background:#f1f5f9;"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div><label>Con / Sin Tetón</label><input id="f_teton" readonly style="background:#f1f5f9;"></div>
+        <div><label>Lote de lavado (nuevo)</label><input id="f_lotelav" oninput="lfGuardarEstado()" placeholder="Ej: LF-001"></div>
+        <div><label>Fecha</label><input id="f_fecha" type="date" readonly style="background:#f1f5f9;"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div>
+          <label>Responsable</label>
+          <select id="f_resp" onchange="lfGuardarEstado()">
+            <option value="">— Seleccionar —</option>
+            <option>Lourdes Deasis</option><option>Gabriela Goritz</option>
+          </select>
+        </div>
+        <div><label>Cantidad</label><input id="f_cant" type="number" min="1" oninput="lfGuardarEstado()"></div>
+        <div></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+        <button class="btn" id="f_btnAgregarGrupo" style="background:#64748b;" onclick="f_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
+        <button class="btn" id="f_btnTapon" style="background:#16a34a; display:none;" onclick="f_registrarTapon()">Registrar como Final (tapón — sin pasos ni monitoreo)</button>
+      </div>
+    </div>
+
+    <div class="card" id="f_seccionGrupo" style="display:none; border-color:#0284c7; background:#f0f9ff;">
+      <h2 style="color:#0284c7;">Grupo de Lotes para Lavado Final</h2>
+      <p class="empty" style="margin-bottom:8px;">Los lotes del grupo pasan juntos por el mismo Proceso químico de abajo. Cada lote necesita su propio "Lote de lavado".</p>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>Producto / Lote origen</th><th>Medida</th><th style="text-align:center;">REF QC</th><th>Lote de lavado</th><th>Responsable</th>
+            <th style="text-align:center;">Cant.</th><th style="text-align:center;">Acción</th>
+          </tr></thead>
+          <tbody id="f_bodyGrupo"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+        <button class="btn" style="background:#64748b; margin:0;" onclick="f_limpiarGrupo()">Limpiar Grupo</button>
+      </div>
+    </div>
+
+    
+    <div class="card" id="f_cardPasos" style="border-color:#c4b5fd; background:#faf5ff;">
+      <h2 style="color:#6d28d9;">3. Proceso químico</h2>
+      <div class="grid-3" style="margin-bottom:12px;">
+        <div><label>Hora inicio del proceso</label><input type="time" id="f_horaIni" onchange="lfGuardarEstado()"></div>
+        <div><label>Hora fin del proceso</label><input type="time" id="f_horaFin" onchange="lfGuardarEstado()"></div>
+        <div></div>
+      </div>
+      <p class="empty" style="margin-bottom:8px;">Escribí cuánto duró cada paso</p>
+      <div id="f_pasos" class="pasos-grid"></div>
+    </div>
+
+    <div class="card" id="f_cardCond" style="border-color:#0ea5e9; background:#f0f9ff;">
+      <h2 style="color:#0369a1;">4. Monitoreo con instrumento</h2>
+      <div class="cond-titulo">CONDUCTÍMETRO Marca MILWAUKEE, para corroborar ausencia de residuos ácidos</div>
+      <table style="margin-top:0;">
+        <thead><tr><th>Descrip.</th><th style="text-align:center;">Resultado</th><th style="text-align:center;">Rango aceptable</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>C. Inicial</td>
+            <td style="text-align:center;"><input type="number" step="0.01" id="f_condInicial" oninput="f_revisarConductimetro(this,0,1); lfGuardarEstado()"></td>
+            <td style="text-align:center;">0 a 1 (incl.)</td>
+          </tr>
+          <tr>
+            <td>C. 1er Descarte</td>
+            <td style="text-align:center;"><input type="number" step="0.01" id="f_cond1erDescarte" oninput="f_revisarConductimetro(this,0,5); lfGuardarEstado()"></td>
+            <td style="text-align:center;">0 a 5</td>
+          </tr>
+          <tr>
+            <td>C. Último descarte</td>
+            <td style="text-align:center;"><input type="number" step="0.01" id="f_condUltimoDescarte" oninput="f_revisarConductimetro(this,0,1); lfGuardarEstado()"></td>
+            <td style="text-align:center;">0 a 1 (incl.)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div id="f_condAviso" class="cond-aviso"></div>
+    </div>
+
+    <div class="card">
+      <label>Observaciones</label>
+      <textarea id="f_obs" rows="2" placeholder="Notas..." style="resize:none;" oninput="lfGuardarEstado()"></textarea>
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+        <span id="f_msg" style="font-size:13px;"></span>
+        <button class="btn" id="f_btnGrupo" onclick="f_registrarGrupo()">Registrar Grupo Completo</button>
+      </div>
+      <div id="f_trabajos"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+   
+  var DIAG_MSGS = {};
+  function pintarDiag_() {
+    var d = document.getElementById('diag');
+    if (!d) return;
+    var claves = Object.keys(DIAG_MSGS);
+    d.style.display = claves.length ? 'block' : 'none';
+    d.textContent = claves.map(function (k) { return DIAG_MSGS[k].texto; }).join('\n');
+    d.className = claves.every(function (k) { return DIAG_MSGS[k].suave; }) ? 'suave' : '';
+  }
+  function mostrarDiag(texto, clave, suave) {
+    DIAG_MSGS[clave || texto] = { texto: texto, suave: !!suave };
+    pintarDiag_();
+  }
+  function quitarDiag(clave) {
+    if (DIAG_MSGS[clave]) { delete DIAG_MSGS[clave]; pintarDiag_(); }
+  }
+  function textoError_(e) {
+    if (!e) return 'error desconocido';
+    return e.message || e.toString() || String(e);
+  }
+  window.onerror = function (m, src, linea) { mostrarDiag('Error en la página: ' + m + ' (línea ' + linea + ')'); return false; };
+
+   
+  var REFRESCO_MS = 60000;        
+  var PAUSA_SATURADO_MS = 120000; 
+  var PAUSA_HASTA = 0;
+  var G_EN_CURSO = false, F_EN_CURSO = false;
+  var G_ULTIMA = 0, F_ULTIMA = 0;
+
+  function esSaturado_(txt) {
+    return /RESOURCE_EXHAUSTED|too many|demasiad|Service invoked|cuota|quota|rate limit/i.test(String(txt || ''));
+  }
+  function marcarSaturado_() {
+    PAUSA_HASTA = Date.now() + PAUSA_SATURADO_MS;
+    mostrarDiag('Google está saturado por tantos pedidos seguidos. La lista se vuelve a actualizar sola en 2 minutos; lo que ya cargaste no se pierde.', 'saturado', true);
+  }
+
+  var G = [], F = [];
+  var G_AGRUPADOS = [], F_AGRUPADOS = [];
+  var G_CARGA_SEQ = 0, F_CARGA_SEQ = 0;
+  var F_ENVIANDO = [];
+  var F_TRABAJO_SEQ = 0;
+
+  var F_PASOS = ['Desengrasante','Agua Red 1','Cloro','Agua Red 2','Ac Ni','Agua Red 3','Ac Clorhidrico 6N','Agua Red 4','Agua Destilada','Isopropilico','Secado'];
+  var F_COND_RANGOS = {
+    condInicial: { label: 'C. Inicial', min: 0, max: 1 },
+    cond1erDescarte: { label: 'C. 1er Descarte', min: 0, max: 5 },
+    condUltimoDescarte: { label: 'C. Último descarte', min: 0, max: 1 }
+  };
+
+  function hoy() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+  }
+  function pestanaActiva_() {
+    return document.getElementById('tabFinal').className === 'hide' ? 'grueso' : 'final';
+  }
+  function mostrar(cual) {
+    var esG = (cual === 'grueso');
+    document.getElementById('tabGrueso').className = esG ? '' : 'hide';
+    document.getElementById('tabFinal').className  = esG ? 'hide' : '';
+    document.getElementById('tabBtnGrueso').className = esG ? 'tab active' : 'tab';
+    document.getElementById('tabBtnFinal').className  = esG ? 'tab' : 'tab active';
+    
+    if (esG) { if (Date.now() - G_ULTIMA > 30000) g_cargar(); }
+    else { if (Date.now() - F_ULTIMA > 30000) f_cargar(); }
+  }
+  function msg(id, t, ok) {
+    var m = document.getElementById(id); if (!m) return;
+    m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
+    if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent = ''; }, 4000);
+  }
+  
+  function avisoSiTarda_(idSelect, nombreFuncion) {
+    return setTimeout(function () {
+      var s = document.getElementById(idSelect);
+      if (s && /Cargando/.test(s.textContent)) {
+        s.innerHTML = '<option value="">El servidor no respondió</option>';
+        mostrarDiag('El servidor no respondió (' + nombreFuncion + '). Revisá "Ejecuciones" en Apps Script.', 'tarda_' + nombreFuncion);
+      }
+    }, 60000);
+  }
+
+   
+  var LF_STORAGE_KEY = 'bioFixLavadoFinalEstado_v2';
+  var GG_STORAGE_KEY = 'bioFixLavadoGruesoEstado_v2';
+  var MIGRAR_TIEMPOS = false;
+
+  function lfMigrarDesdeV1_() {
+    try {
+      var txtViejo = localStorage.getItem('bioFixLavadoFinalEstado_v1');
+      if (!txtViejo) return;
+      var v = JSON.parse(txtViejo) || {};
+      var c = v.campos || {};
+      var mismo = function (a, b) { return a.lote === b.lote && a.producto === b.producto && a.medida === b.medida; };
+
+      var txtNuevo = localStorage.getItem(LF_STORAGE_KEY);
+      if (txtNuevo) {
+        var actual = JSON.parse(txtNuevo) || {};
+        var grupo = actual.grupo || [];
+        (v.grupo || []).forEach(function (g) {
+          if (!grupo.some(function (x) { return mismo(x, g); })) grupo.push(g);
+        });
+        actual.grupo = grupo;
+        localStorage.setItem(LF_STORAGE_KEY, JSON.stringify(actual));
+        localStorage.removeItem('bioFixLavadoFinalEstado_v1');
+        return;
+      }
+
+      var tiempos = {}, horaIni = '', horaFin = '';
+      if (MIGRAR_TIEMPOS) {
+        var cronos = v.cronosVar || {};
+        Object.keys(cronos).forEach(function (p) {
+          var s = Math.round(Number(cronos[p] && cronos[p].seg) || 0);
+          if (s <= 0) return;
+          var m = Math.floor(s / 60), r = s % 60;
+          tiempos[p] = r ? (m + ':' + (r < 10 ? '0' : '') + r) : String(m);
+        });
+        var hhmm = function (ms) {
+          if (!ms) return '';
+          var d = new Date(Number(ms));
+          return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        };
+        horaIni = hhmm(v.procesoInicio);
+        horaFin = hhmm(v.procesoFin);
+      }
+
+      localStorage.setItem(LF_STORAGE_KEY, JSON.stringify({
+        campos: {
+          fila: c.fila || '', prod: c.prod || '', med: c.med || '', loteReal: c.loteReal || '',
+          teton: c.teton || '', disp: c.disp || '0 u.', ref: c.ref || '',
+          lotelav: c.lotelav || '', resp: c.resp || '', cant: c.cant || ''
+        },
+        grupo: v.grupo || [],
+        tiempos: tiempos, horaIni: horaIni, horaFin: horaFin,
+        obs: c.obs || '',
+        cond: { a: c.condInicial || '', b: c.cond1erDescarte || '', c: c.condUltimoDescarte || '' }
+      }));
+      localStorage.removeItem('bioFixLavadoFinalEstado_v1');
+    } catch (e) { }
+  }
+
+  function ggMigrarDesdeV1_() {
+    try {
+      if (localStorage.getItem(GG_STORAGE_KEY)) return;
+      var txt = localStorage.getItem('bioFixLavadoGruesoEstado_v1');
+      if (!txt) return;
+      localStorage.setItem(GG_STORAGE_KEY, txt);
+      localStorage.removeItem('bioFixLavadoGruesoEstado_v1');
+    } catch (e) {}
+  }
+
+  lfMigrarDesdeV1_();
+  ggMigrarDesdeV1_();
+
+  function val_(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  function setVal_(id, v) { var el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); }
+
+  function lfGuardarEstado() {
+    try {
+      var tiempos = {};
+      F_PASOS.forEach(function (p) { tiempos[p] = val_(f_idTiempo(p)); });
+      var estado = {
+        campos: {
+          fila: val_('f_fila'), prod: val_('f_prod'), med: val_('f_med'), loteReal: val_('f_loteReal'),
+          teton: val_('f_teton'), disp: document.getElementById('f_disp').textContent, ref: val_('f_refControl'),
+          lotelav: val_('f_lotelav'), resp: val_('f_resp'), cant: val_('f_cant')
+        },
+        grupo: F_AGRUPADOS,
+        tiempos: tiempos,
+        horaIni: val_('f_horaIni'), horaFin: val_('f_horaFin'),
+        obs: val_('f_obs'),
+        cond: { a: val_('f_condInicial'), b: val_('f_cond1erDescarte'), c: val_('f_condUltimoDescarte') }
+      };
+      localStorage.setItem(LF_STORAGE_KEY, JSON.stringify(estado));
+    } catch (e) { }
+  }
+  function lfLimpiarEstado() { try { localStorage.removeItem(LF_STORAGE_KEY); } catch (e) {} }
+  function lfRestaurarEstado() {
+    try {
+      var txt = localStorage.getItem(LF_STORAGE_KEY);
+      if (!txt) return;
+      var e = JSON.parse(txt);
+      if (e.grupo && e.grupo.length) { F_AGRUPADOS = e.grupo; f_renderGrupo(); }
+      F_PASOS.forEach(function (p) { setVal_(f_idTiempo(p), (e.tiempos || {})[p] || ''); });
+      setVal_('f_horaIni', e.horaIni); setVal_('f_horaFin', e.horaFin);
+      setVal_('f_obs', e.obs);
+      if (e.cond) { setVal_('f_condInicial', e.cond.a); setVal_('f_cond1erDescarte', e.cond.b); setVal_('f_condUltimoDescarte', e.cond.c); }
+      Object.keys(F_COND_RANGOS).forEach(function (id) {
+        var el = document.getElementById('f_' + id);
+        if (el) f_revisarConductimetro(el, F_COND_RANGOS[id].min, F_COND_RANGOS[id].max);
+      });
+      var c = e.campos || {};
+      if (c.loteReal) {
+        setVal_('f_fila', c.fila); setVal_('f_prod', c.prod); setVal_('f_med', c.med); setVal_('f_loteReal', c.loteReal);
+        setVal_('f_lote', c.loteReal + (c.ref ? (' - ' + c.ref) : ''));
+        setVal_('f_teton', c.teton); document.getElementById('f_disp').textContent = c.disp || '0 u.';
+        setVal_('f_refControl', c.ref); setVal_('f_ref', c.ref);
+        setVal_('f_lotelav', c.lotelav); setVal_('f_resp', c.resp); setVal_('f_cant', c.cant);
+      }
+      f_actualizarModoTapon_();
+    } catch (err) {
+      lfLimpiarEstado();
+    }
+  }
+
+  function ggGuardarEstado() {
+    try {
+      var estado = {
+        campos: {
+          fila: val_('g_fila'), prod: val_('g_prod'), med: val_('g_med'), loteReal: val_('g_loteReal'),
+          teton: val_('g_teton'), disp: document.getElementById('g_disp').textContent, ref: val_('g_refControl'),
+          lotelav: val_('g_lotelav'), resp: val_('g_resp'), cant: val_('g_cant'), rech: val_('g_rech'), obs: val_('g_obs')
+        },
+        grupo: G_AGRUPADOS
+      };
+      if (!estado.campos.loteReal && !G_AGRUPADOS.length) { localStorage.removeItem(GG_STORAGE_KEY); return; }
+      localStorage.setItem(GG_STORAGE_KEY, JSON.stringify(estado));
+    } catch (e) { }
+  }
+  function ggLimpiarEstado() { try { localStorage.removeItem(GG_STORAGE_KEY); } catch (e) {} }
+  function ggRestaurarEstado() {
+    try {
+      var txt = localStorage.getItem(GG_STORAGE_KEY);
+      if (!txt) return;
+      var e = JSON.parse(txt);
+      if (e.grupo && e.grupo.length) { G_AGRUPADOS = e.grupo; g_renderGrupo(); }
+      var c = e.campos || {};
+      if (!c.loteReal) return;
+      setVal_('g_fila', c.fila); setVal_('g_prod', c.prod); setVal_('g_med', c.med); setVal_('g_loteReal', c.loteReal);
+      setVal_('g_lote', c.loteReal + (c.ref ? (' - ' + c.ref) : ''));
+      setVal_('g_teton', c.teton); document.getElementById('g_disp').textContent = c.disp || '0 u.';
+      setVal_('g_refControl', c.ref); document.getElementById('g_ref').textContent = c.ref || '—';
+      setVal_('g_lotelav', c.lotelav); setVal_('g_resp', c.resp); setVal_('g_cant', c.cant);
+      setVal_('g_rech', (c.rech != null && c.rech !== '') ? c.rech : 0); setVal_('g_obs', c.obs);
+    } catch (err) {
+      ggLimpiarEstado();
+    }
+  }
+
+   
+  function f_revisarConductimetro(input, min, max) {
+    var v = input.value;
+    input.classList.toggle('cond-fuera', v !== '' && (Number(v) < min || Number(v) > max));
+    f_actualizarAvisoConductimetro_();
+  }
+  function f_actualizarAvisoConductimetro_() {
+    var aviso = document.getElementById('f_condAviso');
+    if (!aviso) return;
+    var fuera = [];
+    Object.keys(F_COND_RANGOS).forEach(function (id) {
+      var r = F_COND_RANGOS[id], el = document.getElementById('f_' + id);
+      if (el && el.value !== '' && (Number(el.value) < r.min || Number(el.value) > r.max)) {
+        fuera.push(r.label + ' (' + el.value + ', esperado ' + r.min + '–' + r.max + ')');
+      }
+    });
+    aviso.style.display = fuera.length ? 'block' : 'none';
+    aviso.textContent = fuera.length ? '⚠ Fuera del rango esperado: ' + fuera.join('; ') + '.' : '';
+  }
+  function f_datosConductimetro() {
+    return { condInicial: val_('f_condInicial'), cond1erDescarte: val_('f_cond1erDescarte'), condUltimoDescarte: val_('f_condUltimoDescarte') };
+  }
+  function f_refManualChanged() {
+    document.getElementById('f_refControl').value = document.getElementById('f_ref').value.trim();
+    lfGuardarEstado();
+  }
+
+   
+  function g_cargar(forzar) {
+    if (G_EN_CURSO && !forzar) return;                 
+    if (!forzar && Date.now() < PAUSA_HASTA) return;   
+    G_EN_CURSO = true;
+    G_ULTIMA = Date.now();
+    var mi = ++G_CARGA_SEQ;
+    var timer = avisoSiTarda_('g_combo', 'lgObtenerDisponibles');
+    google.script.run
+      .withSuccessHandler(function(res){
+        clearTimeout(timer); G_EN_CURSO = false;
+        if (mi !== G_CARGA_SEQ) return;
+        quitarDiag('lg_error'); quitarDiag('saturado'); quitarDiag('tarda_lgObtenerDisponibles');
+        G = res || []; g_combo(forzar);
+      })
+      .withFailureHandler(function(e){
+        clearTimeout(timer); G_EN_CURSO = false;
+        if (mi !== G_CARGA_SEQ) return;
+        var t = textoError_(e);
+        if (esSaturado_(t)) { marcarSaturado_(); return; }
+        mostrarDiag('lgObtenerDisponibles -> ' + t, 'lg_error');
+      })
+      .lgObtenerDisponibles();
+  }
+  function g_estaEnGrupo_(x) {
+    return G_AGRUPADOS.some(function(g){ return g.lote === x.lote && g.producto === x.producto && g.medida === x.medida; });
+  }
+  function g_pintarOpciones_() {
+    var c = document.getElementById('g_combo');
+    var valorPrevio = c.value;
+    var disponibles = [];
+    G.forEach(function(x, i){ if (!g_estaEnGrupo_(x)) disponibles.push({ item: x, idx: i }); });
+    if (!disponibles.length) {
+      c.innerHTML = '<option value="">' + (G.length ? 'Todos los lotes disponibles ya están en el grupo' : 'No hay lotes esperando lavado grueso') + '</option>';
+    } else {
+      c.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
+        disponibles.map(function(o){ var x = o.item; return '<option value="'+o.idx+'">'+x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u</option>'; }).join('');
+      if (valorPrevio !== '' && disponibles.some(function(o){ return String(o.idx) === valorPrevio; })) c.value = valorPrevio;
+    }
+    c.dataset.pintado = '1';
+  }
+  function g_combo(forzar) {
+    var c = document.getElementById('g_combo');
+    var yaSeleccionado = val_('g_loteReal') !== '';
+    var ae = document.activeElement;
+    var editando = ae && ae.id && /^g_(resp|cant|rech|obs|lotelav)$/.test(ae.id);
+    if (!forzar && (yaSeleccionado || editando)) {
+      if (c.dataset.pintado !== '1') g_pintarOpciones_();
+      return;
+    }
+    g_pintarOpciones_();
+    if (!yaSeleccionado || forzar) { if (forzar) g_limpiar(); }
+  }
+  function g_sel() {
+    var idx = val_('g_combo');
+    if (idx === '' || !G[idx]) { g_limpiar(); return; }
+    var it = G[idx];
+    setVal_('g_fila', it.fila || '');
+    setVal_('g_prod', it.producto || '');
+    setVal_('g_med', it.medida || '');
+    setVal_('g_loteReal', it.lote || '');
+    setVal_('g_lote', it.lote ? (it.lote + (it.refControl ? (' - ' + it.refControl) : '')) : '');
+    setVal_('g_teton', it.teton || '');
+    setVal_('g_cant', it.disponible || '');
+    document.getElementById('g_disp').textContent = (it.disponible || 0) + ' u.';
+    setVal_('g_refControl', it.refControl || '');
+    document.getElementById('g_ref').textContent = it.refControl || '—';
+    ggGuardarEstado();
+  }
+  function g_limpiar() {
+    ['g_fila','g_loteReal','g_prod','g_med','g_lote','g_teton','g_cant','g_lotelav','g_obs'].forEach(function(id){ setVal_(id, ''); });
+    setVal_('g_rech', 0);
+    document.getElementById('g_disp').textContent = '0 u.';
+    setVal_('g_refControl', '');
+    document.getElementById('g_ref').textContent = '—';
+  }
+  function g_datosActuales() {
+    return {
+      producto: val_('g_prod'), medida: val_('g_med'), lote: val_('g_loteReal'), teton: val_('g_teton'),
+      loteLavado: val_('g_lotelav'), fecha: val_('g_fecha'), responsable: val_('g_resp'),
+      cantidad: val_('g_cant'), rechazadas: val_('g_rech'), observaciones: val_('g_obs'),
+      refControl: val_('g_refControl')
+    };
+  }
+  function g_registrarSolo() {
+    var d = g_datosActuales();
+    if (!d.producto || !d.lote) { msg('g_msg','Seleccioná un lote.', false); return; }
+    if (!d.responsable) { msg('g_msg','Falta el responsable.', false); return; }
+    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('g_msg','Falta la cantidad.', false); return; }
+    if (!d.loteLavado) { msg('g_msg','Escribí el lote de lavado grueso.', false); return; }
+    var b = document.getElementById('g_btn'); b.disabled = true;
+    msg('g_msg','Guardando…', true);
+    google.script.run
+      .withSuccessHandler(function(r){ b.disabled = false; msg('g_msg', (r && r.msg) || 'Registrado.', true); g_limpiar(); ggLimpiarEstado(); g_cargar(true); })
+      .withFailureHandler(function(e){
+        b.disabled = false;
+        var t = textoError_(e);
+        if (esSaturado_(t)) { marcarSaturado_(); msg('g_msg', 'Google está saturado: no se guardó. Probá de nuevo en un par de minutos.', false); return; }
+        msg('g_msg', t, false);
+      })
+      .lgRegistrar(d);
+  }
+  function g_agregarAlGrupo() {
+    var d = g_datosActuales();
+    if (!d.producto || !d.lote) { msg('g_msg','Seleccioná un lote primero.', false); return; }
+    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('g_msg','Completá la cantidad.', false); return; }
+    if (!d.responsable) { msg('g_msg','Elegí el Responsable antes de agregar al grupo.', false); return; }
+    if (G_AGRUPADOS.some(function(x){ return x.lote === d.lote && x.producto === d.producto; })) { msg('g_msg','Este lote ya está en el grupo.', false); return; }
+    G_AGRUPADOS.push(d);
+    g_renderGrupo(); g_limpiar(); g_pintarOpciones_(); ggGuardarEstado();
+    msg('g_msg','Lote agregado al grupo.', true);
+  }
+  function g_renderGrupo() {
+    var cont = document.getElementById('g_seccionGrupo'), tbody = document.getElementById('g_bodyGrupo');
+    if (!G_AGRUPADOS.length) { cont.style.display = 'none'; tbody.innerHTML = ''; return; }
+    cont.style.display = 'block';
+    tbody.innerHTML = G_AGRUPADOS.map(function(x, idx){
+      return '<tr>' +
+        '<td><b>'+x.producto+'</b> ('+x.lote+')'+(x.teton?' <span style="color:#94a3b8;">· '+x.teton+'</span>':'')+'</td>' +
+        '<td>'+x.medida+'</td>' +
+        '<td style="text-align:center; font-weight:700;">'+(x.refControl || '—')+'</td>' +
+        '<td><input type="text" value="'+(x.loteLavado||'')+'" placeholder="Ej: LG-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'" onchange="g_actualizarLoteLavado('+idx+',this.value)"></td>' +
+        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+(x.responsable || 'FALTA')+'</td>' +
+        '<td style="text-align:center;">'+x.cantidad+'u</td>' +
+        '<td style="text-align:center;">'+(x.rechazadas||0)+'u</td>' +
+        '<td style="text-align:center;"><button class="btn-mini" style="background:#ef4444;color:#fff;" onclick="g_quitarDelGrupo('+idx+')">Quitar</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+  function g_actualizarLoteLavado(idx, v) { G_AGRUPADOS[idx].loteLavado = v; ggGuardarEstado(); }
+  function g_quitarDelGrupo(idx) { G_AGRUPADOS.splice(idx, 1); g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); }
+  function g_limpiarGrupo() { G_AGRUPADOS = []; g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); msg('g_msg','Grupo vaciado.', true); }
+  function g_registrarGrupo() {
+    if (!G_AGRUPADOS.length) { msg('g_msg','Agregá lotes al grupo antes de registrar.', false); return; }
+    var sinLote = G_AGRUPADOS.filter(function(x){ return !x.loteLavado; });
+    var sinResp = G_AGRUPADOS.filter(function(x){ return !x.responsable; });
+    if (sinLote.length || sinResp.length) {
+      var partes = [];
+      if (sinLote.length) partes.push('falta el lote de lavado grueso en ' + sinLote.length + ' fila(s)');
+      if (sinResp.length) partes.push('falta el responsable en ' + sinResp.length + ' fila(s)');
+      g_renderGrupo();
+      msg('g_msg', 'No se puede registrar el grupo: ' + partes.join(' y ') + '.', false);
+      return;
+    }
+    document.getElementById('g_btnGrupo').disabled = true;
+    g_procesarGrupoSecuencial(0, [], []);
+  }
+  function g_procesarGrupoSecuencial(index, exitosos, fallidos) {
+    if (index >= G_AGRUPADOS.length) {
+      document.getElementById('g_btnGrupo').disabled = false;
+      G_AGRUPADOS = fallidos.map(function(f){ return f.item; });
+      g_renderGrupo();
+      g_cargar(true);
+      if (!fallidos.length) {
+        ggLimpiarEstado();
+        msg('g_msg', 'Se registraron ' + exitosos.length + ' lote(s).', true);
+      } else {
+        ggGuardarEstado();
+        msg('g_msg', 'Se registraron ' + exitosos.length + ' lote(s). Quedaron ' + fallidos.length + ' sin guardar: ' +
+          fallidos.map(function(f){ return f.item.lote + ' (' + f.error + ')'; }).join(' · '), false);
+      }
+      return;
+    }
+    var item = G_AGRUPADOS[index];
+    google.script.run
+      .withSuccessHandler(function(){ exitosos.push(item); g_procesarGrupoSecuencial(index + 1, exitosos, fallidos); })
+      .withFailureHandler(function(e){
+        var t = textoError_(e);
+        if (esSaturado_(t)) marcarSaturado_();
+        fallidos.push({ item: item, error: t });
+        g_procesarGrupoSecuencial(index + 1, exitosos, fallidos);
+      })
+      .lgRegistrar(item);
+  }
+
+   
+  function f_cargar(forzar) {
+    if (F_EN_CURSO && !forzar) return;
+    if (!forzar && Date.now() < PAUSA_HASTA) return;
+    F_EN_CURSO = true;
+    F_ULTIMA = Date.now();
+    var mi = ++F_CARGA_SEQ;
+    var timer = avisoSiTarda_('f_combo', 'lfObtenerDisponibles');
+    google.script.run
+      .withSuccessHandler(function(res){
+        clearTimeout(timer); F_EN_CURSO = false;
+        if (mi !== F_CARGA_SEQ) return;
+        quitarDiag('lf_error'); quitarDiag('saturado'); quitarDiag('tarda_lfObtenerDisponibles');
+        F = res || []; f_combo(forzar);
+      })
+      .withFailureHandler(function(e){
+        clearTimeout(timer); F_EN_CURSO = false;
+        if (mi !== F_CARGA_SEQ) return;
+        var t = textoError_(e);
+        if (esSaturado_(t)) { marcarSaturado_(); return; }
+        mostrarDiag('lfObtenerDisponibles -> ' + t, 'lf_error');
+      })
+      .lfObtenerDisponibles();
+  }
+  function f_mismoLote_(a, b) { return a.lote === b.lote && a.producto === b.producto && a.medida === b.medida; }
+  function f_estaEnGrupo_(x) {
+    return F_AGRUPADOS.some(function(g){ return f_mismoLote_(g, x); }) ||
+           F_ENVIANDO.some(function(g){ return f_mismoLote_(g, x); });
+  }
+  function f_pintarOpciones_() {
+    var c = document.getElementById('f_combo');
+    var valorPrevio = c.value;
+    var disponibles = [];
+    F.forEach(function(x, i){ if (!f_estaEnGrupo_(x)) disponibles.push({ item: x, idx: i }); });
+    if (!disponibles.length) {
+      c.innerHTML = '<option value="">' + (F.length ? 'Todos los lotes disponibles ya están en el grupo' : 'No hay lotes esperando lavado final') + '</option>';
+    } else {
+      c.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
+        disponibles.map(function(o){ var x = o.item; return '<option value="'+o.idx+'">'+x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u</option>'; }).join('');
+      if (valorPrevio !== '' && disponibles.some(function(o){ return String(o.idx) === valorPrevio; })) c.value = valorPrevio;
+    }
+    c.dataset.pintado = '1';
+  }
+  function f_combo(forzar) {
+    var c = document.getElementById('f_combo');
+    var yaSeleccionado = val_('f_loteReal') !== '';
+    var ae = document.activeElement;
+    var editando = ae && ae.id && /^f_(resp|cant|lotelav|obs|ref|horaIni|horaFin|cond)/.test(ae.id);
+    if (!forzar && (yaSeleccionado || editando)) {
+      if (c.dataset.pintado !== '1') f_pintarOpciones_();
+      return;
+    }
+    f_pintarOpciones_();
+  }
+  function f_sel() {
+    var idx = val_('f_combo');
+    if (idx === '' || !F[idx]) { f_limpiar(); return; }
+    var it = F[idx];
+    setVal_('f_fila', it.fila || '');
+    setVal_('f_prod', it.producto || '');
+    setVal_('f_med', it.medida || '');
+    setVal_('f_loteReal', it.lote || '');
+    setVal_('f_lote', it.lote ? (it.lote + (it.refControl ? (' - ' + it.refControl) : '')) : '');
+    setVal_('f_teton', it.teton || '');
+    setVal_('f_cant', it.disponible || '');
+    document.getElementById('f_disp').textContent = (it.disponible || 0) + ' u.';
+    setVal_('f_refControl', it.refControl || '');
+    setVal_('f_ref', it.refControl || '');
+    f_actualizarModoTapon_();
+    lfGuardarEstado();
+  }
+  function f_limpiar() {
+    ['f_fila','f_loteReal','f_prod','f_med','f_lote','f_teton','f_cant','f_lotelav','f_refControl','f_ref'].forEach(function(id){ setVal_(id, ''); });
+    document.getElementById('f_disp').textContent = '0 u.';
+    f_actualizarModoTapon_();
+  }
+  function f_datosActuales() {
+    return {
+      producto: val_('f_prod'), medida: val_('f_med'), lote: val_('f_loteReal'), teton: val_('f_teton'),
+      loteLavado: val_('f_lotelav'), fecha: val_('f_fecha'), responsable: val_('f_resp'),
+      cantidad: val_('f_cant'), observaciones: val_('f_obs'), refControl: val_('f_refControl')
+    };
+  }
+
+   
+  var F_TAPON_PRODUCTOS = ['Tapon Porta Implante MP','Tapon Porta Implante HI','Tapon Porta Implante HE','Tapon Porta Implante Generico'];
+  function f_norm_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+  function f_esTapon_(producto) { var n = f_norm_(producto); return F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
+  function f_actualizarModoTapon_() {
+    var esTapon = f_esTapon_(val_('f_prod'));
+    document.getElementById('f_cardPasos').style.display = esTapon ? 'none' : '';
+    document.getElementById('f_cardCond').style.display = esTapon ? 'none' : '';
+    document.getElementById('f_btnAgregarGrupo').style.display = esTapon ? 'none' : '';
+    document.getElementById('f_btnTapon').style.display = esTapon ? '' : 'none';
+  }
+
+   
+  function f_idTiempo(p) { return 't_' + p.replace(/\s+/g, '_'); }
+  function f_renderPasos() {
+    document.getElementById('f_pasos').innerHTML = F_PASOS.map(function (p) {
+      var ph = (p === 'Secado') ? 'ej. 60' : '';
+      return '<div class="paso-box"><label>' + p + '</label>' +
+        '<input type="text" inputmode="decimal" id="' + f_idTiempo(p) + '" placeholder="' + ph + '" oninput="f_validarTiempo(this); lfGuardarEstado()"></div>';
+    }).join('');
+  }
+  var F_MAX_MIN_PASO = 60;
+  function f_parseMin_(txt) {
+    var t = String(txt == null ? '' : txt).trim();
+    if (!t) return '';
+    var v;
+    var m = t.match(/^(\d{1,2}):([0-5]?\d)$/);
+    if (m) {
+      v = Number(m[1]) + Number(m[2]) / 60;
+    } else {
+      v = Number(t.replace(',', '.'));
+      if (!isFinite(v) || v < 0) return NaN;
+    }
+    return (v <= F_MAX_MIN_PASO) ? v : NaN;
+  }
+  function f_validarTiempo(input) {
+    var v = f_parseMin_(input.value);
+    input.classList.toggle('invalido', typeof v === 'number' && isNaN(v));
+  }
+  function f_tiemposVariables() {
+    var out = {};
+    F_PASOS.forEach(function (p) { var v = f_parseMin_(val_(f_idTiempo(p))); out[p] = (typeof v === 'number' && !isNaN(v)) ? v : 0; });
+    return out;
+  }
+  function f_cantidadesPasosPara_(total, tiempos) {
+    var out = {};
+    F_PASOS.forEach(function (p) { out[p] = (tiempos[p] > 0) ? (Number(total) || 0) : 0; });
+    return out;
+  }
+  function f_horaAMs_(hhmm, base) {
+    if (!hhmm) return '';
+    var p = hhmm.split(':');
+    var d = base ? new Date(base) : new Date();
+    d.setHours(Number(p[0]) || 0, Number(p[1]) || 0, 0, 0);
+    return d.getTime();
+  }
+  function f_totalCantidadGrupo_() {
+    return F_AGRUPADOS.reduce(function(sum, x){ return sum + (Number(x.cantidad) || 0); }, 0);
+  }
+  function f_limpiarProceso_() {
+    F_PASOS.forEach(function (p) { var el = document.getElementById(f_idTiempo(p)); if (el) { el.value = ''; el.classList.remove('invalido'); } });
+    setVal_('f_horaIni', ''); setVal_('f_horaFin', ''); setVal_('f_obs', '');
+    Object.keys(F_COND_RANGOS).forEach(function (id) {
+      var el = document.getElementById('f_' + id);
+      if (el) { el.value = ''; el.classList.remove('cond-fuera'); }
+    });
+    f_actualizarAvisoConductimetro_();
+  }
+
+   
+  function f_agregarAlGrupo() {
+    var d = f_datosActuales();
+    if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
+    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('f_msg','Completá la cantidad.', false); return; }
+    if (!d.responsable) { msg('f_msg','Elegí el Responsable antes de agregar al grupo.', false); return; }
+    if (F_AGRUPADOS.some(function(x){ return x.lote === d.lote && x.producto === d.producto; })) { msg('f_msg','Este lote ya está en el grupo.', false); return; }
+    F_AGRUPADOS.push(d);
+    f_renderGrupo(); f_limpiar(); f_pintarOpciones_(); lfGuardarEstado();
+    msg('f_msg','Lote agregado al grupo.', true);
+  }
+  function f_renderGrupo() {
+    var cont = document.getElementById('f_seccionGrupo'), tbody = document.getElementById('f_bodyGrupo');
+    if (!F_AGRUPADOS.length) { cont.style.display = 'none'; tbody.innerHTML = ''; return; }
+    cont.style.display = 'block';
+    tbody.innerHTML = F_AGRUPADOS.map(function(x, idx){
+      return '<tr>' +
+        '<td><b>'+x.producto+'</b> ('+x.lote+')'+(x.teton?' <span style="color:#94a3b8;">· '+x.teton+'</span>':'')+'</td>' +
+        '<td>'+x.medida+'</td>' +
+        '<td><input type="text" value="'+(x.refControl||'')+'" placeholder="Sin REF" style="text-align:center; font-weight:700;'+(!x.refControl?'border-color:#f59e0b;background:#fffbeb;':'')+'" onchange="f_actualizarRefControl('+idx+',this.value)"></td>' +
+        '<td><input type="text" value="'+(x.loteLavado||'')+'" placeholder="Ej: LF-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'" onchange="f_actualizarLoteLavado('+idx+',this.value)"></td>' +
+        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+(x.responsable || 'FALTA')+'</td>' +
+        '<td style="text-align:center;">'+x.cantidad+'u</td>' +
+        '<td style="text-align:center;"><button class="btn-mini" style="background:#ef4444;color:#fff;" onclick="f_quitarDelGrupo('+idx+')">Quitar</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+  function f_actualizarLoteLavado(idx, v) { F_AGRUPADOS[idx].loteLavado = v; lfGuardarEstado(); }
+  function f_actualizarRefControl(idx, v) { F_AGRUPADOS[idx].refControl = v.trim(); lfGuardarEstado(); }
+  function f_quitarDelGrupo(idx) { F_AGRUPADOS.splice(idx, 1); f_renderGrupo(); f_pintarOpciones_(); lfGuardarEstado(); }
+  function f_limpiarGrupo() { F_AGRUPADOS = []; f_renderGrupo(); f_pintarOpciones_(); lfGuardarEstado(); msg('f_msg','Grupo vaciado.', true); }
+
+   
+  function f_trabajoSet_(id, html, tipo) {
+    var cont = document.getElementById('f_trabajos');
+    var el = document.getElementById('f_trab_' + id);
+    if (!el) { el = document.createElement('div'); el.id = 'f_trab_' + id; cont.insertBefore(el, cont.firstChild); }
+    el.className = 'trabajo ' + (tipo || '');
+    el.innerHTML = html;
+  }
+  function f_generarPdf_(id, textoBase) {
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (r && r.pdfUrl) f_trabajoSet_(id, textoBase + ' <a href="' + r.pdfUrl + '" target="_blank">Ver PDF del día</a>', 'ok');
+        else if (r && r.enCola) f_trabajoSet_(id, textoBase + ' El PDF del día se actualiza al terminar el que se estaba generando.', 'ok');
+        else f_trabajoSet_(id, textoBase, 'ok');
+      })
+      .withFailureHandler(function (e) { f_trabajoSet_(id, textoBase + ' (No se pudo generar el PDF del día: ' + textoError_(e) + ')', 'ok'); })
+      .lfGenerarPdfDelDiaEnSegundoPlano();
+  }
+  function f_enviarEnSegundoPlano_(items, comunes) {
+    var id = ++F_TRABAJO_SEQ;
+    var nombres = items.map(function (x) { return x.lote; }).join(', ');
+    F_ENVIANDO = F_ENVIANDO.concat(items);
+    f_pintarOpciones_();
+    f_trabajoSet_(id, '⏳ Registrando ' + items.length + ' lote(s) por detrás: ' + nombres + '. Podés seguir trabajando.', '');
+    function sacarDeEnviando() {
+      F_ENVIANDO = F_ENVIANDO.filter(function (x) { return !items.some(function (it) { return f_mismoLote_(it, x); }); });
+    }
+    google.script.run
+      .withSuccessHandler(function (r) {
+        sacarDeEnviando();
+        var exitosos = (r && r.exitosos) || [], fallidos = (r && r.fallidos) || [];
+        f_cargar(true);
+        if (fallidos.length) {
+          var det = fallidos.map(function (f) { return (items[f.idx] ? items[f.idx].lote : '?') + ' (' + f.error + ')'; }).join(' · ');
+          f_trabajoSet_('x' + id, '⚠ No se guardaron: ' + det + '. Vuelven a aparecer en "Lotes disponibles".', 'err');
+        }
+        if (exitosos.length) {
+          var textoOk = '✓ Registrados ' + exitosos.length + ' de ' + items.length + ' lote(s): ' + nombres + '.';
+          f_trabajoSet_(id, textoOk + ' Generando el PDF del día…', 'ok');
+          f_generarPdf_(id, textoOk);
+        } else {
+          f_trabajoSet_(id, '✗ No se registró ningún lote de: ' + nombres + '.', 'err');
+        }
+      })
+      .withFailureHandler(function (e) {
+        sacarDeEnviando();
+        var t = textoError_(e);
+        if (esSaturado_(t)) {
+          marcarSaturado_();
+          
+          items.forEach(function (it) { if (!F_AGRUPADOS.some(function (x) { return f_mismoLote_(x, it); })) F_AGRUPADOS.push(it); });
+          f_renderGrupo(); lfGuardarEstado();
+          f_trabajoSet_(id, '✗ Google estaba saturado y no se registró ' + nombres + '. Los lotes volvieron al grupo: esperá un par de minutos y registrá de nuevo (revisá los tiempos del proceso).', 'err');
+          return;
+        }
+        f_cargar(true);
+        f_trabajoSet_(id, '✗ Problema registrando ' + nombres + ' (' + t + '). Si siguen en "Lotes disponibles", no se registraron.', 'err');
+      })
+      .lfRegistrarGrupo({ items: items, comunes: comunes });
+  }
+
+  function f_registrarTapon() {
+    var d = f_datosActuales();
+    if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
+    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('f_msg','Completá la cantidad.', false); return; }
+    if (!d.responsable) { msg('f_msg','Elegí el Responsable.', false); return; }
+    if (!d.loteLavado) { msg('f_msg','Completá el Lote de lavado.', false); return; }
+    f_limpiar(); lfGuardarEstado();
+    f_enviarEnSegundoPlano_([d], {});
+  }
+
+  function f_registrarGrupo() {
+    if (!F_AGRUPADOS.length) { msg('f_msg','Agregá lotes al grupo antes de registrar.', false); return; }
+    var sinLote = F_AGRUPADOS.filter(function(x){ return !x.loteLavado; });
+    var sinResp = F_AGRUPADOS.filter(function(x){ return !x.responsable; });
+    if (sinLote.length || sinResp.length) {
+      var partes = [];
+      if (sinLote.length) partes.push('falta el lote de lavado en ' + sinLote.length + ' fila(s)');
+      if (sinResp.length) partes.push('falta el responsable en ' + sinResp.length + ' fila(s)');
+      f_renderGrupo();
+      msg('f_msg', 'No se puede registrar el grupo: ' + partes.join(' y ') + '.', false);
+      return;
+    }
+    var malos = F_PASOS.filter(function (p) { var v = f_parseMin_(val_(f_idTiempo(p))); return typeof v === 'number' && isNaN(v); });
+    if (malos.length) { msg('f_msg', 'Revisá el tiempo de: ' + malos.join(', ') + ' (usá 15 o 15:30, máximo 60 minutos).', false); return; }
+    var tiempos = f_tiemposVariables();
+    if (!F_PASOS.some(function (p) { return tiempos[p] > 0; })) { msg('f_msg', 'Cargá el tiempo de al menos un paso del Proceso químico.', false); return; }
+
+    var hIni = val_('f_horaIni'), hFin = val_('f_horaFin');
+    var msIni = f_horaAMs_(hIni);
+    var msFin = f_horaAMs_(hFin);
+    if (msIni && msFin && msFin < msIni) msFin += 24 * 60 * 60 * 1000;
+
+    var items = F_AGRUPADOS.slice();
+    var comunes = {
+      cantidadesPasos: f_cantidadesPasosPara_(f_totalCantidadGrupo_(), tiempos),
+      tiemposVariables: tiempos,
+      horaInicioMs: msIni || '',
+      horaFinMs: msFin || '',
+      conductimetro: f_datosConductimetro()
+    };
+
+    F_AGRUPADOS = [];
+    f_renderGrupo();
+    f_limpiarProceso_();
+    lfLimpiarEstado();
+    f_enviarEnSegundoPlano_(items, comunes);
+  }
+
+   
+  
+  
+  function refrescarTodo() {
+    if (document.hidden) return;
+    if (Date.now() < PAUSA_HASTA) return;
+    if (F_ENVIANDO.length) return;
+    if (pestanaActiva_() === 'grueso') g_cargar(); else f_cargar();
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    var ultima = pestanaActiva_() === 'grueso' ? G_ULTIMA : F_ULTIMA;
+    if (Date.now() - ultima > 30000) refrescarTodo();
+  });
+
+  window.onload = function() {
+    try {
+      setVal_('g_fecha', hoy());
+      setVal_('f_fecha', hoy());
+      f_renderPasos();
+      f_actualizarModoTapon_();
+      ggRestaurarEstado();
+      lfRestaurarEstado();
+    } catch (e) {
+      mostrarDiag('Error al iniciar la pantalla: ' + textoError_(e));
+    }
+    g_cargar();
+    setTimeout(function () { f_cargar(); }, 1500); 
+    setInterval(refrescarTodo, REFRESCO_MS);
+  };
+</script>
+</body>
+</html>
