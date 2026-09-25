@@ -192,7 +192,20 @@ function mostrarLogin() {
   document.getElementById('vistaApp').classList.add('hide');
   document.getElementById('vistaLogin').classList.remove('hide');
 }
+var PANTALLA = 'deposito';
+var ADMINS = ['tecnica'];   // usuarios que pueden entrar a todas las pantallas
 function mostrarApp(session) {
+  var u = emailAUsuario(session.user.email).toLowerCase();
+  if (u !== PANTALLA && ADMINS.indexOf(u) < 0) {
+    document.getElementById('vistaApp').classList.add('hide');
+    var v = document.getElementById('vistaLogin');
+    v.classList.remove('hide');
+    v.innerHTML = '<h1>Depósito — Bio-Fix</h1>' +
+      '<p style="font-size:14px;color:#b91c1c;font-weight:700;">Esta tablet está ingresada como "' + u + '".</p>' +
+      '<p style="font-size:14px;color:#475569;">Esta pantalla es del Depósito. Para usarla hay que salir e ingresar con el usuario deposito.</p>' +
+      '<button class="btn" onclick="salir().then(function(){ location.reload(); })">Salir e ingresar con otro usuario</button>';
+    return;
+  }
   document.getElementById('vistaLogin').classList.add('hide');
   document.getElementById('vistaApp').classList.remove('hide');
   document.getElementById('quien').textContent = 'Puesto: ' + emailAUsuario(session.user.email);
