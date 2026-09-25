@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depósito — Lavado Final — Bio-Fix</title>
+<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
+<script>window.BIOFIX_PANTALLA = 'deposito';</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:920px; margin:0 auto; }
+  h1{ font-size:18px; margin-bottom:12px; color:#0369a1; font-weight:600; }
+  .total-box{ background:#0284c7; color:#fff; border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+  .total-box .lbl{ font-size:14px; font-weight:600; opacity:.9; }
+  .total-box .num{ font-size:28px; font-weight:800; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .card.desp{ border-color:#fde68a; background:#fffdf5; }
+  .card-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap; }
+  .card-head h2{ font-size:14px; margin:0; color:#1e293b; }
+  .sub{ font-size:13px; font-weight:800; color:#0369a1; background:#e0f2fe; border:1px solid #93c5fd; padding:3px 12px; border-radius:8px; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ background:#f1f5f9; text-align:left; padding:5px 8px; border:1px solid #e2e8f0; font-size:12px; }
+  td{ padding:4px 8px; border:1px solid #e2e8f0; }
+  td.r{ text-align:right; font-weight:700; }
+  td.c{ text-align:center; }
+  .empty{ font-size:13px; color:var(--mut); font-style:italic; }
+  .btn{ background:#16a34a; color:#fff; border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+  .btn.ghost{ background:#fff; color:#0369a1; border:1px solid #93c5fd; }
+  .btn:disabled{ opacity:.5; }
+  .pill{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; }
+  .pill.ok{ background:#dcfce7; color:#15803d; }
+  .pill.no{ background:#f1f5f9; color:#64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>Depósito — Para Lavado Final</h1>
+    <button class="btn ghost" onclick="cargar()">↻ Actualizar</button>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <input id="buscar" placeholder="🔍 Buscar por producto o lote…" oninput="filtrarBusqueda()"
+      style="width:100%; padding:9px 12px; font-size:14px; border:1px solid #cbd5e1; border-radius:8px;">
+  </div>
+  <div id="msg" style="font-size:13px; margin-bottom:10px;"></div>
+
+  <div class="total-box"><span class="lbl">Total esperando para Lavado Final</span><span class="num" id="total">…</span></div>
+  <div id="lista"><p class="empty">Cargando…</p></div>
+</div>
+
+<script>
+  var DATA = null;
+
+  function filtrarBusqueda(){
+    var q = (document.getElementById('buscar').value || '').toLowerCase().trim();
+    var rows = document.querySelectorAll('#lista tbody tr');
+    for (var i = 0; i < rows.length; i++) {
+      var txt = rows[i].textContent.toLowerCase();
+      rows[i].style.display = (!q || txt.indexOf(q) >= 0) ? '' : 'none';
+    }
+  }
+  function msg(t, ok){
+    var m = document.getElementById('msg');
+    m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
+    if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent = ''; }, 4000);
+  }
+  function toggleQty(id, habilitado){
+    var el = document.getElementById(id);
+    if (el) el.disabled = !habilitado;
+  }
+
+  function cargar(){
+    document.getElementById('lista').innerHTML = '<p class="empty">Cargando…</p>';
+    document.getElementById('total').textContent = '…';
+    google.script.run
+      .withSuccessHandler(render)
+      .withFailureHandler(function(e){ document.getElementById('lista').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + e.message + '</p>'; })
+      .depResumenLavadoFinal();
+  }
+
+  function render(res){
+    DATA = res;
+    document.getElementById('total').textContent = (res.subtotal || 0) + ' u.';
+    if (!res.items || !res.items.length) {
+      document.getElementById('lista').innerHTML = '<div class="card desp"><p class="empty">No hay lotes esperando para Lavado Final.</p></div>';
+      return;
+    }
+    var filas = res.items.map(function (it, i) {
+      var restante = (it.restante != null) ? Number(it.restante) : (Number(it.disponible) || 0);
+      var asignadoCant = Number(it.asignadoCant) || 0;
+      var chk = restante > 0
+        ? '<td class="c" style="display:flex; gap:4px; align-items:center; justify-content:center;">' +
+            '<input type="checkbox" id="cs_' + i + '" onchange="toggleQty(\'q_' + i + '\', this.checked)">' +
+            '<input type="number" id="q_' + i + '" value="' + restante + '" min="1" max="' + restante + '" style="width:60px; padding:3px; font-size:12px;" disabled>' +
+          '</td>'
+        : '<td class="c"><input type="checkbox" checked disabled></td>';
+      var est = '<td class="c">' + (
+        asignadoCant > 0
+          ? (restante > 0
+              ? '<span class="pill ok">Enviado ' + asignadoCant + ' u. · quedan ' + restante + ' u.</span>'
+              : '<span class="pill ok">Enviado</span>')
+          : '<span class="pill no">En depósito</span>'
+      ) + '</td>';
+      return '<tr><td>' + (it.producto || '') + '</td><td>' + (it.medida || '') + '</td><td>' + (it.lote || '') + '</td><td>' + (it.teton || '—') + '</td>' +
+        '<td class="r">' + (Number(it.disponible) || 0) + '</td>' + est + chk + '</tr>';
+    }).join('');
+    document.getElementById('lista').innerHTML =
+      '<div class="card desp"><div class="card-head"><h2>Para Lavado Final</h2><span class="sub">' + (res.subtotal || 0) + ' u.</span></div>' +
+      '<table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Tetón</th><th style="text-align:right;">Cant.</th><th class="c">Estado</th><th class="c">Sel.</th></tr></thead><tbody>' + filas + '</tbody></table>' +
+      '<div style="display:flex; justify-content:flex-end; margin-top:10px;"><button class="btn" id="btnEnviar" onclick="enviar()">Enviar a Lavado Final</button></div>' +
+      '</div>';
+    filtrarBusqueda();
+  }
+
+  function enviar(){
+    var sel = [];
+    DATA.items.forEach(function (it, i) {
+      var chk = document.getElementById('cs_' + i);
+      if (chk && chk.checked && !chk.disabled) {
+        var qEl = document.getElementById('q_' + i);
+        var tope = (it.restante != null) ? Number(it.restante) : (Number(it.disponible) || 0);
+        var cant = Math.min(Number(qEl.value) || 0, tope);
+        if (cant > 0) sel.push({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: cant });
+      }
+    });
+    if (!sel.length) { msg('Marcá al menos un lote.', false); return; }
+    var btn = document.getElementById('btnEnviar'); if (btn) btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) { msg(r.msg, true); cargar(); })
+      .withFailureHandler(function (err) { if (btn) btn.disabled = false; msg(err.message, false); })
+      .depAsignar({ sector: 'lavado final', items: sel });
+  }
+
+  window.onload = cargar;
+</script>
+</body>
+</html>
