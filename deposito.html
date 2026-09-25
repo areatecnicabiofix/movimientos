@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depósito — Bio-Fix</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:920px; margin:0 auto; }
+  h1{ font-size:18px; margin:0; color:#0369a1; font-weight:600; }
+  .top{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .top-der{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .quien{ font-size:12px; color:var(--mut); }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{ flex:1; padding:12px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
+  .tab.active{ background:#0284c7; color:#fff; border-color:#0284c7; }
+  .total-box{ background:#0284c7; color:#fff; border-radius:12px; padding:16px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+  .total-box.green{ background:#16a34a; }
+  .total-box .lbl{ font-size:14px; font-weight:600; opacity:.9; }
+  .total-box .num{ font-size:28px; font-weight:800; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .card.desp{ border-color:#fde68a; background:#fffdf5; }
+  .card.info{ background:#f8fafc; }
+  .card-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap; }
+  .card-head h2{ font-size:14px; margin:0; color:#1e293b; }
+  .sub{ font-size:13px; font-weight:800; color:#0369a1; background:#e0f2fe; border:1px solid #93c5fd; padding:3px 12px; border-radius:8px; }
+  .tabla-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ background:#f1f5f9; text-align:left; padding:5px 8px; border:1px solid #e2e8f0; font-size:12px; }
+  td{ padding:4px 8px; border:1px solid #e2e8f0; }
+  td.r{ text-align:right; font-weight:700; }
+  td.c{ text-align:center; }
+  label{ font-size:12px; color:var(--mut); font-weight:600; }
+  select, input[type=email], input[type=password]{ padding:7px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  .empty{ font-size:13px; color:var(--mut); font-style:italic; }
+  .btn{ background:#16a34a; color:#fff; border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+  .btn.ghost{ background:#fff; color:#0369a1; border:1px solid #93c5fd; }
+  .btn.gris{ background:#fff; color:#64748b; border:1px solid #cbd5e1; }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .pill{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; }
+  .pill.ok{ background:#dcfce7; color:#15803d; }
+  .pill.no{ background:#f1f5f9; color:#64748b; }
+  .hide{ display:none !important; }
+  .conv{ margin-top:5px; font-size:11px; background:#fff7ed; border:1px solid #fdba74; border-radius:6px; padding:5px 8px; text-align:left; }
+  .conv label{ font-weight:400; cursor:pointer; color:#7c2d12; }
+  .celda-sel{ display:flex; gap:4px; align-items:center; justify-content:center; }
+  .estado{ font-size:11px; color:var(--mut); margin-top:-8px; margin-bottom:10px; text-align:right; }
+  .login{ max-width:340px; margin:60px auto; background:#fff; border:1px solid var(--bx); border-radius:12px; padding:22px; }
+  .login h1{ margin-bottom:14px; }
+  .login input{ width:100%; margin-bottom:10px; padding:10px; font-size:14px; }
+  .login .btn{ width:100%; padding:11px; font-size:14px; }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="vistaLogin" class="login hide">
+  <h1>Depósito — Bio-Fix</h1>
+  <input id="lgEmail" type="text" placeholder="Usuario (ej: deposito)" autocomplete="username" autocapitalize="none">
+  <input id="lgPass" type="password" placeholder="Contraseña" autocomplete="current-password"
+         onkeydown="if(event.key==='Enter') ingresar()">
+  <button class="btn" id="lgBtn" onclick="ingresar()">Ingresar</button>
+  <div id="lgMsg" style="font-size:13px; color:#b91c1c; margin-top:10px;"></div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="vistaApp" class="container hide">
+  <div class="top">
+    <h1>Depósito — Bio-Fix</h1>
+    <div class="top-der">
+      <span class="quien" id="quien"></span>
+      <button class="btn ghost" onclick="cargarActual()">↻ Actualizar</button>
+      <button class="btn gris" onclick="salir()">Salir</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tb_semi" onclick="ver('semi')">Semielaborado</div>
+    <div class="tab" id="tb_sb" onclick="ver('sb')">Sala Blanca → Terminado</div>
+    <div class="tab" id="tb_comp" onclick="ver('comp')">Componentes / Instrumental</div>
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <input id="buscar" placeholder="🔍 Buscar por producto o lote…" oninput="filtrarBusqueda()"
+      style="width:100%; padding:9px 12px; font-size:14px; border:1px solid #cbd5e1; border-radius:8px;">
+  </div>
+  <div id="msg" style="font-size:13px; margin-bottom:10px;"></div>
+
+  <div id="paneSemi">
+    <div class="total-box"><span class="lbl">Total en proceso (todas las etapas)</span><span class="num" id="totalSemi">…</span></div>
+    <div class="estado" id="estadoSemi"></div>
+    <div id="listaSemi"><p class="empty">Cargando…</p></div>
+  </div>
+
+  <div id="paneSb" class="hide">
+    <div class="total-box green"><span class="lbl">En Sala Blanca (esperando Terminado)</span><span class="num" id="totalSb">…</span></div>
+    <div class="card desp">
+      <div class="card-head"><h2>Sala Blanca</h2>
+        <div><label>Responsable&nbsp;</label>
+          <select id="sb_resp"><option value="">— Seleccionar —</option><option>Lourdes</option><option>Gabriela Goritz</option></select>
+        </div>
+      </div>
+      <div id="listaSb"><p class="empty">Cargando…</p></div>
+    </div>
+  </div>
+
+  <div id="paneComp" class="hide">
+    <div class="total-box" style="background:#7c3aed;"><span class="lbl">Componentes + Instrumental en depósito</span><span class="num" id="totalComp">…</span></div>
+    <div class="card" style="border-color:#ddd6fe;background:#faf5ff;">
+      <div class="card-head">
+        <h2>En depósito (ya pasaron los procesos)</h2>
+        <div>
+          <label>Ver&nbsp;</label>
+          <select id="comp_filtro" onchange="cargarComp()">
+            <option value="todos">Todos (tipo)</option>
+            <option value="componente">Solo Componentes</option>
+            <option value="instrumental">Solo Instrumental</option>
+          </select>
+          &nbsp;<select id="comp_sistema" onchange="cargarComp()">
+            <option value="todos">Todos (sistema)</option>
+            <option value="Componente HI">Componente HI</option>
+            <option value="Componente HE">Componente HE</option>
+            <option value="Componente CMU">Componente CMU</option>
+            <option value="Componente CMHI">Componente CMHI (Cono Morse)</option>
+            <option value="Componente MP-MPB">Componente MP-MPB</option>
+            <option value="Instrumental">Instrumental</option>
+          </select>
+        </div>
+      </div>
+      <div id="listaComp"><p class="empty">Cargando…</p></div>
+      <div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap;">
+        <div><label>Responsable&nbsp;</label>
+          <select id="comp_resp"><option value="">— Seleccionar —</option><option>Sol Caprino</option><option>Lourdes Deasis</option></select>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn" style="background:#0284c7;" onclick="compEnviarSel('control')">Enviar a Control</button>
+          <button class="btn" style="background:#b45309;" onclick="compEnviarSel('blasting')">Enviar a Blasting</button>
+          <button class="btn" style="background:#7c3aed;" onclick="compEnviarSel('grabado')">Enviar a Grabado láser</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======================= CONFIGURACIÓN ======================= */
+var SUPABASE_URL = 'https://zsxuyalnxwedqsfqvgsl.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_c56JEbSgS2REWtI-abCDpw_M4nrUMJ_';   // clave pública (es segura en el navegador)
+var API_URL      = 'PEGAR_ACA_LA_URL_/exec_DEL_APPS_SCRIPT_DE_TRAZABILIDAD';
+
+// Los usuarios de puesto no necesitan email propio: el operario escribe "deposito"
+// y se convierte en areatecnicabiofix+deposito@gmail.com (el "+algo" llega al mismo Gmail).
+var EMAIL_BASE   = 'areatecnicabiofix@gmail.com';
+function usuarioAEmail(u) {
+  u = String(u || '').trim().toLowerCase();
+  if (u.indexOf('@') >= 0) return u;
+  var partes = EMAIL_BASE.split('@');
+  return partes[0] + '+' + u + '@' + partes[1];
+}
+function emailAUsuario(e) {
+  var m = String(e || '').match(/\+([^@]+)@/);
+  return m ? m[1] : e;
+}
+
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
+
+var ETAPAS = [
+  { orden: 1, etapa: 'Esperando Lavado Primario',   sectorKey: null },
+  { orden: 2, etapa: 'Esperando Abrillantado',      sectorKey: null },
+  { orden: 3, etapa: 'Esperando Vaporeado',         sectorKey: null },
+  { orden: 4, etapa: 'Esperando Lavado Secundario', sectorKey: null },
+  { orden: 5, etapa: 'Para Control',                sectorKey: 'control' },
+  { orden: 6, etapa: 'Para Lavado Grueso',          sectorKey: 'lavado grueso' },
+  { orden: 7, etapa: 'Para Blasting',               sectorKey: 'blasting' },
+  { orden: 8, etapa: 'Para Lavado Final',           sectorKey: 'lavado final' }
+];
+
+var SEMI = null, SB = null, ACTUAL = 'semi', COMP_ITEMS = [];
+
+/* ======================= SESIÓN ======================= */
+async function iniciar() {
+  var r = await sb.auth.getSession();
+  if (r.data && r.data.session) mostrarApp(r.data.session); else mostrarLogin();
+  sb.auth.onAuthStateChange(function (ev, session) {
+    if (ev === 'SIGNED_OUT' || !session) mostrarLogin();
+  });
+}
+function mostrarLogin() {
+  document.getElementById('vistaApp').classList.add('hide');
+  document.getElementById('vistaLogin').classList.remove('hide');
+}
+function mostrarApp(session) {
+  document.getElementById('vistaLogin').classList.add('hide');
+  document.getElementById('vistaApp').classList.remove('hide');
+  document.getElementById('quien').textContent = 'Puesto: ' + emailAUsuario(session.user.email);
+  cargarActual();
+}
+async function ingresar() {
+  var btn = document.getElementById('lgBtn'), m = document.getElementById('lgMsg');
+  btn.disabled = true; m.textContent = '';
+  var r = await sb.auth.signInWithPassword({
+    email: usuarioAEmail(document.getElementById('lgEmail').value),
+    password: document.getElementById('lgPass').value
+  });
+  btn.disabled = false;
+  if (r.error) { m.textContent = 'Usuario o contraseña incorrectos.'; return; }
+  mostrarApp(r.data.session);
+}
+async function salir() { await sb.auth.signOut(); mostrarLogin(); }
+
+/* ======================= LLAMADAS A APPS SCRIPT (guardar) ======================= */
+async function api(fn, args) {
+  var s = (await sb.auth.getSession()).data.session;
+  if (!s) { mostrarLogin(); throw new Error('Sesión vencida. Volvé a ingresar.'); }
+  return new Promise(function (resolve, reject) {
+    var cb = 'cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    var tag = document.createElement('script');
+    var timer = setTimeout(function () { limpiar(); reject(new Error('Apps Script no respondió (tiempo agotado).')); }, 90000);
+    function limpiar() { clearTimeout(timer); delete window[cb]; if (tag.parentNode) tag.parentNode.removeChild(tag); }
+    window[cb] = function (r) {
+      limpiar();
+      if (r && r.ok) resolve(r.data); else reject(new Error((r && r.error) || 'Error desconocido'));
+    };
+    tag.onerror = function () { limpiar(); reject(new Error('No se pudo conectar con Apps Script.')); };
+    tag.src = API_URL + '?fn=' + encodeURIComponent(fn) +
+              '&args=' + encodeURIComponent(JSON.stringify(args || [])) +
+              '&token=' + encodeURIComponent(s.access_token) +
+              '&callback=' + cb;
+    document.body.appendChild(tag);
+  });
+}
+
+/* ======================= LECTURA DIRECTA DE SUPABASE ======================= */
+async function traerTodo(tabla, campos, armar) {
+  var todo = [], PAG = 1000;
+  for (var desde = 0; ; desde += PAG) {
+    var q = armar(sb.from(tabla).select(campos)).range(desde, desde + PAG - 1);
+    var r = await q;
+    if (r.error) {
+      if (r.error.code === 'PGRST301' || /JWT/i.test(r.error.message)) { mostrarLogin(); }
+      throw new Error(r.error.message);
+    }
+    todo = todo.concat(r.data);
+    if (r.data.length < PAG) break;
+  }
+  return todo;
+}
+
+// Igual que mecNorm_: minúsculas, sin tildes, espacios simples
+function norm(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function clave(p, t, med, lote) { return norm(p) + '|' + norm(t) + '|' + norm(med) + '|' + norm(lote); }
+function vaBlasting(p) {
+  var n = norm(p);
+  if (n.indexOf('monopieza b') >= 0 || n.indexOf('monopieza basal') >= 0) return n.indexOf('tratado') >= 0;
+  return true;
+}
+
+// Réplica de depResumen() + marcar()
+async function depResumen() {
+  var res = await Promise.all([
+    traerTodo('v_deposito_items',
+      'orden,producto,teton,medida,lote,disponible,blastinado_total,blastinado_enviado',
+      function (q) { return q.lte('orden', 8).order('orden').order('primer_ord'); }),
+    traerTodo('asignaciones_espejo', 'producto,teton,medida,lote,sector,cantidad',
+      function (q) { return q.order('fila_sheet'); })
+  ]);
+  var filas = res[0], asig = res[1];
+
+  var asignadas = {};
+  asig.forEach(function (a) {
+    var s = norm(a.sector); if (!s) return;
+    var set = asignadas[s] || (asignadas[s] = {});
+    var k = clave(a.producto, a.teton, a.medida, a.lote);
+    set[k] = (set[k] || 0) + (Number(a.cantidad) || 0);
+  });
+
+  var porOrden = {};
+  filas.forEach(function (r) { (porOrden[r.orden] = porOrden[r.orden] || []).push(r); });
+
+  var total = 0;
+  var etapas = ETAPAS.map(function (def) {
+    var set = def.sectorKey ? (asignadas[norm(def.sectorKey)] || {}) : {};
+    var items = (porOrden[def.orden] || []).map(function (r) {
+      var it = { producto: r.producto, teton: r.teton, medida: r.medida, lote: r.lote,
+                 disponible: Number(r.disponible) || 0 };
+      if (def.sectorKey) {
+        var disp = it.disponible;
+        if (def.sectorKey === 'lavado final' && vaBlasting(it.producto)) {
+          it.cantidadTotal = Number(r.blastinado_total) || disp;
+          it.enviadoCant = Number(r.blastinado_enviado) || 0;
+          it.asignadoCant = it.enviadoCant;
+          it.restante = disp;
+        } else {
+          var a = Math.min(set[clave(it.producto, it.teton, it.medida, it.lote)] || 0, disp);
+          it.cantidadTotal = disp;
+          it.asignadoCant = a;
+          it.enviadoCant = a;
+          it.restante = Math.max(0, disp - a);
+        }
+      }
+      return it;
+    });
+    var sub = 0; items.forEach(function (it) { sub += it.disponible; });
+    total += sub;
+    return { etapa: def.etapa, sectorKey: def.sectorKey, items: items, subtotal: sub };
+  });
+  return { etapas: etapas, total: total };
+}
+
+async function sbResumen() {
+  var filas = await traerTodo('v_deposito_items', 'producto,teton,medida,lote,disponible',
+    function (q) { return q.eq('orden', 9).order('primer_ord'); });
+  var total = 0;
+  var items = filas.map(function (r) { var d = Number(r.disponible) || 0; total += d;
+    return { producto: r.producto, teton: r.teton, medida: r.medida, lote: r.lote, disponible: d }; });
+  return { items: items, total: total };
+}
+
+/* ======================= UI GENERAL ======================= */
+function cap(t){ return { semi:'Semi', sb:'Sb', comp:'Comp' }[t]; }
+function filtrarBusqueda(){
+  var q = (document.getElementById('buscar').value || '').toLowerCase().trim();
+  var pane = document.getElementById('pane'+cap(ACTUAL)); if (!pane) return;
+  var rows = pane.querySelectorAll('tbody tr');
+  for (var i=0;i<rows.length;i++){
+    rows[i].style.display = (!q || rows[i].textContent.toLowerCase().indexOf(q)>=0) ? '' : 'none';
+  }
+}
+function ver(cual){
+  ACTUAL = cual;
+  ['semi','sb','comp'].forEach(function(t){
+    document.getElementById('pane'+cap(t)).className = (t===cual) ? '' : 'hide';
+    document.getElementById('tb_'+t).className = (t===cual) ? 'tab active' : 'tab';
+  });
+  cargarActual();
+}
+function cargarActual(){ if (ACTUAL === 'semi') cargarSemi(); else if (ACTUAL === 'sb') cargarSb(); else cargarComp(); }
+function toggleQty(id, on){ var el = document.getElementById(id); if (el) el.disabled = !on; }
+function msg(t, ok){
+  var m = document.getElementById('msg');
+  m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
+  if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent=''; }, 4000);
+}
+function nombreSector(k){
+  return ({'control':'Control','lavado grueso':'Lavado Grueso','blasting':'Blasting','lavado final':'Lavado Final'})[k] || k;
+}
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function horaAhora(){ var d = new Date(); return d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+
+/* ======================= COMPONENTES (sigue leyendo de Apps Script) ======================= */
+function cargarComp(){
+  document.getElementById('listaComp').innerHTML = '<p class="empty">Cargando…</p>';
+  document.getElementById('totalComp').textContent = '…';
+  api('compResumen', [document.getElementById('comp_filtro').value, document.getElementById('comp_sistema').value])
+    .then(renderComp)
+    .catch(function(e){ document.getElementById('listaComp').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+esc(e.message)+'</p>'; });
+}
+function jsCuerpoEscaneo(p){ var n=(p||'').toLowerCase(); return n.indexOf('cuerpo de escaneo')>=0 || n.indexOf('cuerpo escaneo')>=0; }
+function jsGrabado(p){ var n=(p||'').toLowerCase();
+  return n.indexOf('llave colocadora')>=0||n.indexOf('llave conectora')>=0||n.indexOf('fresa lanza')>=0||n.indexOf('kit de 3 expansores')>=0||n.indexOf('kit de expansores')>=0||n.indexOf('torquimetro')>=0||n.indexOf('torquímetro')>=0||n.indexOf('mango rigido')>=0||n.indexOf('mango rígido')>=0||n.indexOf('mango para angulacion')>=0||n.indexOf('mango para angulación')>=0||n.indexOf('punta driver llave colocadora')>=0; }
+function renderComp(res){
+  COMP_ITEMS = res.items || [];
+  document.getElementById('totalComp').textContent = (res.total||0) + ' u.  (Comp ' + (res.totalComp||0) + ' · Instr ' + (res.totalInstr||0) + ')';
+  if (!COMP_ITEMS.length){ document.getElementById('listaComp').innerHTML = '<p class="empty">No hay componentes en depósito.</p>'; return; }
+  var filas = COMP_ITEMS.map(function(it, i){
+    var tg = it.tipo==='Instrumental' ? '<span class="pill" style="background:#fef3c7;color:#92400e;">Instrumental</span>' : '<span class="pill" style="background:#ede9fe;color:#6d28d9;">Componente</span>';
+    var rutas = [];
+    if (it.tipo !== 'Instrumental') rutas.push('Control');
+    if (jsCuerpoEscaneo(it.producto)) rutas.push('Blasting');
+    if (jsGrabado(it.producto)) rutas.push('Grabado');
+    var d = Number(it.disponible)||0;
+    return '<tr><td>'+esc(it.producto)+'</td><td>'+esc(it.sistema||'—')+'</td><td>'+esc(it.lote)+'</td><td class="c">'+tg+'</td><td class="r">'+d+'</td><td class="c" style="font-size:11px;color:#475569;">'+(rutas.join(' · ')||'—')+'</td>' +
+      '<td class="c"><div class="celda-sel"><input type="checkbox" id="ck_'+i+'" onchange="toggleQty(\'qc_'+i+'\', this.checked)">' +
+      '<input type="number" id="qc_'+i+'" value="'+d+'" min="1" max="'+d+'" style="width:60px; padding:3px; font-size:12px;" disabled></div></td></tr>';
+  }).join('');
+  document.getElementById('listaComp').innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Sistema</th><th>Lote</th><th class="c">Tipo</th><th style="text-align:right;">Cant.</th><th class="c">Puede ir a</th><th class="c">Sel.</th></tr></thead><tbody>'+filas+'</tbody></table></div>';
+  filtrarBusqueda();
+}
+function compEnviarSel(destino){
+  var sel = [];
+  COMP_ITEMS.forEach(function(it, i){
+    var c = document.getElementById('ck_'+i);
+    if (c && c.checked){
+      var cant = Math.min(Number(document.getElementById('qc_'+i).value) || 0, Number(it.disponible) || 0);
+      if (cant > 0) sel.push(Object.assign({}, it, { cantidad: cant }));
+    }
+  });
+  if (!sel.length){ msg('Marcá al menos un componente.', false); return; }
+  msg('Enviando…', true);
+  api('compEnviar', [{ destino: destino, responsable: document.getElementById('comp_resp').value, items: sel }])
+    .then(function(r){ msg((r && r.msg) || 'Listo.', true); cargarComp(); })
+    .catch(function(e){ msg(e.message, false); });
+}
+
+/* ======================= SEMIELABORADO ======================= */
+function cargarSemi(){
+  document.getElementById('listaSemi').innerHTML = '<p class="empty">Cargando…</p>';
+  document.getElementById('totalSemi').textContent = '…';
+  var t0 = performance.now();
+  depResumen()
+    .then(function(res){
+      renderSemi(res);
+      document.getElementById('estadoSemi').textContent = 'Actualizado ' + horaAhora() + ' · ' + Math.round(performance.now() - t0) + ' ms';
+    })
+    .catch(function(e){ document.getElementById('listaSemi').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+esc(e.message)+'</p>'; });
+}
+function esBolsaMadre(p){
+  var n = (p||'').toLowerCase().trim();
+  if (n.indexOf('monopieza b.') >= 0 && (n.indexOf('no tratado') >= 0 || n.indexOf('no pulido') >= 0)) return true;
+  if (n.indexOf('basal') >= 0 && n.indexOf('basal tratado') < 0 && n.indexOf('basal pulido') < 0) return true;
+  return false;
+}
+function renderSemi(res){
+  SEMI = res;
+  document.getElementById('totalSemi').textContent = (res.total || 0) + ' u.';
+  document.getElementById('listaSemi').innerHTML = res.etapas.map(function (e, ei) {
+    var despacha = !!e.sectorKey;
+    if (!e.items || !e.items.length) {
+      return '<div class="card'+(despacha?' desp':' info')+'"><div class="card-head"><h2>'+e.etapa+'</h2><span class="sub">'+(e.subtotal||0)+' u.</span></div><p class="empty">Sin piezas en esta etapa.</p></div>';
+    }
+    var filas = e.items.map(function (it, ii) {
+      var conv = '';
+      if (despacha && e.sectorKey === 'control' && esBolsaMadre(it.producto)) {
+        conv = '<div class="conv" style="display:flex; align-items:flex-start; gap:6px;">' +
+          '<b style="color:#b45309; white-space:nowrap;">Pasa a Control como:</b><span>' +
+          '<label style="display:block;"><input type="radio" name="cv_'+ei+'_'+ii+'" value="" checked> Monopieza Basal (sin convertir)</label>' +
+          '<label style="display:block;"><input type="radio" name="cv_'+ei+'_'+ii+'" value="tratado"> Monopieza Basal Tratado</label>' +
+          '</span></div>';
+      }
+      var restante = (it.restante != null) ? Number(it.restante) : (Number(it.disponible) || 0);
+      var asignadoCant = Number(it.asignadoCant) || 0;
+      var cantTotal = (it.cantidadTotal != null) ? Number(it.cantidadTotal) : (Number(it.disponible) || 0);
+      var chk = despacha ? (
+        restante > 0
+          ? '<td class="c"><div class="celda-sel"><input type="checkbox" id="cs_'+ei+'_'+ii+'" onchange="toggleQty(\'q_'+ei+'_'+ii+'\', this.checked)">' +
+            '<input type="number" id="q_'+ei+'_'+ii+'" value="'+restante+'" min="1" max="'+restante+'" style="width:60px; padding:3px; font-size:12px;" disabled></div></td>'
+          : '<td class="c"><input type="checkbox" checked disabled></td>'
+      ) : '';
+      var est = despacha ? '<td class="c">' + (
+          asignadoCant > 0
+            ? (restante > 0 ? '<span class="pill ok">Enviado '+asignadoCant+' u. · quedan '+restante+' u.</span>' : '<span class="pill ok">Enviado</span>')
+            : '<span class="pill no">En depósito</span>'
+        ) + '</td>' : '';
+      return '<tr><td>'+esc(it.producto)+conv+'</td><td>'+esc(it.medida)+'</td><td>'+esc(it.lote)+'</td><td>'+esc(it.teton||'—')+'</td><td class="r">'+cantTotal+'</td>'+est+chk+'</tr>';
+    }).join('');
+    var thx = despacha ? '<th class="c">Estado</th><th class="c">Sel.</th>' : '';
+    var boton = despacha ? '<div style="display:flex; justify-content:flex-end; margin-top:10px;"><button class="btn" id="bs_'+ei+'" onclick="enviarSector('+ei+')">Enviar a '+nombreSector(e.sectorKey)+'</button></div>' : '';
+    return '<div class="card'+(despacha?' desp':' info')+'"><div class="card-head"><h2>'+e.etapa+'</h2><span class="sub">'+(e.subtotal||0)+' u.</span></div>' +
+      '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Tetón</th><th style="text-align:right;">Cant.</th>'+thx+'</tr></thead><tbody>'+filas+'</tbody></table></div>'+boton+'</div>';
+  }).join('');
+  filtrarBusqueda();
+}
+function enviarSector(ei){
+  var e = SEMI.etapas[ei], sel = [];
+  e.items.forEach(function (it, ii) {
+    var chk = document.getElementById('cs_'+ei+'_'+ii);
+    if (chk && chk.checked && !chk.disabled) {
+      var tope = (it.restante != null) ? Number(it.restante) : (Number(it.disponible) || 0);
+      var cant = Math.min(Number(document.getElementById('q_'+ei+'_'+ii).value) || 0, tope);
+      if (cant > 0) {
+        var item = { producto: it.producto, teton: it.teton||'', medida: it.medida, lote: it.lote, cantidad: cant };
+        var radios = document.getElementsByName('cv_'+ei+'_'+ii);
+        for (var r = 0; r < radios.length; r++) { if (radios[r].checked) { item.conversion = radios[r].value; break; } }
+        sel.push(item);
+      }
+    }
+  });
+  if (!sel.length) { msg('Marcá al menos un lote.', false); return; }
+  var btn = document.getElementById('bs_'+ei); if (btn) btn.disabled = true;
+  msg('Enviando…', true);
+  api('depAsignar', [{ sector: e.sectorKey, items: sel }])
+    .then(function(r){ msg((r && r.msg) || 'Listo.', true); cargarSemi(); })
+    .catch(function(err){ if (btn) btn.disabled = false; msg(err.message, false); });
+}
+
+/* ======================= SALA BLANCA ======================= */
+function cargarSb(){
+  document.getElementById('listaSb').innerHTML = '<p class="empty">Cargando…</p>';
+  document.getElementById('totalSb').textContent = '…';
+  sbResumen()
+    .then(renderSb)
+    .catch(function(e){ document.getElementById('listaSb').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+esc(e.message)+'</p>'; });
+}
+function renderSb(res){
+  SB = res; document.getElementById('totalSb').textContent = (res.total || 0) + ' u.';
+  var cont = document.getElementById('listaSb');
+  if (!res.items || !res.items.length) { cont.innerHTML = '<p class="empty">No hay piezas en Sala Blanca.</p>'; return; }
+  var filas = res.items.map(function (it, ii) {
+    var d = Number(it.disponible)||0;
+    return '<tr><td>'+esc(it.producto)+'</td><td>'+esc(it.medida)+'</td><td>'+esc(it.lote)+'</td><td>'+esc(it.teton||'—')+'</td><td class="r">'+d+'</td>' +
+      '<td class="c"><div class="celda-sel"><input type="checkbox" id="csb_'+ii+'" onchange="toggleQty(\'qsb_'+ii+'\', this.checked)">' +
+      '<input type="number" id="qsb_'+ii+'" value="'+d+'" min="1" max="'+d+'" style="width:60px; padding:3px; font-size:12px;" disabled></div></td></tr>';
+  }).join('');
+  cont.innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Tetón</th><th style="text-align:right;">Cant.</th><th class="c">Sel.</th></tr></thead><tbody>'+filas+'</tbody></table></div>' +
+    '<div style="display:flex; justify-content:flex-end; margin-top:10px;"><button class="btn" id="btnSb" onclick="enviarTerminado()">Enviar a Terminado</button></div>';
+  filtrarBusqueda();
+}
+function enviarTerminado(){
+  var sel = [];
+  SB.items.forEach(function (it, ii) {
+    var chk = document.getElementById('csb_'+ii);
+    if (chk && chk.checked){
+      var cant = Math.min(Number(document.getElementById('qsb_'+ii).value) || 0, Number(it.disponible) || 0);
+      if (cant > 0) sel.push({ producto: it.producto, teton: it.teton||'', medida: it.medida, lote: it.lote, cantidad: cant });
+    }
+  });
+  if (!sel.length) { msg('Marcá al menos un lote.', false); return; }
+  var btn = document.getElementById('btnSb'); if (btn) btn.disabled = true;
+  msg('Enviando…', true);
+  api('sbEnviarTerminado', [{ responsable: document.getElementById('sb_resp').value, items: sel }])
+    .then(function(r){ msg((r && r.msg) || 'Listo.', true); cargarSb(); })
+    .catch(function(err){ if (btn) btn.disabled = false; msg(err.message, false); });
+}
+
+iniciar();
+</script>
+</body>
+</html>
