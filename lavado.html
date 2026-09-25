@@ -9,6 +9,21 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
+<script>
+  // Lecturas rápidas: estas funciones salen de Supabase en vez de Apps Script (guardar sigue igual).
+  // Plan B: abrir la página con ?modo=hoja y vuelve a leer todo desde las hojas.
+  window.BIOFIX_CACHE = ['mecCatalogo'];
+  function bfRpc(nombre) {
+    return BIOFIX.supabase.rpc(nombre).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      return r.data;
+    });
+  }
+  window.BIOFIX_LOCAL = {
+    obtenerTotalesLavado: function () { return bfRpc('lavado_totales'); },
+    abrListarBorradores:  function () { return bfRpc('lavado_abr_borradores'); }
+  };
+</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --warn:#b45309; }
   *{ box-sizing:border-box; font-family:Arial, sans-serif; }
