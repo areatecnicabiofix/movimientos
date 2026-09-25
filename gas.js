@@ -62,7 +62,10 @@
     var c = document.createElement('div');
     c.id = 'bfChip';
     c.setAttribute('style', 'position:fixed;right:10px;bottom:10px;z-index:99998;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:6px 12px;font:12px Arial,sans-serif;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.08);');
-    c.innerHTML = 'Puesto: <b>' + sectorDe(session) + '</b> · <a href="#" id="bfSalirC" style="color:#0284c7;">Salir</a>';
+    var esAdmin = ADMINS.indexOf(sectorDe(session)) >= 0;
+    c.innerHTML = 'Puesto: <b>' + sectorDe(session) + '</b> · ' +
+      (esAdmin && PANTALLA ? '<a href="index.html" style="color:#0284c7;">Menú</a> · ' : '') +   // solo "tecnica" vuelve al menú
+      '<a href="#" id="bfSalirC" style="color:#0284c7;">Salir</a>';
     document.body.appendChild(c);
     document.getElementById('bfSalirC').onclick = function (e) { e.preventDefault(); salir(); };
   }
