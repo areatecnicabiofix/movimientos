@@ -9,6 +9,76 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
+<script>
+/* ===== Lecturas rápidas desde Supabase (Lavados Grueso / Final) =====
+ * Estas lecturas salen de UNA consulta a Supabase (función lavados_disponibles) en vez de ir al Apps Script,
+ * con la misma lógica que Codigo.gs. Si algo falla, cae solo al Apps Script.
+ * ?modo=hoja en la dirección -> siempre Apps Script (plan B).
+ * ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado abajo a la izquierda. */
+(function () {
+  var RPC = 'lavados_disponibles';
+  var cache = null, cacheT = 0;
+  function datos() {
+    var ahora = Date.now();
+    if (cache && ahora - cacheT < 3000) return cache;   // las lecturas de un mismo refresco comparten la consulta
+    cacheT = ahora;
+    cache = BIOFIX.supabase.rpc(RPC).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      return r.data || {};
+    });
+    cache.catch(function () { cache = null; });
+    return cache;
+  }
+  var SACAR = {
+    lgObtenerDisponibles: function (d) { return d.lg; },
+    lfObtenerDisponibles: function (d) { return d.lf; }
+  };
+  function planB(fn) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      return datos().then(function (d) {
+        var r = SACAR[fn](d);
+        if (r == null) throw new Error('la copia de la hoja todavía no está en Supabase');
+        return r;
+      }).catch(function (e) {
+        console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
+        return BIOFIX.llamar(fn, args);
+      });
+    };
+  }
+  window.BIOFIX_LOCAL = {};
+  Object.keys(SACAR).forEach(function (fn) { window.BIOFIX_LOCAL[fn] = planB(fn); });
+
+  if (/[?&]comparar=1\b/.test(location.search)) {
+    window.addEventListener('load', function () {
+      function clave(x) {
+        return ['producto', 'teton', 'medida', 'lote', 'disponible', 'fila', 'cantidad', 'rechazadas',
+                'cantidadTotal', 'enviadoCant', 'restante', 'refControl']
+          .map(function (k) { var v = x[k]; return (v == null ? '' : String(v).trim()); }).join('|');
+      }
+      function lista(r) { var a = Array.isArray(r) ? r : ((r && r.items) || []); return a.map(clave).sort(); }
+      BIOFIX.sesion.then(function () {
+        return Promise.all(Object.keys(SACAR).map(function (fn) {
+          return Promise.all([datos().then(SACAR[fn]), BIOFIX.llamar(fn, [])]).then(function (p) {
+            var a = lista(p[0]), b = lista(p[1]);
+            var extra = (p[0] && p[0].subtotal != null) ? ' · subtotal ' + p[0].subtotal + ' / ' + p[1].subtotal : '';
+            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
+            console.log(fn, { supabase: p[0], appsScript: p[1], diferencias: dif });
+            return fn + ': ' + (a.join('\n') === b.join('\n') ? 'IGUALES ✓' : 'DISTINTOS ✗') +
+                   ' (' + a.length + ' / ' + b.length + ')' + extra +
+                   (dif.length ? '\n   ' + dif.slice(0, 6).join('\n   ') : '');
+          });
+        }));
+      }).then(function (lineas) {
+        var box = document.createElement('pre');
+        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:12px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
+        box.textContent = 'COMPARACIÓN Supabase vs Apps Script\n' + lineas.join('\n');
+        document.body.appendChild(box);
+      }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
+    });
+  }
+})();
+</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
   *{ box-sizing:border-box; font-family:Arial, sans-serif; }
