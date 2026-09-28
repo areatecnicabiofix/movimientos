@@ -149,6 +149,14 @@
       return resp.json();
     }).then(function (j) {
       if (!j || !j.ok) throw new Error((j && j.error) || 'Error desconocido');
+      if (j.t) {   // botones que guardan: el Apps Script informa cuánto tardó cada parte
+        try {
+          sb.from('api_tiempos').insert([
+            { pantalla: PANTALLA || 'inicio', fn: fn + ' [función]', ms: j.t.fn, ok: true },
+            { pantalla: PANTALLA || 'inicio', fn: fn + ' [copia supabase]', ms: j.t.sync, ok: true }
+          ]).then(function () {}, function () {});
+        } catch (e) { /* nunca romper la pantalla por la medición */ }
+      }
       return j.data;
     });
   }
