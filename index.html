@@ -51,8 +51,7 @@
     lavado:     'lavado.html',
     lavados:    'lavados.html',
     blasting:   'blasting.html',
-    control:    'control.html',
-    grabado:    'grabado.html'
+    control:    'control.html'
   };
 
   var NUEVAS = [
@@ -63,13 +62,12 @@
     { t: 'Lavado',                 d: 'Primario, Abrillantado, Vaporeado, Secundario', href: 'lavado.html' },
     { t: 'Lavados Grueso / Final', d: 'Lavado Grueso y Lavado Final',             href: 'lavados.html' },
     { t: 'Control de Calidad',     d: 'Control por cotas',                        href: 'control.html' },
-    { t: 'Blasting',               d: 'Bandejas, blastinado y control',           href: 'blasting.html' },
-    { t: 'Grabado Láser',          d: 'Componentes a grabar',                     href: 'grabado.html' }
+    { t: 'Blasting',               d: 'Bandejas, blastinado y control',           href: 'blasting.html' }
   ];
   var VIEJAS = [
     { t: 'Mecanizado', v: '' }, { t: 'Lavado', v: 'lavado' }, { t: 'Control de Calidad', v: 'control' },
     { t: 'Lavados Grueso / Final', v: 'lavados' }, { t: 'Blasting', v: 'blasting' },
-    { t: 'Depósito', v: 'deposito' }, { t: 'Depósito — Lavado Final', v: 'depositolf' }, { t: 'Grabado Láser', v: 'grabado' }
+    { t: 'Depósito', v: 'deposito' }, { t: 'Depósito — Lavado Final', v: 'depositolf' }
   ];
 
   BIOFIX.sesion.then(function (session) {
