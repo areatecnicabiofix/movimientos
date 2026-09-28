@@ -79,7 +79,7 @@
       <input id="cMedida" placeholder="Medida…" oninput="renderCotas()">
       <label class="mut"><input type="checkbox" id="cMin" checked onchange="renderCotas()"> Solo con 10+ valores numéricos</label>
     </div>
-    <p class="mut">Cp/Cpk aparecen cuando cargás la tolerancia de esa cota (tabla <b>cotas_tolerancia</b> en Supabase). Tocá una fila para ver el gráfico de control.</p>
+    <p class="mut">Tocá una fila para ver el gráfico de control.</p>
     <div class="card" id="cGrafico" style="display:none"></div>
     <div class="card"><div class="tabla-wrap" id="cLista"><p class="mut">Cargando…</p></div></div>
   </div>
@@ -177,7 +177,6 @@ function cargarCotas(){
     renderCotas();
   }).catch(function(e){ $('cLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
-function pillCpk(v){ if (v == null) return ''; var c = v >= 1.33 ? 'ok' : (v >= 1 ? 'reg' : 'mal'); return '<span class="pill '+c+'">'+num(v,2)+'</span>'; }
 function renderCotas(){
   var o = $('cOrigen').value, p = $('cProd').value, m = $('cMedida').value.toLowerCase().trim(), min = $('cMin').checked;
   var lista = COTAS.filter(function(c){
@@ -185,13 +184,11 @@ function renderCotas(){
   });
   if (!lista.length){ $('cLista').innerHTML = '<p class="mut">Sin cotas para ese filtro.</p>'; return; }
   window._CL = lista;
-  $('cLista').innerHTML = '<table><thead><tr><th>Origen</th><th>Producto</th><th>Medida</th><th>Cota</th><th>Valores</th><th>Media</th><th>Desvío</th><th>Mín</th><th>Máx</th><th>LCI</th><th>LCS</th><th>Tol.</th><th>Cp</th><th>Cpk</th><th>Fuera tol.</th><th>Atributo OK / No OK</th></tr></thead><tbody>' +
+  $('cLista').innerHTML = '<table><thead><tr><th>Origen</th><th>Producto</th><th>Medida</th><th>Cota</th><th>Valores</th><th>Media</th><th>Desvío</th><th>Mín</th><th>Máx</th><th>LCI</th><th>LCS</th></tr></thead><tbody>' +
     lista.map(function(c, i){
-      var tol = (c.lsl != null && c.usl != null) ? num(c.lsl)+' – '+num(c.usl) : '<span class="mut">sin cargar</span>';
       return '<tr class="click" onclick="grafico('+i+')"><td>'+esc(c.origen)+'</td><td>'+esc(c.producto)+'</td><td>'+esc(c.medida)+'</td><td><b>'+esc(c.letra)+'</b></td>' +
         '<td class="r">'+c.numericas+'</td><td class="r">'+num(c.media,4)+'</td><td class="r">'+num(c.desvio,4)+'</td><td class="r">'+num(c.minimo)+'</td><td class="r">'+num(c.maximo)+'</td>' +
-        '<td class="r">'+num(c.lci,4)+'</td><td class="r">'+num(c.lcs,4)+'</td><td>'+tol+'</td><td class="r">'+pillCpk(c.cp)+'</td><td class="r">'+pillCpk(c.cpk)+'</td>' +
-        '<td class="r">'+(c.fuera_tolerancia ? '<span class="pill mal">'+c.fuera_tolerancia+'</span>' : '')+'</td><td class="r">'+(c.atributo_ok||c.atributo_no_ok ? c.atributo_ok+' / '+c.atributo_no_ok : '')+'</td></tr>';
+        '<td class="r">'+num(c.lci,4)+'</td><td class="r">'+num(c.lcs,4)+'</td></tr>';
     }).join('') + '</tbody></table>';
 }
 function grafico(i){
@@ -202,14 +199,14 @@ function grafico(i){
     if (!s.length){ box.innerHTML = '<p class="mut">Sin valores numéricos.</p>'; return; }
     var W = Math.max(640, box.clientWidth - 32), H = 260, pl = 50, pr = 70, pt = 14, pb = 26;
     var vals = s.map(function(x){ return Number(x.valor); });
-    var refs = [c.lci, c.lcs, c.lsl, c.usl].filter(function(v){ return v != null; }).map(Number);
+    var refs = [c.lci, c.lcs].filter(function(v){ return v != null; }).map(Number);
     var lo = Math.min.apply(null, vals.concat(refs)), hi = Math.max.apply(null, vals.concat(refs));
     var pad = (hi - lo) * 0.08 || 0.01; lo -= pad; hi += pad;
     var X = function(k){ return pl + (s.length === 1 ? 0 : k * (W - pl - pr) / (s.length - 1)); };
     var Y = function(v){ return pt + (hi - v) * (H - pt - pb) / (hi - lo); };
     var linea = function(v, color, dash, txt){ if (v == null) return ''; var y = Y(Number(v));
       return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" stroke="'+color+'" stroke-width="1.2" '+(dash?'stroke-dasharray="5 4"':'')+'/><text x="'+(W-pr+4)+'" y="'+(y+3)+'">'+txt+' '+num(v,3)+'</text>'; };
-    var fuera = function(v){ return (c.lsl != null && (v < c.lsl || v > c.usl)) || v < c.lci || v > c.lcs; };
+    var fuera = function(v){ return v < c.lci || v > c.lcs; };
     var pts = s.map(function(x, k){ return X(k)+','+Y(Number(x.valor)); }).join(' ');
     var dots = s.map(function(x, k){ var v = Number(x.valor), f = fuera(v);
       return '<circle cx="'+X(k)+'" cy="'+Y(v)+'" r="'+(f?3.5:2.2)+'" fill="'+(f?'#dc2626':'#0284c7')+'"><title>'+esc(x.lote)+' · '+num(v,4)+' · '+fecha(x.fecha)+'</title></circle>'; }).join('');
@@ -217,9 +214,8 @@ function grafico(i){
     box.innerHTML = '<h2>'+esc(c.producto)+' · '+esc(c.medida)+' · cota '+esc(c.letra)+' <span class="mut">('+esc(c.origen)+', '+s.length+' valores)</span></h2>' +
       '<svg width="100%" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="max-height:300px">' + ticks +
       linea(c.media, '#0f172a', false, 'Media') + linea(c.lci, '#f59e0b', true, 'LCI') + linea(c.lcs, '#f59e0b', true, 'LCS') +
-      linea(c.lsl, '#dc2626', false, 'LIE') + linea(c.usl, '#dc2626', false, 'LSE') +
       '<polyline points="'+pts+'" fill="none" stroke="#93c5fd" stroke-width="1"/>' + dots + '</svg>' +
-      '<p class="mut">Puntos rojos: fuera de los límites de control (±3σ) o de tolerancia. Pasá el dedo o el mouse sobre un punto para ver lote y fecha.</p>';
+      '<p class="mut">Puntos rojos: fuera de los límites de control (media ± 3 desvíos): posible error de carga o proceso corrido. Pasá el dedo o el mouse sobre un punto para ver lote y fecha.</p>';
   }).catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 
