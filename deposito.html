@@ -283,9 +283,14 @@ async function depResumen() {
       'orden,producto,teton,medida,lote,disponible,blastinado_total,blastinado_enviado',
       function (q) { return q.lte('orden', 8).order('orden').order('primer_ord'); }),
     traerTodo('asignaciones_espejo', 'producto,teton,medida,lote,sector,cantidad',
-      function (q) { return q.order('fila_sheet'); })
+      function (q) { return q.order('fila_sheet'); }),
+    // NUEVO: para Blasting, qué ya está en "Para Blasting" y qué falta mandar (ver v_blasting_envio)
+    traerTodo('v_blasting_envio', 'producto,teton,medida,lote,para_blast,ya_grueso,legado,va',
+      function (q) { return q.order('primer_ord'); })
   ]);
   var filas = res[0], asig = res[1];
+  var envio = {};
+  res[2].forEach(function (r) { envio[clave(r.producto, r.teton, r.medida, r.lote)] = r; });
 
   var asignadas = {};
   asig.forEach(function (a) {
@@ -311,6 +316,18 @@ async function depResumen() {
           it.enviadoCant = Number(r.blastinado_enviado) || 0;
           it.asignadoCant = it.enviadoCant;
           it.restante = disp;
+        } else if (def.sectorKey === 'blasting') {
+          // FIX: antes se topaba contra el total HISTÓRICO de ASIGNACIONES (nunca baja), así que si
+          // de un lote de 100 ya se habían mandado 50 y se blastinaron, las otras 50 figuraban como
+          // "ya enviadas". Ahora: enviado = lo que está en "Para Blasting"; falta mandar = lo que
+          // terminó Lavado Grueso, menos asignaciones viejas que nunca pasaron por el Ledger.
+          var e = envio[clave(it.producto, it.teton, it.medida, it.lote)] || {};
+          var ya = e.va ? Math.max(0, Number(e.ya_grueso) || 0) : 0;
+          var falta = Math.min(disp, Math.max(0, ya - (Number(e.legado) || 0)));
+          it.cantidadTotal = disp;
+          it.restante = falta;
+          it.asignadoCant = Math.max(0, disp - falta);
+          it.enviadoCant = it.asignadoCant;
         } else {
           var a = Math.min(set[clave(it.producto, it.teton, it.medida, it.lote)] || 0, disp);
           it.cantidadTotal = disp;
