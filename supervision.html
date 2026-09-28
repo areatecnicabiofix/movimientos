@@ -472,15 +472,29 @@ function renderProd(){
     Object.keys(op).sort().map(function(k){ var o = op[k]; return [esc(k), o.n, num(o.pz,0), d2(o.a, o.pz), d2(o.b, o.pz), d2(o.a + o.b, o.n), num(o.pausa,0)]; }));
   $('pBctl').innerHTML = tablaSimple(['Responsable', 'Controles', 'Piezas', 'Min por pieza', 'Min por control', 'Pausa total (min)'],
     Object.keys(ct).sort().map(function(k){ var o = ct[k]; return [esc(k), o.n, num(o.pz,0), d2(o.min, o.pz), d2(o.min, o.n), num(o.pausa,0)]; }));
-  var pz = {};
+  // Control de piezas: el trabajo de cada control se reparte según cuántas mediciones cargó cada uno
+  var pz = {}, totTipo = {};
   (PROD.pz || []).forEach(function(r){
     if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf)) return;
-    var k = (r.responsable || '(sin responsable)') + '|' + (r.tipo || ''); if (!pz[k]) pz[k] = { n: 0, min: 0, cnt: 0, pausa: 0 };
-    pz[k].n++; if (r.tiempo != null) { pz[k].min += +r.tiempo; pz[k].cnt++; } pz[k].pausa += +r.pausa || 0;
+    var resp = r.resp || {}, tot = 0, tipo = r.tipo || '';
+    Object.keys(resp).forEach(function(k){ tot += Number(resp[k]) || 0; });
+    if (!tot) return;
+    var principal = Object.keys(resp).sort(function(a, b){ return resp[b] - resp[a]; })[0];
+    totTipo[tipo] = (totTipo[tipo] || 0) + tot;
+    Object.keys(resp).forEach(function(nombre){
+      var k = tipo + '|' + nombre, n = Number(resp[nombre]) || 0, parte = n / tot;
+      if (!pz[k]) pz[k] = { ctl: 0, ppal: 0, med: 0, min: 0, medT: 0 };
+      pz[k].ctl++; pz[k].med += n; if (nombre === principal) pz[k].ppal++;
+      if (r.tiempo != null && Number(r.tiempo) > 0) { pz[k].min += Number(r.tiempo) * parte; pz[k].medT += n; }
+    });
     motivos(r.motivos, 'Control de piezas');
   });
-  $('pPz').innerHTML = tablaSimple(['Responsable', 'Tipo', 'Controles', 'Min por control', 'Pausa total (min)'],
-    Object.keys(pz).sort().map(function(k){ var o = pz[k], kk = k.split('|'); return [esc(kk[0]), esc(kk[1]), o.n, d2(o.min, o.cnt), num(o.pausa,0)]; }).map(function(f){ return f; }));
+  $('pPz').innerHTML = '<p class="mut">Cada control se reparte según cuántas mediciones cargó cada uno. "Principal" = controles en los que fue el que más midió. El tiempo del control se reparte en la misma proporción.</p>' +
+    tablaSimple(['Tipo', 'Responsable', 'Controles en los que midió', 'Principal en', 'Mediciones', '% de las mediciones', 'Min por medición'],
+    Object.keys(pz).sort(function(a, b){ var ta = a.split('|')[0], tb = b.split('|')[0]; return ta === tb ? pz[b].med - pz[a].med : (ta < tb ? -1 : 1); }).map(function(k){
+      var o = pz[k], kk = k.split('|');
+      return [esc(kk[0]), esc(kk[1]), o.ctl, o.ppal, num(o.med,0), num(100 * o.med / (totTipo[kk[0]] || 1), 1) + ' %', o.medT ? num(o.min / o.medT, 2) : '—'];
+    })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>');
   var cc = {};
   (PROD.cc || []).forEach(function(r){
     if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf)) return;
