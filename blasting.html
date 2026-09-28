@@ -10,9 +10,9 @@
 <script src="config.js"></script>
 <script src="gas.js"></script>
 <script>
-/* ===== Lecturas rápidas desde Supabase (Blasting) =====
+/* ===== Lecturas rápidas desde Supabase (Blasting: borradores y bandejas) =====
  * Estas lecturas salen de UNA consulta a Supabase (función blasting_datos) en vez de ir al Apps Script,
- * con la misma lógica que Codigo.gs. Si algo falla, cae solo al Apps Script.
+ * con la misma lógica que el .gs. Si algo falla (o la hoja todavía no está copiada), cae solo al Apps Script.
  * ?modo=hoja en la dirección -> siempre Apps Script (plan B).
  * ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado abajo a la izquierda. */
 (function () {
@@ -29,18 +29,175 @@
     cache.catch(function () { cache = null; });
     return cache;
   }
+  function falta() { throw new Error('la copia de la hoja todavía no está en Supabase'); }
+  /* ---- ayudantes comunes (mismas reglas que Codigo.gs) ---- */
+  function N(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+  function T(v) { return String(v == null ? '' : v).trim(); }
+  // Valor "como lo devuelve getValues": los números vuelven a ser números.
+  function V(x) { if (x == null) return ''; var s = String(x).trim(); return /^-?\d+([.,]\d+)?$/.test(s) ? Number(s.replace(',', '.')) : String(x); }
+  function num(x) { var v = V(x); return typeof v === 'number' ? v : (Number(v) || 0); }
+  function pad2(n) { return ('0' + n).slice(-2); }
+  function hora(x) { var s = T(x), m = s.match(/^(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : s; }          // HH:mm
+  function fecha(x) { var s = T(x), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] : s; }
+  // Columna como mecCol_ (primer encabezado que coincide, en el orden de los nombres)
+  function colPri(h, nombres) { for (var i = 0; i < nombres.length; i++) { var j = h.indexOf(N(nombres[i])); if (j >= 0) return j; } return -1; }
+  // Columna como bndMap_ (si el encabezado se repite, gana el último)
+  function colUlt(h, nombre) { var k = N(nombre), j = -1; for (var i = 0; i < h.length; i++) if (h[i] === k) j = i; return j; }
+  function celda(v, c) { return c >= 0 ? v[c] : ''; }
+  var LET = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+  function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
+    var p = N(producto), conTeton = N(teton).indexOf('con') >= 0;
+    if (p.indexOf('hexagono interno') >= 0) return 'O';
+    if (p.indexOf('cono morse') >= 0) return 'M';
+    if (p.indexOf('compresivo multi') >= 0 || p.indexOf('cmu3') >= 0) return 'M';
+    if (p.indexOf('basal') >= 0) {
+      if (conTeton) return 'M';
+      var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
+      var dd = mm ? parseFloat(mm[1].replace(',', '.')) : null;
+      return (dd != null && dd >= 5.5) ? 'K' : 'J';
+    }
+    if (p.indexOf('monopieza') >= 0) return 'M';
+    if (p.indexOf('tapon porta implante') >= 0) return 'F';
+    return 'O';
+  }
+  function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
+  function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
+
+  /* ---- Blasting: bla* y bnd* (= Codigo.gs / bandejas.gs) ---- */
+  function listaBla(d) { if (!d.espejo) falta(); return d.enBlasting || []; }              // = blaListar
+  function ind(d) { if (!d.espejo || !d.ind || !Array.isArray(d.ind.h)) falta(); return d.ind; }
+  function claveL(p, m, l) { return N(p) + '|' + N(m) + '|' + N(l); }                      // = bndClaveL_
+  var CERRADOS = ['finalizada', 'reprocesada', 'enviada', 'control registrado', ''];
+  function I(d) {   // columnas + filas de "Indicadores de Blasting"
+    var h = ind(d).h, c = {};
+    ['Fecha','Tipo','N° Bandeja','Operario','Producto','Lote','Medida','Teton','Cant. Implantes',
+     'Hora Inicio Armado','Hora Fin Armado','Pausa Armado (min)','Hora Inicio Blastinado','Hora Fin Blastinado',
+     'Pausa Blastinado (min)','Hora Inicio Control','Pausa Control (min)','Motivos Pausa','Observaciones',
+     'Tiempo Armado (min)','Tiempo Blastinado (min)','Estado','Pausa Desde'].forEach(function (n) { c[n] = colUlt(h, n); });
+    return { c: c, filas: d.ind.filas || [] };
+  }
+  function g(x, f, n) { return celda(f.v || [], x.c[n]); }
+  function esControl(x, f) { return x.c['Tipo'] >= 0 && N(g(x, f, 'Tipo')) === 'control'; }
+  function leer(x, f) {   // = bndLeer_
+    return { fila: f.fila, fecha: fecha(g(x, f, 'Fecha')), bandeja: V(g(x, f, 'N° Bandeja')), operario: V(g(x, f, 'Operario')),
+      producto: V(g(x, f, 'Producto')), lote: V(g(x, f, 'Lote')), medida: V(g(x, f, 'Medida')), teton: V(g(x, f, 'Teton')),
+      cantidad: V(g(x, f, 'Cant. Implantes')),
+      hIniArm: hora(g(x, f, 'Hora Inicio Armado')), hFinArm: hora(g(x, f, 'Hora Fin Armado')), pausaArm: num(g(x, f, 'Pausa Armado (min)')),
+      hIniBla: hora(g(x, f, 'Hora Inicio Blastinado')), hFinBla: hora(g(x, f, 'Hora Fin Blastinado')), pausaBla: num(g(x, f, 'Pausa Blastinado (min)')),
+      motivos: V(g(x, f, 'Motivos Pausa')), observaciones: V(g(x, f, 'Observaciones')),
+      tArm: V(g(x, f, 'Tiempo Armado (min)')), tBla: V(g(x, f, 'Tiempo Blastinado (min)')),
+      estado: V(g(x, f, 'Estado')), pausaDesde: hora(g(x, f, 'Pausa Desde')) };
+  }
+  function progreso(d, producto, medida, lote) {   // = bndProgresoLote
+    var x = I(d), hecho = 0, enProceso = 0, obj = claveL(producto, medida, lote);
+    x.filas.forEach(function (f) {
+      if (esControl(x, f)) return;
+      if (claveL(g(x, f, 'Producto'), g(x, f, 'Medida'), g(x, f, 'Lote')) !== obj) return;
+      var est = N(g(x, f, 'Estado')), cant = num(g(x, f, 'Cant. Implantes'));
+      if (est === 'finalizada') hecho += cant;
+      else if (est !== 'reprocesada' && est !== 'enviada') enProceso += cant;
+    });
+    var pedido = 0;
+    listaBla(d).forEach(function (b) { if (claveL(b.producto, b.medida, b.lote) === obj) pedido += Number(b.cantidad) || 0; });
+    return { pedido: pedido, hecho: hecho, enProceso: enProceso, disponible: Math.max(0, pedido - hecho - enProceso),
+             completo: (pedido > 0 && hecho >= pedido && enProceso === 0) };
+  }
   var SACAR = {
-    blaObtenerDisponibles: function (d) { return d.espejo ? d.disponibles : null; },
-    blaListar:             function (d) { return d.espejo ? d.enBlasting : null; }
+    blaObtenerDisponibles: function (d) { if (!d.espejo) falta(); return d.disponibles; },
+    blaListar: function (d) { return listaBla(d); },
+    bndActual: function (d) {
+      var x = I(d);
+      if (x.c['Estado'] < 0) return null;
+      for (var i = 0; i < x.filas.length; i++) {
+        var f = x.filas[i];
+        if (x.c['Tipo'] >= 0) { var tipo = N(g(x, f, 'Tipo')); if (tipo && tipo !== 'bandeja') continue; }
+        if (CERRADOS.indexOf(N(g(x, f, 'Estado'))) < 0) return leer(x, f);
+      }
+      return null;
+    },
+    bndControlEnCurso: function (d) {
+      var x = I(d);
+      if (x.c['Estado'] < 0 || x.c['Tipo'] < 0) return null;
+      for (var i = 0; i < x.filas.length; i++) {
+        var f = x.filas[i];
+        if (N(g(x, f, 'Tipo')) !== 'control') continue;
+        if (CERRADOS.indexOf(N(g(x, f, 'Estado'))) >= 0) continue;
+        return { fila: f.fila, producto: V(g(x, f, 'Producto')), medida: V(g(x, f, 'Medida')), lote: V(g(x, f, 'Lote')),
+          teton: V(g(x, f, 'Teton')), cantidad: num(g(x, f, 'Cant. Implantes')),
+          horaInicio: hora(g(x, f, 'Hora Inicio Control')), pausaMin: num(g(x, f, 'Pausa Control (min)')),
+          pausaDesde: hora(g(x, f, 'Pausa Desde')), enPausa: !!N(g(x, f, 'Pausa Desde')) };
+      }
+      return null;
+    },
+    bndLotes: function (d) {
+      var out = [];
+      listaBla(d).forEach(function (b) {
+        var pr = progreso(d, b.producto, b.medida, b.lote);
+        if (pr.disponible > 0) out.push({ producto: b.producto, teton: b.teton || '', medida: b.medida || '—', lote: b.lote,
+          cantidad: pr.disponible, pedido: pr.pedido, hecho: pr.hecho, enProceso: pr.enProceso });
+      });
+      return out;
+    },
+    bndLotesCompletos: function (d) {
+      var out = [], vistos = {};
+      listaBla(d).forEach(function (b) {
+        var k = claveL(b.producto, b.medida, b.lote); if (vistos[k]) return; vistos[k] = 1;
+        var pr = progreso(d, b.producto, b.medida, b.lote);
+        if (pr.completo) out.push({ producto: b.producto, teton: b.teton || '', medida: b.medida, lote: b.lote, cantidad: pr.hecho });
+      });
+      return out;
+    },
+    bndPanel: function (d) {
+      var x = I(d), lotes = {}, orden = [];
+      x.filas.forEach(function (f) {
+        if (esControl(x, f)) return;
+        var est = N(g(x, f, 'Estado'));
+        if (est === 'reprocesada' || est === 'enviada') return;
+        var prod = V(g(x, f, 'Producto')), med = V(g(x, f, 'Medida')), lote = V(g(x, f, 'Lote')), cant = num(g(x, f, 'Cant. Implantes'));
+        var k = claveL(prod, med, lote);
+        if (!lotes[k]) { lotes[k] = { producto: prod, medida: med, lote: lote, hecho: 0, enProceso: 0 }; orden.push(k); }
+        if (est === 'finalizada') lotes[k].hecho += cant; else lotes[k].enProceso += cant;
+      });
+      listaBla(d).forEach(function (b) {
+        var k = claveL(b.producto, b.medida, b.lote);
+        if (!lotes[k]) { lotes[k] = { producto: b.producto, medida: b.medida, lote: b.lote, hecho: 0, enProceso: 0 }; orden.push(k); }
+        lotes[k].pedido = (lotes[k].pedido || 0) + (Number(b.cantidad) || 0);
+      });
+      var arr = [];
+      orden.forEach(function (k) { var L = lotes[k]; L.pedido = L.pedido || 0; if (L.pedido > 0 || L.enProceso > 0) arr.push(L); });
+      return arr;
+    },
+    bndProximoNumero: function (d, a) {
+      var x = I(d), maxN = 0, obj = claveL(a[0], a[1], a[2]);
+      if (x.c['N° Bandeja'] < 0) return 1;
+      x.filas.forEach(function (f) {
+        if (claveL(g(x, f, 'Producto'), g(x, f, 'Medida'), g(x, f, 'Lote')) !== obj) return;
+        var n = Number(V(g(x, f, 'N° Bandeja'))); if (!isNaN(n) && n > maxN) maxN = n;
+      });
+      return maxN + 1;
+    },
+    bndPromedio: function (d, a) {
+      var x = I(d), MIN = 20, sa = 0, na = 0, sb = 0, nb = 0, tot = 0, obj = N(a[0]) + '|' + N(a[1]);
+      x.filas.forEach(function (f) {
+        if (N(g(x, f, 'Estado')) !== 'finalizada') return;
+        if (N(g(x, f, 'Producto')) + '|' + N(g(x, f, 'Medida')) !== obj) return;
+        tot++;
+        var ra = V(g(x, f, 'Tiempo Armado (min)')), rb = V(g(x, f, 'Tiempo Blastinado (min)'));
+        var va = Number(ra); if (!isNaN(va) && ra !== '') { sa += va; na++; }
+        var vb = Number(rb); if (!isNaN(vb) && rb !== '') { sb += vb; nb++; }
+      });
+      if (tot < MIN) return { hay: false, n: tot, minimo: MIN };
+      function pr(s, n) { return n ? Math.round(s / n) : '—'; }
+      return { hay: true, n: tot, minimo: MIN, armado: pr(sa, na), blastinado: pr(sb, nb) };
+    }
   };
+  var COMPARAR = [['blaObtenerDisponibles'], ['blaListar'], ['bndActual'], ['bndControlEnCurso'],
+                  ['bndLotes'], ['bndLotesCompletos'], ['bndPanel']];
+
   function planB(fn) {
     return function () {
       var args = Array.prototype.slice.call(arguments);
-      return datos().then(function (d) {
-        var r = SACAR[fn](d);
-        if (r == null) throw new Error('la copia de la hoja todavía no está en Supabase');
-        return r;
-      }).catch(function (e) {
+      return datos().then(function (d) { return SACAR[fn](d, args); }).catch(function (e) {
         console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
         return BIOFIX.llamar(fn, args);
       });
@@ -52,26 +209,28 @@
   if (/[?&]comparar=1\b/.test(location.search)) {
     window.addEventListener('load', function () {
       function clave(x) {
-        return ['producto', 'teton', 'medida', 'lote', 'disponible', 'fila', 'cantidad', 'rechazadas',
-                'cantidadTotal', 'enviadoCant', 'restante', 'refControl']
-          .map(function (k) { var v = x[k]; return (v == null ? '' : String(v).trim()); }).join('|');
+        if (x == null || typeof x !== 'object') return String(x == null ? '' : x);
+        return Object.keys(x).sort().map(function (k) {
+          var v = x[k];
+          return k + ':' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v == null ? '' : v).trim());
+        }).join('|');
       }
-      function lista(r) { var a = Array.isArray(r) ? r : ((r && r.items) || []); return a.map(clave).sort(); }
+      function lista(r) { var a = Array.isArray(r) ? r : (r == null ? [] : [r]); return a.map(clave).sort(); }
       BIOFIX.sesion.then(function () {
-        return Promise.all(Object.keys(SACAR).map(function (fn) {
-          return Promise.all([datos().then(SACAR[fn]), BIOFIX.llamar(fn, [])]).then(function (p) {
+        return Promise.all(COMPARAR.map(function (c) {
+          var fn = c[0], args = c[1] || [], nombre = fn + '(' + args.map(function (a) { return JSON.stringify(a); }).join(', ') + ')';
+          return Promise.all([datos().then(function (d) { return SACAR[fn](d, args); }), BIOFIX.llamar(fn, args)]).then(function (p) {
             var a = lista(p[0]), b = lista(p[1]);
-            var extra = (p[0] && p[0].subtotal != null) ? ' · subtotal ' + p[0].subtotal + ' / ' + p[1].subtotal : '';
-            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
-            console.log(fn, { supabase: p[0], appsScript: p[1], diferencias: dif });
-            return fn + ': ' + (a.join('\n') === b.join('\n') ? 'IGUALES ✓' : 'DISTINTOS ✗') +
-                   ' (' + a.length + ' / ' + b.length + ')' + extra +
-                   (dif.length ? '\n   ' + dif.slice(0, 6).join('\n   ') : '');
-          });
+            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).map(function (x) { return 'SB: ' + x; })
+              .concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
+            console.log(nombre, { supabase: p[0], appsScript: p[1], diferencias: dif });
+            return nombre + ': ' + (dif.length ? 'DISTINTOS ✗' : 'IGUALES ✓') + ' (' + a.length + ' / ' + b.length + ')' +
+                   (dif.length ? '\n   ' + dif.slice(0, 4).map(function (x) { return x.slice(0, 300); }).join('\n   ') : '');
+          }, function (e) { return nombre + ': ERROR ' + e.message; });
         }));
       }).then(function (lineas) {
         var box = document.createElement('pre');
-        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:12px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
+        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:11px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
         box.textContent = 'COMPARACIÓN Supabase vs Apps Script\n' + lineas.join('\n');
         document.body.appendChild(box);
       }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
