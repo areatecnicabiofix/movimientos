@@ -10,6 +10,202 @@
 <script>window.BIOFIX_CACHE = ['mecCatalogo']; // catálogo: se muestra al instante y se actualiza por detrás</script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
+<script>
+/* ===== Lecturas rápidas desde Supabase (Mecanizado) =====
+ * Estas lecturas salen de UNA consulta a Supabase (función mecanizado_datos) en vez de ir al Apps Script,
+ * con la misma lógica que el .gs. Si algo falla (o la hoja todavía no está copiada), cae solo al Apps Script.
+ * ?modo=hoja en la dirección -> siempre Apps Script (plan B).
+ * ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado abajo a la izquierda. */
+(function () {
+  var RPC = 'mecanizado_datos';
+  var cache = null, cacheT = 0;
+  function datos() {
+    var ahora = Date.now();
+    if (cache && ahora - cacheT < 3000) return cache;   // las lecturas de un mismo refresco comparten la consulta
+    cacheT = ahora;
+    cache = BIOFIX.supabase.rpc(RPC).then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      return r.data || {};
+    });
+    cache.catch(function () { cache = null; });
+    return cache;
+  }
+  function falta() { throw new Error('la copia de la hoja todavía no está en Supabase'); }
+  /* ---- ayudantes comunes (mismas reglas que Codigo.gs) ---- */
+  function N(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+  function T(v) { return String(v == null ? '' : v).trim(); }
+  // Valor "como lo devuelve getValues": los números vuelven a ser números.
+  function V(x) { if (x == null) return ''; var s = String(x).trim(); return /^-?\d+([.,]\d+)?$/.test(s) ? Number(s.replace(',', '.')) : String(x); }
+  function num(x) { var v = V(x); return typeof v === 'number' ? v : (Number(v) || 0); }
+  function pad2(n) { return ('0' + n).slice(-2); }
+  function hora(x) { var s = T(x), m = s.match(/^(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : s; }          // HH:mm
+  function fecha(x) { var s = T(x), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] : s; }
+  // Columna como mecCol_ (primer encabezado que coincide, en el orden de los nombres)
+  function colPri(h, nombres) { for (var i = 0; i < nombres.length; i++) { var j = h.indexOf(N(nombres[i])); if (j >= 0) return j; } return -1; }
+  // Columna como bndMap_ (si el encabezado se repite, gana el último)
+  function colUlt(h, nombre) { var k = N(nombre), j = -1; for (var i = 0; i < h.length; i++) if (h[i] === k) j = i; return j; }
+  function celda(v, c) { return c >= 0 ? v[c] : ''; }
+  var LET = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+  function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
+    var p = N(producto), conTeton = N(teton).indexOf('con') >= 0;
+    if (p.indexOf('hexagono interno') >= 0) return 'O';
+    if (p.indexOf('cono morse') >= 0) return 'M';
+    if (p.indexOf('compresivo multi') >= 0 || p.indexOf('cmu3') >= 0) return 'M';
+    if (p.indexOf('basal') >= 0) {
+      if (conTeton) return 'M';
+      var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
+      var dd = mm ? parseFloat(mm[1].replace(',', '.')) : null;
+      return (dd != null && dd >= 5.5) ? 'K' : 'J';
+    }
+    if (p.indexOf('monopieza') >= 0) return 'M';
+    if (p.indexOf('tapon porta implante') >= 0) return 'F';
+    return 'O';
+  }
+  function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
+  function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
+
+  /* ---- Mecanizado: mecPendientes, mecHistorialLote, prcListarEnControl (= Codigo.gs / ControlPiezasMaquina.gs) ---- */
+  function H(x) { if (!x || !Array.isArray(x.h)) falta(); return x; }
+  var TAPONES = ['tapon porta implante mp', 'tapon porta implante hi', 'tapon porta implante he', 'tapon porta implante generico'];
+  function esTapon(p) { return TAPONES.indexOf(N(p)) >= 0; }
+  function sumasHist(d) {   // = histSumasPorLote_ (columnas FIJAS de HIST_COLS)
+    var out = {};
+    (H(d.hist).filas || []).forEach(function (f) {
+      var r = f.v || [], lote = T(r[1]); if (!lote) return;
+      if (!out[lote]) out[lote] = { buenas: 0, rechazadas: 0, perdidas: 0, setup: 0, excedente: 0 };
+      out[lote].buenas += num(r[8]); out[lote].rechazadas += num(r[9]); out[lote].perdidas += num(r[10]);
+      out[lote].setup += num(r[11]); out[lote].excedente += num(r[12]);
+    });
+    return out;
+  }
+  function hhmm(s) { var m = T(s).match(/(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : ''; }   // = abrHHMM_
+  function listarPz(x, soloEnControl) {   // = pzListar_(esPrueba, ['en control'] | null)
+    var h = H(x).h, c = function (n) { return colPri(h, [n]); };
+    var C = { sub: c('Subestado'), id: c('ID Control'), prod: c('Producto'), tet: c('Teton'), med: c('Medida'), lote: c('Lote'),
+      co: c('Cantidad Original'), ok: c('Cantidad OK'), rech: c('Rechazadas'), resp: c('Responsable General'),
+      obs: c('Observaciones'), ini: c('Inicio'), fin: c('Fin'), tmin: c('Tiempo (min)'), pmin: c('Pausa (min)'),
+      pdesde: c('Pausa desde'), mot: c('Motivos Pausa'), cota: c('Cota'), val: c('Valor'), nm: c('N° Muestra'), rm: c('Responsable') };
+    var porId = {}, orden = [];
+    (x.filas || []).forEach(function (f) {
+      var v = f.v || [], gg = function (k) { return celda(v, C[k]); };
+      var subRaw = gg('sub');
+      if (soloEnControl && N(subRaw) !== 'en control') return;
+      var id = T(gg('id')); if (!id) return;
+      if (!porId[id]) {
+        var producto = V(gg('prod')), teton = V(gg('tet')), medida = V(gg('med'));
+        var tRaw = V(gg('tmin')), pd = T(gg('pdesde'));
+        porId[id] = { fila: id, producto: producto, teton: teton, medida: medida, lote: V(gg('lote')), subestado: V(subRaw),
+          cantidadOriginal: num(gg('co')), cantidad: num(gg('ok')), rechazadas: num(gg('rech')),
+          responsable: V(gg('resp')) || '', observaciones: V(gg('obs')) || '', inicio: T(gg('ini')), fin: T(gg('fin')),
+          tiempo: (tRaw === '' || tRaw == null) ? '' : Number(tRaw), pausaMin: num(gg('pmin')),
+          pausaDesde: pd, enPausa: !!pd, motivos: String(gg('mot') || ''),
+          letrasCota: letrasHasta(limiteCota(producto, teton, medida)), coas: {} };
+        orden.push(id);
+      }
+      var letra = T(gg('cota')), valor = gg('val');
+      if (letra && valor !== '' && valor != null) {
+        var numM = num(gg('nm')), respM = gg('rm') || '';
+        if (!porId[id].coas[letra]) porId[id].coas[letra] = { muestras: [] };
+        var arr = porId[id].coas[letra].muestras;
+        arr[numM > 0 ? numM - 1 : arr.length] = { v: valor, r: respM };
+      }
+    });
+    return orden.map(function (id) {
+      var s = porId[id];
+      s.tiempoTxt = (s.tiempo === '' || s.tiempo == null) ? '' : fmtMin(s.tiempo);
+      Object.keys(s.coas).forEach(function (l) { s.coas[l].muestras = s.coas[l].muestras.filter(function (m) { return m !== undefined; }); });
+      return s;
+    });
+  }
+  var SACAR = {
+    mecPendientes: function (d) {
+      var mq = H(d.maq), h = mq.h, c = function (a) { return colPri(h, a); };
+      var cSub = c(['Subestado']), cPend = c(['Pendiente']), cProd = c(['Producto']), cTet = c(['Teton', 'Tetón']),
+          cMed = c(['Medida']), cLote = c(['Lote']), cCant = c(['Cantidad']), cResp = c(['Responsable']),
+          cHi = c(['Hora Inicio', 'Hora inicio']), cCI = c(['Contador Inicial']), cCO = c(['Cantidad Objetivo']), cPP = c(['Piezas de Prueba']);
+      var sumas = sumasHist(d), vacio = { buenas: 0, rechazadas: 0, perdidas: 0, setup: 0, excedente: 0 };
+      // subestado de la PRIMERA sesión de prueba de cada lote (igual que pzListar_(true, null))
+      var subPrueba = {}, vistos = {}, ph = H(d.prueba).h, pId = colPri(ph, ['ID Control']), pLote = colPri(ph, ['Lote']), pSub = colPri(ph, ['Subestado']);
+      (d.prueba.filas || []).forEach(function (f) {
+        var v = f.v || [], id = T(celda(v, pId)); if (!id || vistos[id]) return; vistos[id] = 1;
+        var l = T(celda(v, pLote)); if (!(l in subPrueba)) subPrueba[l] = V(celda(v, pSub));
+      });
+      var out = [];
+      (mq.filas || []).forEach(function (f) {
+        var r = f.v || [];
+        if (!((cSub >= 0 && N(r[cSub]) === 'pendiente') || (cPend >= 0 && N(r[cPend]) === 'si'))) return;
+        var loteVal = cLote >= 0 ? V(r[cLote]) : '', loteKey = T(loteVal);
+        var producto = cProd >= 0 ? V(r[cProd]) : '', pp = cPP >= 0 ? num(r[cPP]) : 0, hs = sumas[loteKey] || vacio;
+        out.push({ fila: f.fila, producto: producto, teton: cTet >= 0 ? V(r[cTet]) : '', medida: cMed >= 0 ? V(r[cMed]) : '',
+          lote: loteVal, cantidad: cCant >= 0 ? num(r[cCant]) : 0, cantidadObjetivo: cCO >= 0 ? num(r[cCO]) : 0,
+          responsable: cResp >= 0 ? V(r[cResp]) : '', horaInicio: cHi >= 0 ? hhmm(r[cHi]) : '',
+          contadorInicial: cCI >= 0 ? V(r[cCI]) : '',
+          producidoAcumulado: hs.buenas, descartesAcumulado: hs.rechazadas + hs.perdidas, setupAcumulado: hs.setup,
+          excedenteAcumulado: hs.excedente, piezasPrueba: pp,
+          cantidadRealAcumulada: pp + hs.buenas + hs.rechazadas + hs.perdidas + hs.setup + hs.excedente,
+          controlPruebaOk: esTapon(producto) ? true : N(subPrueba[loteKey] || '') === 'controlada' });
+      });
+      return out;
+    },
+    mecHistorialLote: function (d, a) {
+      var lote = T(a[0]), out = [];
+      (H(d.hist).filas || []).forEach(function (f) {
+        var r = f.v || []; if (T(r[1]) !== lote) return;
+        var fe = T(r[0]), m = fe.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+        out.push({ fecha: m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] + ' ' + pad2(m[4]) + ':' + m[5] : fe,
+          tipoCierre: V(r[5]), contadorInicio: V(r[6]), contadorFin: V(r[7]), buenas: V(r[8]), rechazadas: V(r[9]),
+          perdidas: V(r[10]), setup: V(r[11]), excedente: V(r[12]), responsable: V(r[13]) });
+      });
+      return out.reverse();
+    },
+    prcListarEnControl: function (d, a) { return listarPz(a[0] ? d.prueba : d.prod, true); }
+  };
+  var COMPARAR = [['mecPendientes'], ['prcListarEnControl'], ['prcListarEnControl', [true]]];
+
+  function planB(fn) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      return datos().then(function (d) { return SACAR[fn](d, args); }).catch(function (e) {
+        console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
+        return BIOFIX.llamar(fn, args);
+      });
+    };
+  }
+  window.BIOFIX_LOCAL = {};
+  Object.keys(SACAR).forEach(function (fn) { window.BIOFIX_LOCAL[fn] = planB(fn); });
+
+  if (/[?&]comparar=1\b/.test(location.search)) {
+    window.addEventListener('load', function () {
+      function clave(x) {
+        if (x == null || typeof x !== 'object') return String(x == null ? '' : x);
+        return Object.keys(x).sort().map(function (k) {
+          var v = x[k];
+          return k + ':' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v == null ? '' : v).trim());
+        }).join('|');
+      }
+      function lista(r) { var a = Array.isArray(r) ? r : (r == null ? [] : [r]); return a.map(clave).sort(); }
+      BIOFIX.sesion.then(function () {
+        return Promise.all(COMPARAR.map(function (c) {
+          var fn = c[0], args = c[1] || [], nombre = fn + '(' + args.map(function (a) { return JSON.stringify(a); }).join(', ') + ')';
+          return Promise.all([datos().then(function (d) { return SACAR[fn](d, args); }), BIOFIX.llamar(fn, args)]).then(function (p) {
+            var a = lista(p[0]), b = lista(p[1]);
+            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).map(function (x) { return 'SB: ' + x; })
+              .concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
+            console.log(nombre, { supabase: p[0], appsScript: p[1], diferencias: dif });
+            return nombre + ': ' + (dif.length ? 'DISTINTOS ✗' : 'IGUALES ✓') + ' (' + a.length + ' / ' + b.length + ')' +
+                   (dif.length ? '\n   ' + dif.slice(0, 4).map(function (x) { return x.slice(0, 300); }).join('\n   ') : '');
+          }, function (e) { return nombre + ': ERROR ' + e.message; });
+        }));
+      }).then(function (lineas) {
+        var box = document.createElement('pre');
+        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:11px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
+        box.textContent = 'COMPARACIÓN Supabase vs Apps Script\n' + lineas.join('\n');
+        document.body.appendChild(box);
+      }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
+    });
+  }
+})();
+</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#2563eb; --warn:#b45309; --warnbg:#fef3c7; --okbg:#dcfce7; --ok:#15803d; }
   *{ box-sizing:border-box; }
