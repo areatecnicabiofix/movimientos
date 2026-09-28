@@ -9,6 +9,155 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
+<script>
+/* ===== Lecturas rápidas desde Supabase (Control de Calidad) =====
+ * ctlObtenerLotesParaControl y ctlListarEnControl se resuelven con UNA consulta a Supabase
+ * (función control_datos) en vez de ir al Apps Script. Misma lógica que Codigo.gs.
+ * Si algo falla (o un control viejo todavía no tiene ID), cae solo al Apps Script.
+ * Con ?modo=hoja en la dirección se usa siempre el Apps Script (plan B).
+ * Con ?comparar=1 compara las dos versiones y muestra el resultado (para verificar). */
+(function () {
+  var LET = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+  function norm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+  function txt(v) { return String(v == null ? '' : v).trim(); }
+  function num(v) {
+    var s = txt(v).replace(/\s/g, '');
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    s = s.replace(',', '.');
+    var n = Number(s); return isNaN(n) ? 0 : n;
+  }
+  var cache = null, cacheT = 0;
+  function datos() {
+    var ahora = Date.now();
+    if (cache && ahora - cacheT < 3000) return cache;   // las dos lecturas de cada refresco comparten la consulta
+    cacheT = ahora;
+    cache = BIOFIX.supabase.rpc('control_datos').then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      var d = r.data || {};
+      if (!Array.isArray(d.h)) throw new Error('La hoja Control de Calidad todavía no está copiada en Supabase.');
+      return d;
+    });
+    cache.catch(function () { cache = null; });
+    return cache;
+  }
+  function colDe(h, nombres) { for (var i = 0; i < nombres.length; i++) { var j = h.indexOf(norm(nombres[i])); if (j >= 0) return j; } return -1; }
+  function muestrasDe(valCota, valResp) {           // = ctlMuestrasDe_ (versión de 2 celdas)
+    var t = txt(valCota); if (!t) return [];
+    if (t.charAt(0) === '[') {
+      try {
+        var a = JSON.parse(t);
+        if (Array.isArray(a)) return a.map(function (x) {
+          if (x && typeof x === 'object') return { v: (x.v !== undefined ? x.v : ''), r: (x.r || '') };
+          return { v: (x === undefined ? '' : x), r: '' };
+        });
+      } catch (e) {}
+    }
+    var vals = t.split('|').map(function (s) { return s.trim(); });
+    var resps = txt(valResp) ? txt(valResp).split('|').map(function (s) { return s.trim(); }) : [];
+    return vals.map(function (v, i) { return { v: v, r: resps[i] || '' }; });
+  }
+  function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
+    var p = norm(producto), conTeton = norm(teton).indexOf('con') >= 0;
+    if (p.indexOf('hexagono interno') >= 0) return 'O';
+    if (p.indexOf('cono morse') >= 0) return 'M';
+    if (p.indexOf('compresivo multi') >= 0 || p.indexOf('cmu3') >= 0) return 'M';
+    if (p.indexOf('basal') >= 0) {
+      if (conTeton) return 'M';
+      var m = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
+      var d = m ? parseFloat(m[1].replace(',', '.')) : null;
+      return (d != null && d >= 5.5) ? 'K' : 'J';
+    }
+    if (p.indexOf('monopieza') >= 0) return 'M';
+    if (p.indexOf('tapon porta implante') >= 0) return 'F';
+    return 'O';
+  }
+  function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
+  function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
+
+  function listarEnControl(d) {                     // = ctlListarEnControl
+    var h = d.h, c = function (n) { return colDe(h, n); };
+    var C = {
+      sub: c(['Subestado']), id: c(['ID Control']), prod: c(['Producto']), tet: c(['Teton', 'Tetón']),
+      med: c(['Medida']), lote: c(['Lote']), co: c(['Cantidad Original', 'Cantidad Asignada']),
+      cant: c(['Cantidad ok', 'Cantidad OK', 'Cantidad']), rech: c(['Rechazadas']), resp: c(['Responsable']),
+      obs: c(['Observaciones']), ini: c(['Inicio']), fin: c(['Fin']), pmin: c(['Pausa (min)']),
+      pdesde: c(['Pausa desde']), neto: c(['Tiempo neto (min)']), mot: c(['Motivos Pausa'])
+    };
+    var out = [];
+    (d.filas || []).forEach(function (f) {
+      var v = f.v || [], g = function (i) { return i >= 0 ? v[i] : ''; };
+      if (txt(g(C.sub)).toLowerCase() !== 'en control') return;
+      var id = txt(g(C.id));
+      if (!id) throw new Error('Hay un control sin ID (de antes): se lee del Apps Script.');
+      var co = num(g(C.co)), producto = g(C.prod), teton = g(C.tet), medida = g(C.med);
+      var coas = {};
+      LET.forEach(function (l) {
+        var cC = c(['COTA_' + l, 'Cota ' + l, 'Cota_' + l]);
+        coas[l] = { muestras: cC >= 0 ? muestrasDe(v[cC], v[cC + 1]) : [] };
+      });
+      var pausaDesde = txt(g(C.pdesde)), tiempo = txt(g(C.neto));
+      out.push({
+        id: id, fila: f.fila, producto: producto, teton: teton, medida: medida, lote: g(C.lote),
+        subestado: g(C.sub), cantidadOriginal: co, cantidad: num(g(C.cant)),
+        tamMuestra: Math.max(1, Math.ceil(co * 0.15)), rechazadas: num(g(C.rech)),
+        responsable: g(C.resp) || '', observaciones: g(C.obs) || '',
+        inicio: txt(g(C.ini)), fin: txt(g(C.fin)), pausaMin: num(g(C.pmin)),
+        pausaDesde: pausaDesde, enPausa: !!pausaDesde,
+        tiempoTxt: tiempo === '' ? '' : fmtMin(num(tiempo)),
+        motivos: txt(g(C.mot)), letrasCota: letrasHasta(limiteCota(producto, teton, medida)), coas: coas
+      });
+    });
+    return out;
+  }
+  function lotesParaControl(d) {                    // = ctlObtenerLotesParaControl
+    var cLote = colDe(d.h, ['Lote']), enBorrador = {};
+    (d.filas || []).forEach(function (f) { enBorrador[txt((f.v || [])[cLote])] = true; });
+    var out = [];
+    (d.asig || []).forEach(function (a) {
+      if (enBorrador[txt(a.lote)]) return;
+      out.push({ producto: a.conversion || a.producto, productoOriginal: a.producto, teton: a.teton,
+                 medida: a.medida, lote: a.lote, disponible: Number(a.cantidad) || 0 });
+    });
+    return out;
+  }
+  function conPlanB(fn, calc) {
+    return function () {
+      return datos().then(calc).catch(function (e) {
+        console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
+        return BIOFIX.llamar(fn, []);
+      });
+    };
+  }
+  window.BIOFIX_LOCAL = {
+    ctlObtenerLotesParaControl: conPlanB('ctlObtenerLotesParaControl', lotesParaControl),
+    ctlListarEnControl:         conPlanB('ctlListarEnControl', listarEnControl)
+  };
+
+  // ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado arriba
+  if (/[?&]comparar=1\b/.test(location.search)) {
+    window.addEventListener('load', function () {
+      BIOFIX.sesion.then(function () {
+        return Promise.all([datos(), BIOFIX.llamar('ctlObtenerLotesParaControl', []), BIOFIX.llamar('ctlListarEnControl', [])]);
+      }).then(function (r) {
+        var sb1 = lotesParaControl(r[0]), sb2 = listarEnControl(r[0]);
+        function clave1(x) { return [x.producto, x.medida, x.lote, x.disponible].join('|'); }
+        function clave2(x) { return [x.id, x.lote, x.cantidadOriginal, x.cantidad, x.rechazadas, x.inicio, x.pausaMin, x.enPausa,
+          x.letrasCota.join(''), LET.map(function (l) { return (x.coas[l].muestras || []).map(function (m) { return m.v + '/' + m.r; }).join(','); }).join(';')].join('|'); }
+        var a1 = sb1.map(clave1).sort().join('\n'), b1 = (r[1] || []).map(clave1).sort().join('\n');
+        var a2 = sb2.map(clave2).sort().join('\n'), b2 = (r[2] || []).map(clave2).sort().join('\n');
+        var t = 'COMPARACIÓN Supabase vs Apps Script\n' +
+          'Lotes para control: ' + (a1 === b1 ? 'IGUALES ✓' : 'DISTINTOS ✗') + ' (' + sb1.length + ' / ' + (r[1] || []).length + ')\n' +
+          'En control: ' + (a2 === b2 ? 'IGUALES ✓' : 'DISTINTOS ✗') + ' (' + sb2.length + ' / ' + (r[2] || []).length + ')';
+        console.log(t, { supabase: [sb1, sb2], appsScript: [r[1], r[2]] });
+        var box = document.createElement('pre');
+        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:12px;max-width:90vw;white-space:pre-wrap;');
+        box.textContent = t;
+        document.body.appendChild(box);
+      }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
+    });
+  }
+})();
+</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --warn:#b45309; --ok:#15803d; }
   *{ box-sizing:border-box; font-family:Arial, sans-serif; }
@@ -128,6 +277,24 @@
   var SAVE_PENDIENTE = {};
   var LOTES_SUCIOS = {};
 
+  // Dos tablets en el mismo lote: se recuerda QUÉ muestras tocó esta tablet y se manda solo eso.
+  var DIRTY = {};        // DIRTY[id][letra][indice] = true  -> muestra cambiada acá, todavía sin guardar
+  var DIRTY_EXTRA = {};  // DIRTY_EXTRA[id] = { rech: bool, obs: bool }
+  var LOCAL_RECH = {}, LOCAL_OBS = {};
+  function marcarCelda_(f, l, idx) {
+    if (!DIRTY[f]) DIRTY[f] = {};
+    if (!DIRTY[f][l]) DIRTY[f][l] = {};
+    DIRTY[f][l][idx] = true;
+  }
+  function hayCambios_(f) {
+    var d = DIRTY[f] || {}, ex = DIRTY_EXTRA[f] || {};
+    return Object.keys(d).some(function (l) { return Object.keys(d[l]).length > 0; }) || !!ex.rech || !!ex.obs;
+  }
+  function valRech_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? (LOCAL_RECH[f] || 0) : (b.rechazadas || 0); }
+  function valObs_(f, b)  { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].obs) ? (LOCAL_OBS[f] || '') : (b.observaciones || ''); }
+  function valCant_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? Math.max(0, (Number(b.cantidadOriginal) || 0) - (Number(LOCAL_RECH[f]) || 0)) : b.cantidad; }
+  function escAttr_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
   function horaAhoraCdc(){
     var d = new Date();
     var ba = new Date(d.getTime() - 3 * 60 * 60 * 1000);
@@ -229,7 +396,7 @@
         actualizarInventarios();
       })
       .withFailureHandler(function(e){ if(b) b.disabled = false; msg(e.message, false); })
-      .ctlCrearBorrador({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp });
+      .ctlCrearBorradorSeguro({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp });
   }
 
    
@@ -240,13 +407,20 @@
       .ctlListarEnControl();
   }
 
+  // Junta lo que viene del servidor (incluye lo que cargó la OTRA tablet) con lo que esta
+  // tablet cambió y todavía no guardó: las muestras tocadas acá se respetan, el resto se
+  // toma del servidor.
   function prepararMuestras(id, letrasDeEsteLote, coas, tam) {
     if (!MUESTRAS[id]) MUESTRAS[id] = {};
     letrasDeEsteLote.forEach(function (l) {
-      var existentes = (coas && coas[l] && Array.isArray(coas[l].muestras)) ? coas[l].muestras.slice() : [];
-      var arr = MUESTRAS[id][l] || existentes;
-      while (arr.length < tam) arr.push({ v: '', r: '' });
-      if (arr.length > tam) arr = arr.slice(0, tam);
+      var srv = (coas && coas[l] && Array.isArray(coas[l].muestras)) ? coas[l].muestras : [];
+      var loc = MUESTRAS[id][l] || [];
+      var sucias = (DIRTY[id] && DIRTY[id][l]) || {};
+      var arr = [];
+      for (var i = 0; i < tam; i++) {
+        if (sucias[i]) arr.push(loc[i] || { v: '', r: '' });
+        else arr.push(srv[i] ? { v: srv[i].v, r: srv[i].r } : { v: '', r: '' });
+      }
       MUESTRAS[id][l] = arr;
     });
   }
@@ -356,15 +530,15 @@
         tiempos +
         '<div class="grid-3" style="margin-bottom:10px;">'+
           '<div><label>Con/Sin Tetón</label><input value="'+(b.teton||'—')+'" readonly style="background:#f1f5f9;"></div>'+
-          '<div><label>Cantidad (fija)</label><input type="number" id="tcant_'+f+'" value="'+b.cantidad+'" readonly style="background:#f1f5f9; font-weight:700;"></div>'+
-          '<div><label>Rechazadas</label><input type="number" min="0" id="trech_'+f+'" value="'+(b.rechazadas||0)+'" oninput="recalcCantidadFija(\''+f+'\')"><input type="hidden" id="torig_'+f+'" value="'+(b.cantidadOriginal||0)+'"></div>'+
+          '<div><label>Cantidad (fija)</label><input type="number" id="tcant_'+f+'" value="'+valCant_(f, b)+'" readonly style="background:#f1f5f9; font-weight:700;"></div>'+
+          '<div><label>Rechazadas</label><input type="number" min="0" id="trech_'+f+'" value="'+valRech_(f, b)+'" oninput="recalcCantidadFija(\''+f+'\')"><input type="hidden" id="torig_'+f+'" value="'+(b.cantidadOriginal||0)+'"></div>'+
         '</div>'+
         (cantidadVacia ? '' : '<div class="hint" style="margin-bottom:6px;">Muestra a controlar: <b>'+tam+'</b> por cota (15% de '+b.cantidadOriginal+', redondeado para arriba).</div>')+
         '<table class="coas-table">'+
           '<thead><tr><th style="width:40px;">Cota</th><th>Muestra (valor)</th></tr></thead>'+
           '<tbody>'+filasCoa+'</tbody>'+
         '</table>'+
-        '<div style="margin-top:10px;"><label>Observaciones</label><input id="tobs_'+f+'" value="'+(b.observaciones||'')+'" oninput="marcarSucio(\''+f+'\')"></div>'+
+        '<div style="margin-top:10px;"><label>Observaciones</label><input id="tobs_'+f+'" value="'+escAttr_(valObs_(f, b))+'" oninput="marcarObs(\''+f+'\')"></div>'+
         '<div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">'+
           '<div style="display:flex; gap:8px; align-items:center;">'+
             '<button class="btn" style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminarBorrador(\''+f+'\')"'+(cerrando?' disabled':'')+'>🗑 Eliminar</button>'+
@@ -392,6 +566,16 @@
     var rech = Number(document.getElementById('trech_'+f).value) || 0;
     var elCant = document.getElementById('tcant_'+f);
     if (elCant) elCant.value = Math.max(0, orig - rech);
+    LOCAL_RECH[f] = rech;
+    if (!DIRTY_EXTRA[f]) DIRTY_EXTRA[f] = {};
+    DIRTY_EXTRA[f].rech = true;
+    marcarSucio(f);
+  }
+  function marcarObs(f) {
+    var el = document.getElementById('tobs_'+f);
+    LOCAL_OBS[f] = el ? el.value : '';
+    if (!DIRTY_EXTRA[f]) DIRTY_EXTRA[f] = {};
+    DIRTY_EXTRA[f].obs = true;
     marcarSucio(f);
   }
 
@@ -427,9 +611,12 @@
     var huboCambios = false;
     if (MUESTRAS[f]) {
       Object.keys(MUESTRAS[f]).forEach(function(l){
-        MUESTRAS[f][l].forEach(function(m){
-          if (m && m.v !== '' && m.v !== null && m.v !== undefined && m.r !== RESP_LOTE[f]) {
+        // Solo completa el responsable de muestras que no tienen ninguno
+        // (no pisa el de las muestras que cargó otra persona / la otra tablet).
+        MUESTRAS[f][l].forEach(function(m, i){
+          if (m && m.v !== '' && m.v !== null && m.v !== undefined && !String(m.r || '').trim()) {
             m.r = RESP_LOTE[f];
+            marcarCelda_(f, l, i);
             huboCambios = true;
           }
         });
@@ -507,6 +694,7 @@
       v: inp.value === '' ? '' : inp.value.trim(),
       r: RESP_LOTE[f]
     };
+    marcarCelda_(f, l, idx);
     actualizarContadorCota_(f, l);
     marcarSucio(f);
   }
@@ -514,11 +702,15 @@
    
   function encolarGuardado(f) {
     if (SAVE_EN_CURSO[f]) { SAVE_PENDIENTE[f] = true; return; }
+    var d = datosCard(f);
+    if (!d.cambios.length && !('rechazadas' in d) && !('observaciones' in d)) {
+      limpiarSucio(f); msg('No hay cambios para guardar.', true); return;
+    }
     SAVE_EN_CURSO[f] = true;
     google.script.run
       .withSuccessHandler(function (r) {
         SAVE_EN_CURSO[f] = false;
-        limpiarSucio(f);
+        limpiarEnviados_(f, d);
         if (r && r.msg) msg(r.msg, true);
         var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
         if (pend) encolarGuardado(f);
@@ -529,22 +721,49 @@
         var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
         if (pend) encolarGuardado(f);
       })
-      .ctlActualizar(datosCard(f));
+      .ctlActualizarCambios(d);
   }
 
+  // Arma lo que se manda al servidor: SOLO las muestras que cambió esta tablet
+  // (y rechazadas / observaciones solo si se tocaron acá).
   function datosCard(f) {
-    var coas = {};
-    LETRAS_COA.forEach(function(l){
-      var muestras = (MUESTRAS[f] && MUESTRAS[f][l]) ? MUESTRAS[f][l] : undefined;
-      if (muestras === undefined) return;
-      coas[l] = { muestras: muestras };
+    var cambios = [];
+    var dl = DIRTY[f] || {};
+    Object.keys(dl).forEach(function (l) {
+      Object.keys(dl[l]).forEach(function (i) {
+        var m = (MUESTRAS[f] && MUESTRAS[f][l] && MUESTRAS[f][l][i]) || { v: '', r: '' };
+        cambios.push({ l: l, i: Number(i), v: (m.v == null ? '' : String(m.v)), r: String(m.r || '') });
+      });
     });
-    return {
-      id: f, coas: coas,
-      rechazadas: document.getElementById('trech_'+f) ? Number(document.getElementById('trech_'+f).value)||0 : 0,
-      observaciones: document.getElementById('tobs_'+f) ? document.getElementById('tobs_'+f).value : ''
-    };
+    var d = { id: f, cambios: cambios };
+    var ex = DIRTY_EXTRA[f] || {};
+    if (ex.rech) {
+      var er = document.getElementById('trech_'+f);
+      d.rechazadas = Number(er ? er.value : LOCAL_RECH[f]) || 0;
+    }
+    if (ex.obs) {
+      var eo = document.getElementById('tobs_'+f);
+      d.observaciones = eo ? eo.value : (LOCAL_OBS[f] || '');
+    }
+    return d;
   }
+  // Después de guardar bien: saca de "pendientes" lo que se mandó (si no se volvió a tocar mientras tanto).
+  function limpiarEnviados_(f, d) {
+    (d.cambios || []).forEach(function (c) {
+      var m = MUESTRAS[f] && MUESTRAS[f][c.l] && MUESTRAS[f][c.l][c.i];
+      var v = m ? (m.v == null ? '' : String(m.v)) : '', r = m ? String(m.r || '') : '';
+      if (v === c.v && r === c.r && DIRTY[f] && DIRTY[f][c.l]) {
+        delete DIRTY[f][c.l][c.i];
+        if (!Object.keys(DIRTY[f][c.l]).length) delete DIRTY[f][c.l];
+      }
+    });
+    if (DIRTY_EXTRA[f]) {
+      if ('rechazadas' in d && (Number(LOCAL_RECH[f]) || 0) === d.rechazadas) DIRTY_EXTRA[f].rech = false;
+      if ('observaciones' in d && (LOCAL_OBS[f] || '') === d.observaciones) DIRTY_EXTRA[f].obs = false;
+    }
+    if (!hayCambios_(f)) limpiarSucio(f);
+  }
+  function olvidarLote_(f) { delete DIRTY[f]; delete DIRTY_EXTRA[f]; delete LOCAL_RECH[f]; delete LOCAL_OBS[f]; }
   function actualizarEnControl(f) {
     if (CERRANDO[f]) return;
     encolarGuardado(f);
@@ -583,6 +802,7 @@
       google.script.run
         .withSuccessHandler(function(r){
           msg(r.msg, true);
+          olvidarLote_(f);
           delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
           actualizarInventarios();
         })
@@ -592,14 +812,14 @@
           if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
           refrescarEnControl();
         })
-        .ctlCerrar(d);
+        .ctlCerrarCambios(d);
     });
   }
   function eliminarBorrador(f) {
     if (CERRANDO[f]) return;
     if (!confirm('¿Eliminar este control? El lote vuelve a la lista de espera.')) return;
     google.script.run
-      .withSuccessHandler(function(r){ msg(r.msg, true); delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; actualizarInventarios(); })
+      .withSuccessHandler(function(r){ msg(r.msg, true); olvidarLote_(f); delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; actualizarInventarios(); })
       .withFailureHandler(function(e){ msg(e.message, false); })
       .ctlEliminarBorrador({ id: f });
   }
