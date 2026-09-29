@@ -751,12 +751,25 @@
     wrap.style.display = (res === 'Re-blastinar') ? 'block' : 'none';
   }
   function cmsg(t, ok){ var m=document.getElementById('cmsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
+  // Un solo toque por botón: mientras el servidor no responde, un segundo toque no hace nada
+  // (así no aparece "Ya está en pausa" / "No está en pausa" por tocar dos veces).
+  var BF_OCUPADO = {};
+  function ocupado_(k){ if (BF_OCUPADO[k]) return true; BF_OCUPADO[k] = setTimeout(function(){ delete BF_OCUPADO[k]; }, 60000); return false; }
+  function libre_(k){ clearTimeout(BF_OCUPADO[k]); delete BF_OCUPADO[k]; }
+  function errPausa_(e, fmsg){
+    fmsg(e.message, false);
+    if (/pausa/i.test(e.message)) cargarBandejaActual();   // la pantalla estaba desactualizada: se vuelve a leer
+  }
   function pausarControl(){
+    if (ocupado_('ctl')) return;
     var mot = document.getElementById('ctrlMotivo') ? document.getElementById('ctrlMotivo').value : '';
-    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
+    cmsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
   }
   function reanudarControl(){
-    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndReanudarControl({ hora:horaAhora() });
+    if (ocupado_('ctl')) return;
+    cmsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndReanudarControl({ hora:horaAhora() });
   }
   function finalizarControlLote(){
     var res=document.getElementById('clRes')?document.getElementById('clRes').value:'';
@@ -771,8 +784,9 @@
       responsable:document.getElementById('clResp')?document.getElementById('clResp').value:'',
       observaciones:document.getElementById('clObs')?document.getElementById('clObs').value:'',
       hora: horaAhora() };
+    if (ocupado_('ctl')) return;
     cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ cmsg(e.message,false); }).bndFinalizarControlLote(p);
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndFinalizarControlLote(p);
   }
 
 
@@ -793,13 +807,17 @@
     
     var observacionFinal = etiquetaFase + (obs ? ' - ' + obs : '');
 
+    if (ocupado_('band')) return;
+    imsg('Guardando…', true);
     google.script.run
         .withSuccessHandler(function(r) { 
-            cmsg(r.msg, true); 
+            libre_('band');
+            imsg((r && r.msg) || 'Guardado.', true); 
             cargarBandejaActual(); 
         })
         .withFailureHandler(function(e) { 
-            cmsg(e.message, false); 
+            libre_('band');
+            errPausa_(e, imsg); 
         })
         .bndMarcar({ 
             paso: paso, 
@@ -808,8 +826,17 @@
             resp: resp 
         });
 }
-  function pausar(){ var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:''; google.script.run.withSuccessHandler(renderEnCurso).withFailureHandler(function(e){ imsg(e.message,false); }).bndPausar({ motivo:mot, hora:horaAhora() }); }
-  function reanudar(){ google.script.run.withSuccessHandler(renderEnCurso).withFailureHandler(function(e){ imsg(e.message,false); }).bndReanudar({ hora:horaAhora() }); }
+  function pausar(){
+    if (ocupado_('band')) return;
+    var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:'';
+    imsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ libre_('band'); imsg('Bandeja en pausa.', true); renderEnCurso(r); }).withFailureHandler(function(e){ libre_('band'); errPausa_(e, imsg); }).bndPausar({ motivo:mot, hora:horaAhora() });
+  }
+  function reanudar(){
+    if (ocupado_('band')) return;
+    imsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ libre_('band'); imsg('Bandeja reanudada.', true); renderEnCurso(r); }).withFailureHandler(function(e){ libre_('band'); errPausa_(e, imsg); }).bndReanudar({ hora:horaAhora() });
+  }
 
 
   function cargarPanel(){
