@@ -285,7 +285,7 @@ async function depResumen() {
     traerTodo('asignaciones_espejo', 'producto,teton,medida,lote,sector,cantidad',
       function (q) { return q.order('fila_sheet'); }),
     // NUEVO: para Blasting, qué ya está en "Para Blasting" y qué falta mandar (ver v_blasting_envio)
-    traerTodo('v_blasting_envio', 'producto,teton,medida,lote,para_blast,ya_grueso,legado,va',
+    traerTodo('v_blasting_envio', 'producto,teton,medida,lote,para_blast,ya_grueso,legado,va,asignado,usado',
       function (q) { return q.order('primer_ord'); })
   ]);
   var filas = res[0], asig = res[1];
@@ -321,9 +321,12 @@ async function depResumen() {
           // de un lote de 100 ya se habían mandado 50 y se blastinaron, las otras 50 figuraban como
           // "ya enviadas". Ahora: enviado = lo que está en "Para Blasting"; falta mandar = lo que
           // terminó Lavado Grueso, menos asignaciones viejas que nunca pasaron por el Ledger.
+          // Enviado y pendiente en Blasting = lo que mandó el Depósito menos lo que Blasting ya tomó.
+          // Falta mandar = lo que está para Blasting menos eso (así un lote que quedó en "Para Blasting"
+          // sin haberse mandado desde el Depósito, se puede mandar).
           var e = envio[clave(it.producto, it.teton, it.medida, it.lote)] || {};
-          var ya = e.va ? Math.max(0, Number(e.ya_grueso) || 0) : 0;
-          var falta = Math.min(disp, Math.max(0, ya - (Number(e.legado) || 0)));
+          var pendienteBlasting = Math.max(0, (Number(e.asignado) || 0) - (Number(e.usado) || 0));
+          var falta = Math.max(0, disp - pendienteBlasting);
           it.cantidadTotal = disp;
           it.restante = falta;
           it.asignadoCant = Math.max(0, disp - falta);
