@@ -34,9 +34,12 @@
   function sectorDe(session) {
     return String((session && session.user && session.user.email) || '').split('@')[0].toLowerCase();
   }
+  // Además del sector dueño, una página puede dejar entrar a otros puestos:
+  // window.BIOFIX_PERMITIDOS = ['lavados']  (ej. Depósito — Lavado Final lo usa también Lavados)
+  var PERMITIDOS = (window.BIOFIX_PERMITIDOS || []).map(function (x) { return String(x).toLowerCase(); });
   function permitido(session) {
     var u = sectorDe(session);
-    return !PANTALLA || u === PANTALLA || ADMINS.indexOf(u) >= 0;
+    return !PANTALLA || u === PANTALLA || ADMINS.indexOf(u) >= 0 || PERMITIDOS.indexOf(u) >= 0;
   }
   function salir() { return sb.auth.signOut().then(function () { location.reload(); }); }
 
@@ -334,9 +337,10 @@
   };
 
   /* ---------------- avisos del sector (lote parado, saldo negativo, control abierto…) ---------------- */
+  var AVISOS_SECTOR = PANTALLA;
   function avisosCargar() {
     if (!PANTALLA || PANTALLA === 'supervision') return;
-    sb.rpc('alertas_sector', { p_sector: PANTALLA }).then(function (r) {
+    sb.rpc('alertas_sector', { p_sector: AVISOS_SECTOR }).then(function (r) {
       if (r.error) return;
       avisosPintar(r.data || []);
     }, function () {});
@@ -362,7 +366,11 @@
         lista.length + ' aviso(s)' + (AVISOS_ABIERTO ? ' ▾' : ' ▸') + '</a>';
     document.getElementById('bfAvisosBtn').onclick = function (e) { e.preventDefault(); AVISOS_ABIERTO = !AVISOS_ABIERTO; avisosPintar(lista); };
   }
-  sesionLista.then(function () { avisosCargar(); setInterval(avisosCargar, 5 * 60000); });
+  sesionLista.then(function (session) {
+    var u = sectorDe(session);   // si entra otro puesto permitido (ej. lavados en depositolf), ve SUS avisos
+    if (u && u !== PANTALLA && ADMINS.indexOf(u) < 0) AVISOS_SECTOR = u;
+    avisosCargar(); setInterval(avisosCargar, 5 * 60000);
+  });
 
   window.BIOFIX = {
     supabase: sb,
