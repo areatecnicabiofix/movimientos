@@ -98,7 +98,7 @@
       <label class="mut"><input type="checkbox" id="wIni" onchange="renderWip()"> Incluir la carga inicial (30/06)</label>
       <button class="btn gris" onclick="cargarWip()">↻ Actualizar</button>
     </div>
-    <p class="mut">Mismas cantidades que el Depósito. "Días" = desde que entró a esa etapa la parte más vieja de lo que todavía queda ahí. Tocá una etapa para filtrar y un lote para ver su historia.</p>
+    <p class="mut">Mismas cantidades que el Depósito. En Máquina: lo que falta producir de cada lote que está en la máquina, y "Días" desde que arrancó. En el resto, "Días" = desde que entró a esa etapa la parte más vieja de lo que todavía queda ahí. Tocá una etapa para filtrar y un lote para ver su historia.</p>
     <div class="etapas" id="wEtapas"></div>
     <div class="card"><div class="tabla-wrap" id="wLista"><p class="mut">Cargando…</p></div></div>
   </div>
@@ -265,7 +265,7 @@ function renderWip(){
   $('wEtapas').innerHTML = orden.map(function(k){
     var e = etapas[k], t = e.pz || 1;
     return '<div class="etapa'+(WETAPA===k?' sel':'')+'" onclick="filtrarEtapa(\''+esc(k)+'\')"><div class="l">'+esc(k)+'</div>' +
-      '<div class="v">'+num(e.pz,0)+' <span class="mut" style="font-size:12px;font-weight:400">pz</span></div>' +
+      '<div class="v">'+num(e.pz,0)+' <span class="mut" style="font-size:12px;font-weight:400">'+(e.o===0?'pz por producir':'pz')+'</span></div>' +
       '<div class="s">'+e.lotes+' lote(s) · el más viejo '+e.max+' d</div>' +
       '<div class="barra" title="Verde ≤7 d · amarillo 8–14 d · rojo >14 d"><i style="width:'+(e.v*100/t)+'%;background:#22c55e"></i><i style="width:'+(e.a*100/t)+'%;background:#f59e0b"></i><i style="width:'+(e.r*100/t)+'%;background:#ef4444"></i></div></div>';
   }).join('') || '<p class="mut">Nada en proceso con ese filtro.</p>';
@@ -276,7 +276,7 @@ function renderWip(){
     '<table><thead><tr><th>Días</th><th>Etapa</th><th>Lote</th><th>Producto</th><th>Medida</th><th>Tetón</th><th>Cant.</th><th>Entró</th><th>Último mov. del lote</th></tr></thead><tbody>' +
     lista.map(function(w){
       return '<tr class="click" onclick="irLote(\''+esc(w.lote)+'\')"><td><span class="pill '+claseDias(Number(w.dias)||0)+'">'+(w.dias==null?'?':w.dias)+' d</span></td>' +
-        '<td>'+esc(w.etapa)+'</td><td><b>'+esc(w.lote)+'</b>'+(w.inicial?' <span class="pill baja">carga inicial</span>':'')+'</td><td>'+esc(w.producto)+'</td><td>'+esc(w.medida)+'</td><td>'+esc(w.teton)+'</td>' +
+        '<td>'+esc(w.etapa)+'</td><td><b>'+esc(w.lote)+'</b>'+(w.inicial?' <span class="pill baja">carga inicial</span>':'')+(w.detalle?'<div class="mut">'+esc(w.detalle)+'</div>':'')+'</td><td>'+esc(w.producto)+'</td><td>'+esc(w.medida)+'</td><td>'+esc(w.teton)+'</td>' +
         '<td class="r">'+num(w.cantidad,0)+'</td><td>'+fecha(w.desde)+'</td><td>'+fecha(w.ultimo_mov)+'</td></tr>';
     }).join('') + '</tbody></table>';
 }
