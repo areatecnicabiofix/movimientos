@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 32px; color: #333; font-size: 17px; }
+      .container { max-width: 1180px; margin: auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+      h2 { color: #1a73e8; text-align: center; margin-bottom: 28px; font-size: 30px; }
+      fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 22px; margin-bottom: 26px; }
+      legend { font-weight: bold; color: #1a73e8; padding: 0 8px; font-size: 18px; }
+      label { font-weight: bold; display: block; margin-top: 16px; font-size: 16px; }
+      input, select, textarea { width: 100%; padding: 14px; margin-top: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 17px; font-family: inherit; }
+
+      .tabs { display: flex; border-bottom: 2px solid #e5e7eb; margin-bottom: 28px; }
+      .tab-btn { flex: 1; padding: 18px; text-align: center; font-weight: bold; font-size: 18px; cursor: pointer; background: #f4f6f9; color: #64748b; border: none; border-bottom: 3px solid transparent; }
+      .tab-btn.activo { color: #1a73e8; border-bottom-color: #1a73e8; background: white; }
+      .tab-panel { display: none; }
+      .tab-panel.activo { display: block; }
+
+      button.enviar { background: #1a73e8; color: white; border: none; padding: 18px; width: 100%; margin-top: 14px; border-radius: 6px; font-weight: bold; font-size: 19px; cursor: pointer; }
+      button.enviar:hover { background: #1557b0; }
+      button.enviar:disabled { background: #9ab8e8; cursor: not-allowed; }
+      .mensaje { margin-top: 18px; text-align: center; font-weight: bold; font-size: 17px; }
+
+      .rotos-tabla { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+      .rotos-tabla th { background: #f1f5f9; text-align: left; padding: 8px 10px; border: 1px solid #e2e8f0; }
+      .rotos-tabla td { padding: 6px 10px; border: 1px solid #e2e8f0; vertical-align: middle; }
+      .rotos-tabla input { width: 110px; padding: 8px; margin: 0; font-size: 16px; }
+      .rotos-total { margin-top: 10px; font-weight: bold; font-size: 16px; }
+      .rotos-total .desc { color: #b45309; }
+
+      /* Etiquetas: una fila por etiqueta (medida + REF) */
+      .etq-fila { display: flex; gap: 16px; align-items: flex-end; margin-top: 8px; }
+      .etq-fila > div { flex: 1; }
+      .etq-fila > div.etq-ref { flex: 0 0 260px; }
+      .etq-titulo { margin-top: 22px; font-size: 16px; font-weight: bold; color: #1a73e8; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+      @media (max-width: 700px) { .etq-fila { flex-direction: column; align-items: stretch; } .etq-fila > div.etq-ref { flex: 1; } }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Gestión de Anexos y Registros</h2>
+
+      <!-- Pestañas de Navegación -->
+      <div class="tabs">
+        <button type="button" class="tab-btn activo" id="tabBtnAnexo" onclick="mostrarPestana('anexo')">Anexo</button>
+        <button type="button" class="tab-btn" id="tabBtnOrden" onclick="mostrarPestana('orden')">Orden de Fabricación</button>
+        <button type="button" class="tab-btn" id="tabBtnHistorico" onclick="mostrarPestana('historico')">Registro Histórico</button>
+      </div>
+
+      <!-- ============ PESTAÑA 1: ANEXO ============ -->
+      <div class="tab-panel activo" id="panelAnexo">
+        <fieldset>
+          <legend>Lote (con Envasado Secundario ya guardado)</legend>
+          <label>Lote:</label>
+          <select id="loteAnexo" onchange="mostrarInfoLote()">
+            <option value="">Cargando lotes...</option>
+          </select>
+          <div id="infoLoteAnexo" style="margin-top:6px; font-size:15px; color:#555;"></div>
+        </fieldset>
+
+        <fieldset id="fsRotos" style="display:none;">
+          <legend>Implantes rotos / no conformes (opcional)</legend>
+          <p style="font-size:14px; color:#666; margin-top:0;">Si se rompió algún implante al armar el Anexo, cargá cuántos por medida. Se descuentan del TOTAL LIBERADO (y de todo lo que viene después: Orden de Fabricación, Registro Histórico y etiquetas) y queda anotado solo como observación en el Anexo.</p>
+          <div id="listaRotos"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Datos a completar</legend>
+          <label>OF N°:</label>
+          <input type="text" id="ofNumeroAnexo" placeholder="Ej: 1234">
+          <label>Observaciones (opcional):</label>
+          <textarea id="observacionesAnexo" rows="3" placeholder="Ej: .."></textarea>
+          <p style="font-size:14px; color:#666; margin-top:6px;">Si cargás algo acá, va a quedar como una fila de texto debajo de "TOTAL LIBERADO" en la tabla del Anexo, con el formato "Observación: ...".</p>
+        </fieldset>
+
+        <button type="button" class="enviar" id="btnEnviarAnexo" onclick="finalizarAnexo()">Generar Anexo</button>
+        <div class="mensaje" id="mensajeAnexo"></div>
+      </div>
+
+      <!-- ============ PESTAÑA 2: REGISTRO HISTÓRICO ============ -->
+      <div class="tab-panel" id="panelHistorico">
+        <fieldset>
+          <legend>Lote (con Anexo ya generado)</legend>
+          <label>Lote:</label>
+          <select id="loteRegistro" onchange="mostrarInfoLoteHistorico(); cargarMedidasDelLote(); cargarContramuestrasRegistro(); cargarNoConformes();">
+            <option value="">Cargando lotes...</option>
+          </select>
+          <div id="infoLoteRegistro" style="margin-top:6px; font-size:15px; color:#555;"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Contramuestras</legend>
+          <label>Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+          <select id="contramuestrasRegistro">
+            <option value="">Seleccione primero un lote...</option>
+          </select>
+        </fieldset>
+
+        <fieldset>
+          <legend>Esterilización</legend>
+          <label>Operador (envasado):</label>
+          <input type="text" id="operadorEnvasado" value="Miguel Gómez">
+          <label>Operador (esterilización):</label>
+          <input type="text" id="operadorEsterilizacion" value="Miguel Gómez">
+          <label>Fecha de envío a esterilización:</label>
+          <input type="text" id="fechaEsterilizacion" placeholder="dd/mm/aaaa">
+          <label>Cantidad de bultos:</label>
+          <input type="text" id="cantidadBultos" placeholder="Ej: 2 (cajas)">
+          <label>N° de Remito:</label>
+          <input type="text" id="remito" placeholder="Ej: 0000-0107">
+          <label>Cantidad de no conformes:</label>
+          <input type="text" id="cantidadNoConformes" value="0">
+          <p id="hintNoConformes" style="font-size:14px; color:#666; margin-top:6px;"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Control de esterilización (CNEA)</legend>
+          <label>Solicitud N°:</label>
+          <input type="text" id="solicitudN" placeholder="Ej: 225/26">
+          <label>Lote de Irradiación:</label>
+          <input type="text" id="loteIrradiacion" placeholder="Ej: 230/22">
+          <label>Dosis obtenida (KGY):</label>
+          <input type="text" id="dosisKgy" placeholder="Ej: 16,5 – 19,8">
+        </fieldset>
+
+        <fieldset>
+          <legend>Rotulado</legend>
+          <label>N° de OF de rotulado:</label>
+          <input type="text" id="ofRotulado" readonly style="background:#f1f5f9;">
+          <p style="font-size:14px; color:#666; margin-top:6px;">Se asigna solo, en orden correlativo, en el momento de generar el Registro Histórico (puede diferir del número que ves acá si mientras tanto se generó otro lote antes que este).</p>
+          <label>Fecha de elaboración:</label>
+          <input type="text" id="fechaElaboracion" placeholder="Ej: 07/2026">
+          <label>Fecha de vencimiento:</label>
+          <input type="text" id="fechaVencimiento" placeholder="Ej: 07/2030">
+          <label>Fecha de etiquetado:</label>
+          <input type="text" id="fechaEtiquetado" placeholder="dd/mm/aaaa">
+          <label>Operadores responsables (etiquetado):</label>
+          <input type="text" id="operadoresEtiquetado" placeholder="Ej: Marita Montaño">
+        </fieldset>
+
+        <fieldset>
+          <legend>Datos para las etiquetas (Blíster / Packaging / Paciente)</legend>
+          <p style="font-size:14px; color:#666; margin-top:0;">Elegí la medida (Ø) de cada etiqueta. Packaging y Paciente quedan "Igual que Blíster" si no elegís otra.</p>
+
+          <div class="etq-titulo">Etiqueta Blíster</div>
+          <div class="etq-fila">
+            <div>
+              <label for="medidaProducto">Medida (Ø):</label>
+              <select id="medidaProducto" onchange="actualizarRefSegunMedida()">
+                <option value="">-- Elegí un lote primero --</option>
+              </select>
+            </div>
+            <div class="etq-ref">
+              <label for="refBlister">REF:</label>
+              <input type="text" id="refBlister" readonly style="background:#f1f5f9;">
+            </div>
+          </div>
+
+          <div class="etq-titulo">Etiqueta Packaging</div>
+          <div class="etq-fila">
+            <div>
+              <label for="medidaPackaging">Medida (Ø):</label>
+              <select id="medidaPackaging" onchange="actualizarRefSegunMedida()">
+                <option value="">-- Elegí un lote primero --</option>
+              </select>
+            </div>
+            <div class="etq-ref">
+              <label for="refPackaging">REF:</label>
+              <input type="text" id="refPackaging" readonly style="background:#f1f5f9;">
+            </div>
+          </div>
+
+          <div class="etq-titulo">Etiqueta Paciente</div>
+          <div class="etq-fila">
+            <div>
+              <label for="medidaPaciente">Medida (Ø):</label>
+              <select id="medidaPaciente" onchange="actualizarRefSegunMedida()">
+                <option value="">-- Elegí un lote primero --</option>
+              </select>
+            </div>
+            <div class="etq-ref">
+              <label for="refPaciente">REF:</label>
+              <input type="text" id="refPaciente" readonly style="background:#f1f5f9;">
+            </div>
+          </div>
+
+          <p style="font-size:15px; color:#666; margin-top:14px;">
+            Fecha de elaboración y vencimiento se toman de la sección "Rotulado" de arriba.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Documentos a compilar en el PDF final</legend>
+          <label>Hoja de rotulado escaneada y otros documentos (podés elegir varios):</label>
+          <input type="file" id="archivosAdicionales" multiple accept="application/pdf,image/*">
+        </fieldset>
+
+        <button type="button" class="enviar" id="btnEnviarRegistro" onclick="finalizarRegistro()">Generar Registro Histórico</button>
+        <div class="mensaje" id="mensajeHistorico"></div>
+      </div>
+
+      <!-- ============ PESTAÑA 3: ORDEN DE FABRICACIÓN ============ -->
+      <div class="tab-panel" id="panelOrden">
+        <fieldset>
+          <legend>Orden de Fabricación</legend>
+          <label>Sistema:</label>
+          <select id="ofSistema"><option value="">Cargando...</option></select>
+          <label>Pieza:</label>
+          <select id="ofPieza" disabled><option value="">Elegí primero un sistema</option></select>
+          <label>Lote (Anexo):</label>
+          <select id="ofLote" disabled><option value="">Elegí primero un sistema</option></select>
+          <label>N° de Orden de Fabricación / liberación:</label>
+          <input type="text" id="ofNumeroOrden" placeholder="Ej: 1834">
+        </fieldset>
+        <button type="button" class="enviar" id="btnEnviarOrden" onclick="guardarOrdenFabricacion()">Guardar Orden de Fabricación</button>
+        <div class="mensaje" id="mensajeOrden"></div>
+      </div>
+    </div>
+
+    <script>
+      function mostrarPestana(nombre) {
+        document.getElementById('panelAnexo').classList.toggle('activo', nombre === 'anexo');
+        document.getElementById('panelHistorico').classList.toggle('activo', nombre === 'historico');
+        document.getElementById('panelOrden').classList.toggle('activo', nombre === 'orden');
+
+        document.getElementById('tabBtnAnexo').classList.toggle('activo', nombre === 'anexo');
+        document.getElementById('tabBtnHistorico').classList.toggle('activo', nombre === 'historico');
+        document.getElementById('tabBtnOrden').classList.toggle('activo', nombre === 'orden');
+      }
+
+      /* ================= REGISTRO HISTÓRICO ================= */
+      var lotesConAnexo = [];
+      var REFS_POR_MEDIDA = {};
+
+      function cargarLotesConAnexo() {
+        google.script.run
+          .withSuccessHandler(function (lista) {
+            lotesConAnexo = lista;
+            var select = document.getElementById('loteRegistro');
+            select.innerHTML = '';
+            if (!lista || lista.length === 0) {
+              select.innerHTML = '<option value="">No hay lotes disponibles</option>';
+              return;
+            }
+            select.innerHTML = '<option value="">Seleccione un lote...</option>';
+            lista.forEach(function (item) {
+              var option = document.createElement('option');
+              option.value = item.clave;
+              option.text = 'Lote ' + item.sistema + '-' + item.lote + ' (OF ' + item.of + ', ' + item.fecha + ')';
+              select.appendChild(option);
+            });
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('loteRegistro').innerHTML = '<option value="">Error al cargar lotes</option>';
+            document.getElementById('mensajeHistorico').style.color = "red";
+            document.getElementById('mensajeHistorico').innerText = "Error: " + err.message;
+          })
+          .obtenerLotesConAnexoSinRegistroHistorico();
+      }
+
+      function cargarProximoRotulado() {
+        var campo = document.getElementById('ofRotulado');
+        if (!campo) return;
+        google.script.run
+          .withSuccessHandler(function (numero) { campo.value = numero; })
+          .withFailureHandler(function (err) {
+            console.error('No se pudo obtener el próximo N° de rotulado: ' + (err && err.message ? err.message : err));
+          })
+          .obtenerProximoRotulado();
+      }
+
+      function mostrarInfoLoteHistorico() {
+        var clave = document.getElementById('loteRegistro').value;
+        var info = document.getElementById('infoLoteRegistro');
+        if (!clave) { info.innerText = ''; return; }
+        var item = lotesConAnexo.find(function (l) { return String(l.clave) === String(clave); });
+        info.innerText = item ? ('OF: ' + item.of + ' | Fecha del Anexo: ' + item.fecha) : '';
+      }
+
+      // Completa "Cantidad de no conformes" con los rotos cargados en el Anexo.
+      function cargarNoConformes() {
+        var clave = document.getElementById('loteRegistro').value;
+        var campo = document.getElementById('cantidadNoConformes');
+        var hint = document.getElementById('hintNoConformes');
+        hint.innerText = '';
+        if (!clave) { campo.value = '0'; return; }
+        google.script.run
+          .withSuccessHandler(function (n) {
+            if (document.getElementById('loteRegistro').value !== clave) return; // se cambió de lote mientras tanto
+            campo.value = String(Number(n) || 0);
+            hint.innerText = (Number(n) > 0) ? ('Tomado del Anexo: ' + n + ' no conforme(s) descontado(s) del total liberado.') : '';
+          })
+          .withFailureHandler(function () { campo.value = '0'; })
+          .obtenerNoConformesAnexo(clave);
+      }
+
+      /* ---------- Etiquetas: una medida por etiqueta ---------- */
+      // [idSelect, idRef, textoPrimeraOpcion]
+      var ETIQUETAS = [
+        ['medidaProducto',  'refBlister',   '-- Seleccioná una medida --'],
+        ['medidaPackaging', 'refPackaging', '— Igual que Blíster —'],
+        ['medidaPaciente',  'refPaciente',  '— Igual que Blíster —']
+      ];
+
+      function llenarSelectsEtiquetas_(medidas, textoSinDatos) {
+        ETIQUETAS.forEach(function (e) {
+          var sel = document.getElementById(e[0]);
+          if (textoSinDatos) { sel.innerHTML = '<option value="">' + textoSinDatos + '</option>'; return; }
+          sel.innerHTML = '<option value="">' + e[2] + '</option>' +
+            medidas.map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join('');
+        });
+      }
+
+      function cargarMedidasDelLote() {
+        var clave = document.getElementById('loteRegistro').value;
+        REFS_POR_MEDIDA = {};
+        ETIQUETAS.forEach(function (e) { document.getElementById(e[1]).value = ''; });
+        if (!clave) { llenarSelectsEtiquetas_([], '-- Elegí un lote primero --'); return; }
+        llenarSelectsEtiquetas_([], 'Cargando medidas...');
+        google.script.run
+          .withSuccessHandler(function (datos) {
+            if (document.getElementById('loteRegistro').value !== clave) return; // se cambió de lote mientras tanto
+            var medidas = (datos && datos.medidas) ? datos.medidas : [];
+            REFS_POR_MEDIDA = (datos && datos.refsPorMedida) ? datos.refsPorMedida : {};
+            if (medidas.length) llenarSelectsEtiquetas_(medidas);
+            else llenarSelectsEtiquetas_([], 'No hay medidas en el Anexo de este lote');
+            actualizarRefSegunMedida();
+          })
+          .withFailureHandler(function (err) {
+            console.error('Detalle del error al cargar medidas:', err);
+            var detalle = (err && err.message) ? err.message : String(err);
+            llenarSelectsEtiquetas_([], 'Error: ' + detalle);
+          })
+          .obtenerDatosAnexoPorLote(clave);
+      }
+
+      // Pone la REF de cada etiqueta según su medida (si Packaging/Paciente
+      // están en "Igual que Blíster", muestran la REF del Blíster).
+      function actualizarRefSegunMedida() {
+        var medBli = document.getElementById('medidaProducto').value;
+        ETIQUETAS.forEach(function (e) {
+          var med = document.getElementById(e[0]).value || medBli;
+          document.getElementById(e[1]).value = (med && REFS_POR_MEDIDA[med]) ? REFS_POR_MEDIDA[med] : '';
+        });
+      }
+
+      function cargarContramuestrasRegistro() {
+        var clave = document.getElementById('loteRegistro').value;
+        var selectMedidas = document.getElementById('contramuestrasRegistro');
+        if (!clave) { selectMedidas.innerHTML = '<option value="">Seleccione primero un lote...</option>'; return; }
+        selectMedidas.innerHTML = '<option value="">Cargando medidas...</option>';
+        google.script.run
+          .withSuccessHandler(function (detalle) {
+            selectMedidas.innerHTML = '';
+            if (!detalle || detalle.length === 0) {
+              selectMedidas.innerHTML = '<option value="">No hay medidas disponibles</option>';
+              return;
+            }
+            selectMedidas.innerHTML = '<option value="">Seleccione una medida...</option>';
+            detalle.forEach(function (item) {
+              var option = document.createElement('option');
+              var valorMedida = (typeof item === 'object' && item !== null) ? item.medida : item;
+              option.value = valorMedida;
+              option.text = valorMedida;
+              selectMedidas.appendChild(option);
+            });
+          })
+          .withFailureHandler(function () {
+            selectMedidas.innerHTML = '<option value="">Error al cargar medidas</option>';
+          })
+          .obtenerMedidasSecundarioPorClave(clave);
+      }
+
+      function leerArchivosComoBase64(fileList) {
+        var promesas = [];
+        for (var i = 0; i < fileList.length; i++) {
+          promesas.push(new Promise(function (resolve, reject) {
+            var file = fileList[i];
+            var reader = new FileReader();
+            reader.onload = function () {
+              resolve({ nombre: file.name, tipo: file.type || 'application/octet-stream', base64: reader.result.split(',')[1] });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }));
+        }
+        return Promise.all(promesas);
+      }
+
+      function finalizarRegistro() {
+        var clave = document.getElementById('loteRegistro').value;
+        var contramuestras = document.getElementById('contramuestrasRegistro').value.trim();
+        if (!clave) { alert('Seleccione un lote.'); return; }
+        if (!contramuestras) { alert('Indique el diámetro de las Contramuestras.'); return; }
+
+        var medBli = document.getElementById('medidaProducto').value;
+        if (!medBli) { alert('Elegí la medida de la etiqueta Blíster.'); return; }
+        var refBli = document.getElementById('refBlister').value;
+        var medPack = document.getElementById('medidaPackaging').value || medBli;
+        var medPac  = document.getElementById('medidaPaciente').value  || medBli;
+
+        var btn = document.getElementById('btnEnviarRegistro');
+        var msg = document.getElementById('mensajeHistorico');
+        btn.disabled = true;
+        msg.style.color = "#333";
+        msg.innerText = "Leyendo archivos adjuntos...";
+        var archivosInput = document.getElementById('archivosAdicionales');
+
+        leerArchivosComoBase64(archivosInput.files).then(function (archivosAdicionales) {
+          var datos = {
+            claveAnexo: clave,
+            operadorEnvasado: document.getElementById('operadorEnvasado').value,
+            operadorEsterilizacion: document.getElementById('operadorEsterilizacion').value,
+            fechaEsterilizacion: document.getElementById('fechaEsterilizacion').value,
+            cantidadBultos: document.getElementById('cantidadBultos').value,
+            remito: document.getElementById('remito').value,
+            cantidadNoConformes: document.getElementById('cantidadNoConformes').value,
+            solicitudN: document.getElementById('solicitudN').value,
+            loteIrradiacion: document.getElementById('loteIrradiacion').value,
+            dosisKgy: document.getElementById('dosisKgy').value,
+            ofRotulado: document.getElementById('ofRotulado').value,
+            fechaElaboracion: document.getElementById('fechaElaboracion').value,
+            fechaVencimiento: document.getElementById('fechaVencimiento').value,
+            fechaEtiquetado: document.getElementById('fechaEtiquetado').value,
+            operadoresEtiquetado: document.getElementById('operadoresEtiquetado').value,
+            // Blíster (se mantienen los nombres de siempre)
+            medidaProducto: medBli,
+            refBlister: refBli,
+            medidaBlister: medBli,
+            // Packaging y Paciente
+            medidaPackaging: medPack,
+            refPackaging: document.getElementById('refPackaging').value || refBli,
+            medidaPaciente: medPac,
+            refPaciente: document.getElementById('refPaciente').value || refBli,
+            contramuestras: contramuestras,
+            archivosAdicionales: archivosAdicionales
+          };
+          msg.innerText = "Generando Word, exportando y combinando el PDF final...";
+          google.script.run
+            .withSuccessHandler(function (res) { msg.style.color = "green"; msg.innerText = res; btn.disabled = false; })
+            .withFailureHandler(function (err) { msg.style.color = "red"; msg.innerText = "Error: " + err.message; btn.disabled = false; })
+            .generarRegistroHistorico(datos);
+        }).catch(function (err) {
+          msg.style.color = "red"; msg.innerText = "Error leyendo los archivos: " + err; btn.disabled = false;
+        });
+      }
+
+      /* ================= ANEXO ================= */
+      var lotesConSecundario = [];
+      var DETALLE_ANEXO = [];   // [{medida, cantidad}] del lote elegido
+      var _tokenRotos = 0;
+
+      function cargarLotesConSecundario() {
+        google.script.run
+          .withSuccessHandler(function (lista) {
+            lotesConSecundario = lista;
+            var select = document.getElementById('loteAnexo');
+            var claveSeleccionadaPrevia = select.value;
+            select.innerHTML = '';
+
+            if (!lista || lista.length === 0) {
+              select.innerHTML = '<option value="">No hay lotes disponibles</option>';
+              document.getElementById('infoLoteAnexo').innerText = '';
+              ocultarRotos();
+              return;
+            }
+
+            select.innerHTML = '<option value="">Seleccione un lote...</option>';
+            lista.forEach(function (item) {
+              var option = document.createElement('option');
+              option.value = item.clave;
+              option.text = 'Lote ' + item.lote + ' - ' + item.sistema + ' - ' + item.producto + ' (' + item.fecha + ')';
+              select.appendChild(option);
+            });
+
+            var sigueDisponible = lista.some(function (l) { return String(l.clave) === String(claveSeleccionadaPrevia); });
+            if (claveSeleccionadaPrevia && sigueDisponible) {
+              select.value = claveSeleccionadaPrevia; // no se recarga la tabla de rotos: se conserva lo cargado
+            } else {
+              document.getElementById('infoLoteAnexo').innerText = '';
+              ocultarRotos();
+            }
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('loteAnexo').innerHTML = '<option value="">Error al cargar lotes</option>';
+            var msg = document.getElementById('mensajeAnexo');
+            msg.style.color = "red";
+            msg.innerText = "Error: " + err.message;
+          })
+          .obtenerLotesConSecundario();
+      }
+
+      function mostrarInfoLote() {
+        var clave = document.getElementById('loteAnexo').value;
+        var info = document.getElementById('infoLoteAnexo');
+        if (!clave) {
+          info.innerText = '';
+          ocultarRotos();
+          return;
+        }
+        var item = lotesConSecundario.find(function (l) { return String(l.clave) === String(clave); });
+        info.innerText = item ? ('Sistema: ' + item.sistema + ' | Producto: ' + item.producto + ' | Fecha de envasado: ' + item.fecha) : '';
+        cargarDetalleRotos(clave);
+      }
+
+      function ocultarRotos() {
+        DETALLE_ANEXO = [];
+        document.getElementById('fsRotos').style.display = 'none';
+        document.getElementById('listaRotos').innerHTML = '';
+      }
+
+      function cargarDetalleRotos(clave) {
+        var fs = document.getElementById('fsRotos');
+        var cont = document.getElementById('listaRotos');
+        DETALLE_ANEXO = [];
+        fs.style.display = '';
+        cont.innerHTML = '<p style="font-size:14px; color:#666;">Cargando medidas...</p>';
+        var miToken = ++_tokenRotos;
+        google.script.run
+          .withSuccessHandler(function (lista) {
+            if (miToken !== _tokenRotos) return; // respuesta vieja de otro lote
+            DETALLE_ANEXO = lista || [];
+            renderRotos();
+          })
+          .withFailureHandler(function (err) {
+            if (miToken !== _tokenRotos) return;
+            cont.innerHTML = '<p style="font-size:14px; color:#b91c1c;">No se pudieron cargar las medidas: ' + err.message + '</p>';
+          })
+          .obtenerDetalleSecundarioParaAnexo(clave);
+      }
+
+      function renderRotos() {
+        var cont = document.getElementById('listaRotos');
+        if (!DETALLE_ANEXO.length) {
+          cont.innerHTML = '<p style="font-size:14px; color:#666;">Este lote no tiene medidas en el Envasado Secundario.</p>';
+          return;
+        }
+        var filas = DETALLE_ANEXO.map(function (d, i) {
+          return '<tr>' +
+            '<td>' + d.medida + '</td>' +
+            '<td style="text-align:center;">' + d.cantidad + '</td>' +
+            '<td><input type="number" min="0" max="' + d.cantidad + '" step="1" id="rotos_' + i + '" value="0" oninput="actualizarTotalRotos()"></td>' +
+          '</tr>';
+        }).join('');
+        cont.innerHTML =
+          '<table class="rotos-tabla">' +
+            '<thead><tr><th>Medida</th><th style="width:110px; text-align:center;">Envasado</th><th style="width:140px;">Rotos</th></tr></thead>' +
+            '<tbody>' + filas + '</tbody>' +
+          '</table>' +
+          '<div class="rotos-total" id="rotosTotal"></div>';
+        actualizarTotalRotos();
+      }
+
+      function leerRotos() {
+        return DETALLE_ANEXO.map(function (d, i) {
+          var el = document.getElementById('rotos_' + i);
+          var n = el ? Math.floor(Number(el.value) || 0) : 0;
+          return { medida: d.medida, cantidad: n, max: Number(d.cantidad) || 0 };
+        });
+      }
+
+      function actualizarTotalRotos() {
+        var el = document.getElementById('rotosTotal');
+        if (!el) return;
+        var rotos = leerRotos();
+        var totalEnv = rotos.reduce(function (a, r) { return a + r.max; }, 0);
+        var totalRotos = rotos.reduce(function (a, r) { return a + (r.cantidad > 0 ? r.cantidad : 0); }, 0);
+        el.innerHTML = 'Total a liberar: ' + (totalEnv - totalRotos) +
+          (totalRotos > 0 ? ' <span class="desc">(se descuentan ' + totalRotos + ' no conforme(s))</span>' : '');
+      }
+
+      function finalizarAnexo() {
+        var clave = document.getElementById('loteAnexo').value;
+        var ofNumero = document.getElementById('ofNumeroAnexo').value.trim();
+        var observaciones = document.getElementById('observacionesAnexo').value.trim();
+
+        if (!clave) { alert('Seleccione un lote.'); return; }
+        if (!ofNumero) { alert('Indique el N° de O.F.'); return; }
+
+        var rotos = leerRotos();
+        for (var i = 0; i < rotos.length; i++) {
+          if (rotos[i].cantidad < 0) { alert('Los rotos no pueden ser negativos (' + rotos[i].medida + ').'); return; }
+          if (rotos[i].cantidad > rotos[i].max) { alert('Cargaste más rotos que unidades en ' + rotos[i].medida + '.'); return; }
+        }
+        var rotosEnviar = rotos.filter(function (r) { return r.cantidad > 0; })
+                               .map(function (r) { return { medida: r.medida, cantidad: r.cantidad }; });
+        var totalRotos = rotosEnviar.reduce(function (a, r) { return a + r.cantidad; }, 0);
+        if (totalRotos > 0 && !confirm('Se van a descontar ' + totalRotos + ' implante(s) roto(s) del total liberado. ¿Confirmás?')) return;
+
+        var datos = { claveSecundario: clave, ofNumero: ofNumero, observaciones: observaciones, rotos: rotosEnviar };
+
+        var btn = document.getElementById('btnEnviarAnexo');
+        var msg = document.getElementById('mensajeAnexo');
+        btn.disabled = true;
+        msg.style.color = "#333";
+        msg.innerText = "Generando Anexo y PDF...";
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            msg.style.color = "green";
+            msg.innerText = res;
+            btn.disabled = false;
+            document.getElementById('ofNumeroAnexo').value = '';
+            document.getElementById('observacionesAnexo').value = '';
+            document.getElementById('loteAnexo').value = '';
+            document.getElementById('infoLoteAnexo').innerText = '';
+            ocultarRotos();
+            cargarLotesConSecundario();
+          })
+          .withFailureHandler(function (err) {
+            msg.style.color = "red";
+            msg.innerText = "Error: " + err.message;
+            btn.disabled = false;
+          })
+          .generarAnexo(datos);
+      }
+
+      function cargarInicialHistorico() {
+        cargarLotesConAnexo();
+        cargarProximoRotulado();
+      }
+
+      /* ================= ORDEN DE FABRICACIÓN ================= */
+      function cargarInicialOrden() {
+        google.script.run.withSuccessHandler(function (sistemas) {
+          var sel = document.getElementById('ofSistema');
+          sel.innerHTML = '<option value="">Seleccionar...</option>' +
+            sistemas.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+        }).withFailureHandler(function (err) {
+          document.getElementById('ofSistema').innerHTML = '<option value="">Error al cargar sistemas</option>';
+          var msg = document.getElementById('mensajeOrden');
+          msg.style.color = "red";
+          msg.innerText = "Error: " + err.message;
+        }).obtenerSistemasConOrdenFabricacion();
+
+        document.getElementById('ofSistema').addEventListener('change', function () {
+          var sistema = this.value;
+          var selPieza = document.getElementById('ofPieza');
+          var selLote = document.getElementById('ofLote');
+          selPieza.innerHTML = '<option value="">Cargando...</option>';
+          selLote.innerHTML = '<option value="">Elegí primero una pieza</option>';
+          selPieza.disabled = true;
+          selLote.disabled = true;
+          if (!sistema) return;
+
+          google.script.run.withSuccessHandler(function (piezas) {
+            selPieza.innerHTML = '<option value="">Seleccionar...</option>' +
+              piezas.map(function (p) { return '<option value="' + p.indice + '">' + p.nombre + '</option>'; }).join('');
+            selPieza.disabled = false;
+          }).obtenerPiezasOrdenFabricacion(sistema);
+        });
+      }
+
+      var _tokenLotesOrden = 0;
+
+      document.getElementById('ofPieza').addEventListener('change', function () {
+        var sistema = document.getElementById('ofSistema').value;
+        var piezaIndice = this.value;
+        var selLote = document.getElementById('ofLote');
+        selLote.innerHTML = '<option value="">Cargando...</option>';
+        selLote.disabled = true;
+        if (!sistema || piezaIndice === "") return;
+
+        var miToken = ++_tokenLotesOrden;
+        google.script.run.withSuccessHandler(function (lotes) {
+          if (miToken !== _tokenLotesOrden) return;
+          selLote.innerHTML = lotes.length
+            ? '<option value="">Seleccionar...</option>' + lotes.map(function (l) { return '<option value="' + l.clave + '">Lote ' + l.lote + ' (O.F ' + l.of + ' - ' + l.fecha + ')</option>'; }).join('')
+            : '<option value="">No hay lotes pendientes para esta pieza</option>';
+          selLote.disabled = false;
+        }).obtenerLotesParaOrdenFabricacionPorPieza(sistema, piezaIndice);
+      });
+
+      function guardarOrdenFabricacion() {
+        var datos = {
+          sistema: document.getElementById('ofSistema').value,
+          piezaIndice: document.getElementById('ofPieza').value,
+          claveLote: document.getElementById('ofLote').value,
+          numeroOrden: document.getElementById('ofNumeroOrden').value.trim()
+        };
+        var msg = document.getElementById('mensajeOrden');
+        if (!datos.sistema || datos.piezaIndice === "" || !datos.claveLote || !datos.numeroOrden) {
+          msg.style.color = 'red'; msg.innerText = 'Completá todos los campos.';
+          return;
+        }
+        var btn = document.getElementById('btnEnviarOrden');
+        btn.disabled = true;
+        msg.style.color = '#333'; msg.innerText = 'Guardando...';
+        google.script.run
+          .withSuccessHandler(function (r) {
+            msg.style.color = 'green'; msg.innerText = r;
+            btn.disabled = false;
+            document.getElementById('ofNumeroOrden').value = '';
+            document.getElementById('ofPieza').dispatchEvent(new Event('change'));
+            cargarLotesConAnexo();
+          })
+          .withFailureHandler(function (e) {
+            msg.style.color = 'red'; msg.innerText = 'Error: ' + e.message;
+            btn.disabled = false;
+          })
+          .generarOrdenFabricacion(datos);
+      }
+
+      window.onload = function () {
+        try { cargarLotesConSecundario(); } catch (e) { console.error('Error cargando pestaña Anexo:', e); }
+        try { cargarInicialHistorico(); } catch (e) { console.error('Error cargando pestaña Registro Histórico:', e); }
+        try { cargarInicialOrden(); } catch (e) { console.error('Error cargando pestaña Orden de Fabricación:', e); }
+
+        setInterval(cargarLotesConSecundario, 20000);
+      };
+    </script>
+  </body>
+</html>
