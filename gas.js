@@ -37,22 +37,35 @@
   // Además del sector dueño, una página puede dejar entrar a otros puestos:
   // window.BIOFIX_PERMITIDOS = ['lavados']  (ej. Depósito — Lavado Final lo usa también Lavados)
   var PERMITIDOS = (window.BIOFIX_PERMITIDOS || []).map(function (x) { return String(x).toLowerCase(); });
+  // window.BIOFIX_SOLO_ADMIN = true  → la pantalla es solo para técnica (ej. Envasado Paso 1 y Anexo)
+  var SOLO_ADMIN = !!window.BIOFIX_SOLO_ADMIN;
   function permitido(session) {
     var u = sectorDe(session);
-    return !PANTALLA || u === PANTALLA || ADMINS.indexOf(u) >= 0 || PERMITIDOS.indexOf(u) >= 0;
+    if (ADMINS.indexOf(u) >= 0) return true;
+    if (SOLO_ADMIN) return false;
+    return !PANTALLA || u === PANTALLA || PERMITIDOS.indexOf(u) >= 0;
   }
+  // Lo marcado con class="bf-solo-admin" (ej. links a pantallas de técnica) no se muestra a los puestos
+  (function () {
+    var st = document.createElement('style');
+    st.textContent = '.bf-no-admin .bf-solo-admin{display:none!important}';
+    (document.head || document.documentElement).appendChild(st);
+  })();
   function salir() { return sb.auth.signOut().then(function () { location.reload(); }); }
 
   /** Si el usuario es del sector de esta pantalla, sigue; si no, bloquea y ofrece salir. */
   function verificar(session) {
-    if (permitido(session)) { mostrarChip(session); resolverSesion(session); return; }
+    if (permitido(session)) {
+      if (ADMINS.indexOf(sectorDe(session)) < 0) document.documentElement.classList.add('bf-no-admin');
+      mostrarChip(session); resolverSesion(session); return;
+    }
     var d = document.createElement('div');
     d.id = 'bfBloqueo';
     d.setAttribute('style', 'position:fixed;inset:0;background:#f8fafc;z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;');
     d.innerHTML =
       '<div style="width:340px;max-width:92vw;background:#fff;border:1px solid #fecaca;border-radius:12px;padding:22px;text-align:center;">' +
         '<div style="font-size:16px;font-weight:700;color:#b91c1c;margin-bottom:10px;">Esta tablet está ingresada como "' + sectorDe(session) + '"</div>' +
-        '<div style="font-size:14px;color:#475569;margin-bottom:16px;">Esta pantalla es de <b>' + PANTALLA + '</b>. Para usarla hay que salir e ingresar con el usuario de ' + PANTALLA + '.</div>' +
+        '<div style="font-size:14px;color:#475569;margin-bottom:16px;">' + (SOLO_ADMIN ? 'Esta pantalla es solo para <b>técnica</b>.' : 'Esta pantalla es de <b>' + PANTALLA + '</b>. Para usarla hay que salir e ingresar con el usuario de ' + PANTALLA + '.') + '</div>' +
         '<button id="bfSalirB" style="width:100%;padding:11px;font-size:14px;font-weight:700;background:#0284c7;color:#fff;border:none;border-radius:8px;cursor:pointer;">Salir e ingresar con otro usuario</button>' +
       '</div>';
     document.body.appendChild(d);
