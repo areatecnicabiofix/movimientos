@@ -6,6 +6,9 @@
 <title>Control de Calidad — Bio-Fix</title>
 <!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
 <script>window.BIOFIX_PANTALLA = 'control';</script>
+<script>/* Tiempo real: cuando cambia algo de Control en Supabase, la pantalla se recarga sola (ver gas.js) */
+window.BIOFIX_REFRESCAR = function () { refrescarTodo(true); };
+window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad'];</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
@@ -875,7 +878,7 @@
     poblarRespInicial();
     actualizarInventarios();
     validarBtnAbrir();
-    setInterval(function() { refrescarTodo(true); }, 15000);
+    setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
   };
 
   
