@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+    <title>Envasado Primario / Secundario</title>
+    <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
+    <script>window.BIOFIX_PANTALLA = 'envasado';</script>
+    <script src="envasados-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="gas.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
+  .container{ max-width:1400px; width:100%; margin:0 auto; padding:0 12px; }
+  h1{ font-size:18px; margin:0 0 16px 0; color:#0369a1; font-weight:600; }
+  h2{ font-size:14px; margin:0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
+  .panel{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; min-width:0; }
+  .panel-lote{ border-top:4px solid #64748b; }
+  .panel-prim{ border-top:4px solid var(--acc); }
+  .panel-sec{ border-top:4px solid #16a34a; }
+  .oculto{ display:none; }
+  label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
+  select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
+  select:focus, input:focus{ border-color:var(--acc); outline:none; }
+  .btn{ color:#fff; border:none; padding:14px 18px; font-size:15px; font-weight:700; border-radius:8px; cursor:pointer; width:100%; background:#0f766e; }
+  .btn:disabled{ opacity:0.5; cursor:default; }
+  .hint{ font-size:11px; color:var(--mut); margin:4px 0 10px 0; }
+  .fila-cerrada{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:13px; color:#15803d; font-weight:600; }
+  .fila-cierre{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fafafa; }
+  .fila-cierre .med{ font-weight:700; font-size:13px; margin-bottom:8px; color:#1e293b; }
+  .fila-cierre .med .cant{ font-weight:400; color:var(--mut); font-size:12px; }
+  .grid-fila{ display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; }
+  .aviso-warn{ display:none; margin-top:8px; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; }
+  .info-componentes{ display:none; background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:10px; }
+  .tag-auto{ color:#15803d; font-weight:700; }
+  #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:460px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
+  #msg.show{ display:block; }
+  #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
+  #msg.err{ background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+  #diag{ display:none; margin-top:12px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:600; white-space:pre-wrap; }
+  .vacio{ font-size:13px; color:var(--mut); padding:8px 0; }
+  @media (max-width: 700px){
+    body{ padding:8px; }
+    .container{ padding:0 4px; }
+    .panel{ padding:10px; }
+    .grid-fila{ grid-template-columns:1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
+  <b style="color:#0369a1">Envasados:</b>
+  <a href="envasado.html">Paso 1 (carga)</a>
+  <a href="envasado-primsec.html">Primario / Secundario</a>
+  <a href="envasado-anexo.html">Anexo · Orden Fab. · Registro Histórico</a>
+</div>
+<div class="container">
+  <h1>Envasado Primario / Secundario</h1>
+
+  <div class="panel panel-lote">
+    <label>Lote</label>
+    <select id="loteSelect" onchange="cargarDetalle()">
+      <option value="">Cargando lotes...</option>
+    </select>
+    <p class="hint">Elegí el lote: abajo aparecen el Primario y el Secundario de ese lote. Completá los dos y guardá una sola vez.</p>
+  </div>
+
+  <div class="panel panel-prim oculto" id="panelPrimario">
+    <h2>Envasado Primario</h2>
+    <div id="pFilas"></div>
+  </div>
+
+  <div class="panel panel-sec oculto" id="panelSecundario">
+    <h2>Envasado Secundario</h2>
+    <div id="sInfoComponentes" class="info-componentes"></div>
+    <div id="sFilas"></div>
+  </div>
+
+  <button class="btn oculto" id="btnGuardar" onclick="guardarAmbos()">Guardar Primario y Secundario</button>
+
+  <div id="diag"></div>
+</div>
+
+<div id="msg"></div>
+
+<script>
+  function mostrarDiag(texto) {
+    var d = document.getElementById('diag');
+    d.style.display = 'block';
+    d.textContent = (d.textContent ? d.textContent + '\n' : '') + texto;
+  }
+  window.onerror = function (msg, src, linea) {
+    mostrarDiag('Error en la página: ' + msg + ' (línea ' + linea + ')');
+    return false;
+  };
+
+  var DETALLE = [];
+  var LOTES = [];
+  var LOTE_INICIAL = new URLSearchParams(location.search).get('lote') || '';   // antes venía del doGet (?envasados&lote=...)
+
+  function textoError_(err) { return (err && err.message) ? err.message : String(err); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  function mostrarMsg(texto, ok) {
+    var el = document.getElementById('msg');
+    el.textContent = texto;
+    el.className = 'show ' + (ok ? 'ok' : 'err');
+    clearTimeout(mostrarMsg._t);
+    mostrarMsg._t = setTimeout(function () { el.className = ''; }, ok ? 6000 : 9000);
+  }
+
+  function buscarLotePorTexto_(lista, texto) {
+    if (!texto) return null;
+    var t = String(texto).trim().toUpperCase();
+    for (var i = 0; i < lista.length; i++) {
+      var completo = (lista[i].sistema + '-' + lista[i].lote).toUpperCase();
+      if (completo === t || String(lista[i].lote).toUpperCase() === t) return lista[i];
+    }
+    return null;
+  }
+
+  /* ---------- Lista de lotes: pendientes de Primario + Primario cerrado sin Secundario ---------- */
+  function cargarLotes(callback) {
+    var sel = document.getElementById('loteSelect');
+    google.script.run.withSuccessHandler(function (pendientes) {
+      google.script.run.withSuccessHandler(function (sinSec) {
+        var vistos = {};
+        LOTES = [];
+        (pendientes || []).forEach(function (l) { vistos[l.clave] = 1; l.primCerrado = false; LOTES.push(l); });
+        (sinSec || []).forEach(function (l) { if (!vistos[l.clave]) { l.primCerrado = true; LOTES.push(l); } });
+        renderLotes();
+        if (callback) callback(LOTES);
+      }).withFailureHandler(function (err) {
+        mostrarDiag('obtenerLotesDisponiblesSecundario -> ' + textoError_(err));
+        LOTES = (pendientes || []).map(function (l) { l.primCerrado = false; return l; });
+        renderLotes();
+        if (callback) callback(LOTES);
+      }).obtenerLotesDisponiblesSecundario();
+    }).withFailureHandler(function (err) {
+      var t = 'Error: ' + textoError_(err);
+      sel.innerHTML = '<option value="">' + t + '</option>';
+      mostrarDiag('obtenerLotesPendientes -> ' + t);
+    }).obtenerLotesPendientes();
+  }
+
+  function renderLotes() {
+    var sel = document.getElementById('loteSelect');
+    var previo = sel.value;
+    if (!LOTES.length) {
+      sel.innerHTML = '<option value="">No hay lotes pendientes</option>';
+      limpiar();
+      return;
+    }
+    sel.innerHTML = '<option value="">Elegí un lote...</option>' + LOTES.map(function (l) {
+      return '<option value="' + esc(l.clave) + '">Lote ' + esc(l.sistema + '-' + l.lote) + ' - ' + esc(l.producto) + ' (' + esc(l.fecha) + ')' +
+        (l.primCerrado ? ' — Primario ya cerrado, falta Secundario' : '') + '</option>';
+    }).join('');
+    if (previo && LOTES.some(function (l) { return l.clave === previo; })) sel.value = previo;
+  }
+
+  function limpiar() {
+    DETALLE = [];
+    document.getElementById('pFilas').innerHTML = '';
+    document.getElementById('sFilas').innerHTML = '';
+    document.getElementById('sInfoComponentes').style.display = 'none';
+    ['panelPrimario', 'panelSecundario', 'btnGuardar'].forEach(function (id) { document.getElementById(id).classList.add('oculto'); });
+  }
+
+  function cargarDetalle() {
+    var clave = document.getElementById('loteSelect').value;
+    limpiar();
+    if (!clave) return;
+    document.getElementById('panelPrimario').classList.remove('oculto');
+    document.getElementById('pFilas').innerHTML = '<p class="vacio">Cargando...</p>';
+    google.script.run.withSuccessHandler(function (detalle) {
+      if (document.getElementById('loteSelect').value !== clave) return;
+      DETALLE = detalle || [];
+      try { renderPrimario(); renderSecundario(); }
+      catch (e) { mostrarDiag('Error mostrando el lote: ' + e.message); }
+    }).withFailureHandler(function (err) {
+      document.getElementById('pFilas').innerHTML = '';
+      mostrarDiag('obtenerDetalleLote -> Error: ' + textoError_(err));
+    }).obtenerDetalleLote(clave);
+  }
+
+  /* ---------- PRIMARIO ---------- */
+  function renderPrimario() {
+    var cont = document.getElementById('pFilas');
+    if (!DETALLE.length) { cont.innerHTML = '<p class="vacio">Este lote no tiene medidas cargadas.</p>'; return; }
+    var BLOQ = ' readonly style="background:#e9ecef;"';
+    var opcionesRefComp = '<option value="">-</option>';
+    for (var nc = 0; nc <= 7; nc++) { var cod = '0' + nc; opcionesRefComp += '<option value="' + cod + '">' + cod + '</option>'; }
+    var html = '';
+    DETALLE.forEach(function (f) {
+      if (f.yaCerrada) {
+        html += '<div class="fila-cerrada"><span>✓ Ya cerrada — ' + esc(f.medida) + '</span><span>' + esc(f.cantidad) + ' u.</span></div>';
+        return;
+      }
+      var refSug = f.refSugerida || '';
+      var opcionesRef = '<option value=""' + (refSug === '' ? ' selected' : '') + '>-</option>';
+      for (var n = 0; n <= 7; n++) {
+        opcionesRef += '<option value="' + n + '"' + (refSug !== '' && String(n) === refSug ? ' selected' : '') + '>' + n + '</option>';
+      }
+      var ofProd = f.loteSugerido || '', ofLav = f.ofLavadoSugerido || '';
+      html +=
+        '<div class="fila-cierre prim-card" data-fila="' + f.fila + '" data-componente="' + (f.esComponente ? '1' : '0') + '">' +
+          '<div class="med">' + esc(f.medida) + ' <span class="cant">(' + esc(f.cantidad) + ' u.)</span></div>' +
+          '<div class="grid-fila">' +
+            '<div><label>O.F Prod.' + (ofProd ? ' <span class="tag-auto">· de Sala Blanca</span>' : '') + '</label><input class="in-ofProd" type="text" value="' + esc(ofProd) + '"' + (ofProd ? BLOQ : '') + '></div>' +
+            '<div><label>O.F Lav. Final' + (ofLav ? ' <span class="tag-auto">· de Lavado Final</span>' : '') + '</label><input class="in-ofLavado" type="text" value="' + esc(ofLav) + '"' + (ofLav ? BLOQ : '') + '></div>' +
+            (f.esComponente
+              ? '<div><label>Lote Tapón</label><input class="in-loteTap" type="text" value="No aplica" disabled></div>' +
+                '<div><label>Ref</label><select class="in-referencia">' + opcionesRefComp + '</select></div>'
+              : '<div><label>Lote Tapón</label><input class="in-loteTap" type="text"></div>' +
+                '<div><label>Ref (OP-XXXX-N)' + (refSug !== '' ? ' <span class="tag-auto">· autocompletada</span>' : '') + '</label><select class="in-referencia">' + opcionesRef + '</select></div>') +
+            '<div><label>Operario / Responsable</label><input class="in-operario" type="text" value="Miguel Gomez" placeholder="- (si no hay)"></div>' +
+          '</div>' +
+        '</div>';
+    });
+    cont.innerHTML = html;
+  }
+
+  /* ---------- SECUNDARIO (mismo lote, en la misma pantalla) ---------- */
+  function renderSecundario() {
+    var medidas = DETALLE.filter(function (f) { return !f.esComponente; });
+    var componentes = DETALLE.filter(function (f) { return f.esComponente; });
+    document.getElementById('panelSecundario').classList.remove('oculto');
+
+    var info = document.getElementById('sInfoComponentes');
+    if (componentes.length) {
+      info.style.display = 'block';
+      info.textContent = 'Componentes del lote (' + componentes.map(function (c) { return c.medida + ': ' + c.cantidad; }).join(', ') + ') — pasan solos al Secundario con la cantidad del Primario.';
+    }
+
+    var cont = document.getElementById('sFilas');
+    if (!medidas.length) {
+      cont.innerHTML = '<p class="vacio">Este lote no tiene medidas para Envasado Secundario.</p>';
+      return;
+    }
+    cont.innerHTML = medidas.map(function (f) {
+      return '' +
+        '<div class="fila-cierre sec-card">' +
+          '<div class="med">' + esc(f.medida) + ' <span class="cant">(Primario: ' + esc(f.cantidad) + ' u.)</span></div>' +
+          '<div class="grid-fila">' +
+            '<div><label>Cantidad</label><input class="in-cantidad" type="number" min="0" value="' + esc(f.cantidad) + '" data-esperado="' + esc(f.cantidad) + '" oninput="revisarCantidad(this)"></div>' +
+            '<div><label>Operario</label><input class="in-operario" type="text" value="Miguel Gomez"></div>' +
+            '<div style="grid-column:span 2;"><label>Observaciones</label><input class="in-observaciones" type="text" placeholder="OK, o el motivo si difiere"></div>' +
+          '</div>' +
+          '<div class="aviso-warn aviso-cantidad">La cantidad difiere de la del Primario.</div>' +
+          '<input type="hidden" class="in-medida-nombre" value="' + esc(f.medida) + '">' +
+        '</div>';
+    }).join('');
+    document.getElementById('btnGuardar').classList.remove('oculto');
+  }
+
+  function revisarCantidad(input) {
+    var aviso = input.closest('.fila-cierre').querySelector('.aviso-cantidad');
+    aviso.style.display = (Number(input.value) !== Number(input.dataset.esperado)) ? 'block' : 'none';
+  }
+
+  /* ---------- GUARDAR AMBOS ---------- */
+  function guardarAmbos() {
+    var clave = document.getElementById('loteSelect').value;
+    if (!clave) { mostrarMsg('Elegí un lote primero.', false); return; }
+
+    var filasPrimario = [], faltaPrim = false;
+    document.querySelectorAll('#pFilas .prim-card').forEach(function (card) {
+      var esComp = card.dataset.componente === '1';
+      var ofProd = card.querySelector('.in-ofProd').value.trim();
+      var ofLavado = card.querySelector('.in-ofLavado').value.trim();
+      var loteTap = esComp ? '' : card.querySelector('.in-loteTap').value.trim();
+      if (!ofProd || !ofLavado || (!esComp && !loteTap)) faltaPrim = true;
+      filasPrimario.push({
+        fila: card.dataset.fila, ofProd: ofProd, ofLavado: ofLavado, loteTap: loteTap,
+        referencia: card.querySelector('.in-referencia').value,
+        operario: card.querySelector('.in-operario').value.trim() || '-'
+      });
+    });
+    if (faltaPrim) { mostrarMsg('Primario: completá O.F Prod., O.F Lav. Final y Lote Tapón en todas las filas.', false); return; }
+
+    var filasSecundario = [], faltaSec = false;
+    document.querySelectorAll('#sFilas .sec-card').forEach(function (card) {
+      var cantidad = card.querySelector('.in-cantidad').value;
+      var operario = card.querySelector('.in-operario').value.trim();
+      if (cantidad === '' || !operario) faltaSec = true;
+      filasSecundario.push({
+        medida: card.querySelector('.in-medida-nombre').value,
+        cantidad: cantidad,
+        operario: operario,
+        observaciones: card.querySelector('.in-observaciones').value.trim()
+      });
+    });
+    if (!filasSecundario.length) { mostrarMsg('No hay medidas de Secundario para guardar.', false); return; }
+    if (faltaSec) { mostrarMsg('Secundario: completá cantidad y operario en todas las filas.', false); return; }
+
+    var btn = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+    google.script.run.withSuccessHandler(function (res) {
+      btn.disabled = false;
+      btn.textContent = 'Guardar Primario y Secundario';
+      mostrarMsg(res, true);
+      document.getElementById('loteSelect').value = '';
+      limpiar();
+      cargarLotes();
+    }).withFailureHandler(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Guardar Primario y Secundario';
+      mostrarMsg(textoError_(err), false);
+      mostrarDiag('guardarPrimarioYSecundario -> ' + textoError_(err));
+      cargarLotes(); // por si el Primario llegó a guardarse y el lote cambió de estado
+    }).guardarPrimarioYSecundario({ clave: clave, filasPrimario: filasPrimario, filasSecundario: filasSecundario });
+  }
+
+  window.onload = function () {
+    cargarLotes(function (lista) {
+      var m = buscarLotePorTexto_(lista, LOTE_INICIAL);
+      if (m) {
+        document.getElementById('loteSelect').value = m.clave;
+        cargarDetalle();
+      }
+    });
+  };
+</script>
+</body>
+</html>
