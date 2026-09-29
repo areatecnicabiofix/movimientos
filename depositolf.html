@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Depósito — Lavado Final — Bio-Fix</title>
 <!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
-<script>window.BIOFIX_PANTALLA = 'deposito';</script>
+<script>window.BIOFIX_PANTALLA = 'deposito'; window.BIOFIX_PERMITIDOS = ['lavados'];  /* Lavados también manda a Lavado Final */</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
@@ -110,6 +110,7 @@
 <div class="container">
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1>Depósito — Para Lavado Final</h1>
+    <p id="linkLavados" style="display:none;margin:4px 0 10px;font-size:13px;"><a href="lavados.html" style="color:#0284c7;">← Volver a Lavados (Grueso / Final)</a></p>
     <button class="btn ghost" onclick="cargar()">↻ Actualizar</button>
   </div>
 
@@ -208,5 +209,6 @@
 
   window.onload = cargar;
 </script>
+<script>BIOFIX.sesion.then(function (ses) { var u = BIOFIX.sectorDe(ses); if (u === 'lavados' || (BIOFIX_CFG.admins || []).indexOf(u) >= 0) document.getElementById('linkLavados').style.display = ''; });</script>
 </body>
 </html>
