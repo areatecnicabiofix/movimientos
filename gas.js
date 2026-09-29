@@ -146,7 +146,8 @@
    * - Antes de cualquier otro guardado se termina de mandar la cola, para respetar el orden. */
   // Funciones que solo LEEN (no llevan código de guardado ni van a la cola)
   var RE_LECTURA = /(Obtener|Listar|Pendientes|Catalogo|Historial|Panel|Promedio|ProximoNumero|Resumen|Totales|Disponibles|Terminados|Progreso)|^bnd(Lotes|LotesCompletos|Actual|ControlEnCurso)$/;
-  function esLectura(fn) { return RE_LECTURA.test(fn); }
+  // obtener...() son siempre lecturas (Envasados); una página puede sumar otras con window.BIOFIX_LECTURAS = ['fn', ...]
+  function esLectura(fn) { return RE_LECTURA.test(fn) || /^obtener/.test(fn) || (window.BIOFIX_LECTURAS || []).indexOf(fn) >= 0; }
   function nuevoRid() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
   function esErrorDeRed(e) { return e && (e.name === 'TypeError' || /Failed to fetch|NetworkError|Load failed|respondió 5\d\d|tiempo agotado/i.test(e.message || '')); }
   function enFondo(fn) { return (window.BIOFIX_FONDO || []).indexOf(fn) >= 0; }
