@@ -247,7 +247,7 @@
   function llamarSinMedir(fn, args, rid, reintento) {
     return sesionFresca(!!reintento).then(function (s) {
       if (!s) { mostrarLogin(); throw new Error('Sesión vencida. Volvé a ingresar.'); }
-      return fetch(CFG.apiUrl, {
+      return fetch(window.BIOFIX_API_URL || CFG.apiUrl, {   // una página puede llamar a OTRO Apps Script (ej. Envasados)
         method: 'POST',
         body: JSON.stringify({ fn: fn, args: args, token: s.access_token, rid: rid || '' }) // text/plain: sin preflight CORS
       });
