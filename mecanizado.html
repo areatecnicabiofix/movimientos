@@ -504,12 +504,23 @@
     elHint.textContent = 'Esperado en el contador: ' + esperado;
   }
   function horaAhoraMec_(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  // Un solo toque por botón: mientras el servidor no responde, otro toque no hace nada.
+  // Después de pausar/reanudar se vuelve a leer la lista, así el botón muestra el estado real.
+  var MEC_OCUPADO = {};
+  function mecOcupado_(k){ if (MEC_OCUPADO[k]) return true; MEC_OCUPADO[k] = setTimeout(function(){ delete MEC_OCUPADO[k]; }, 60000); return false; }
+  function mecLibre_(k){ clearTimeout(MEC_OCUPADO[k]); delete MEC_OCUPADO[k]; }
   function mecPausarProd(f){
+    if (mecOcupado_('prod'+f)) return;
     var mot = document.getElementById('pmot_'+f) ? document.getElementById('pmot_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prod'+f); refrescarPendientes(); alert(r.msg); })
+      .withFailureHandler(function(e){ mecLibre_('prod'+f); refrescarPendientes(); alert(e.message); })
+      .mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
   }
   function mecReanudarProd(f){
-    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
+    if (mecOcupado_('prod'+f)) return;
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prod'+f); refrescarPendientes(); alert(r.msg); })
+      .withFailureHandler(function(e){ mecLibre_('prod'+f); refrescarPendientes(); alert(e.message); })
+      .mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
   }
 
    
@@ -1017,11 +1028,19 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcActualizar(prcDatosCard(f));
   }
   function prcPausar(f){
+    if (mecOcupado_('prc'+f)) return;
     var mot = document.getElementById('pmotivo_'+f) ? document.getElementById('pmotivo_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
+    prcMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcRefrescarEnControl(); })
+      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); prcRefrescarEnControl(); })
+      .prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
   }
   function prcReanudar(f){
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora() });
+    if (mecOcupado_('prc'+f)) return;
+    prcMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcRefrescarEnControl(); })
+      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); prcRefrescarEnControl(); })
+      .prcReanudar({ fila:f, hora:prcHoraAhora() });
   }
   function prcCerrarControl(f){
     var d = prcDatosCard(f); d.hora = prcHoraAhora();
@@ -1180,11 +1199,19 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcActualizar(pcpDatosCard(f));
   }
   function pcpPausar(f){
+    if (mecOcupado_('pcp'+f)) return;
     var mot = document.getElementById('qmotivo_'+f) ? document.getElementById('qmotivo_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
+    pcpMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpRefrescarEnControl(); })
+      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); pcpRefrescarEnControl(); })
+      .prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
   }
   function pcpReanudar(f){
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
+    if (mecOcupado_('pcp'+f)) return;
+    pcpMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpRefrescarEnControl(); })
+      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); pcpRefrescarEnControl(); })
+      .prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
   }
   function pcpCerrarControl(f){
     var d = pcpDatosCard(f); d.hora = prcHoraAhora();
