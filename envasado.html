@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envasado — Paso 1</title>
+    <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
+    <script>
+      window.BIOFIX_PANTALLA = 'envasado';
+      // URL /exec de la implementación del Apps Script de ENVASADOS (no la de Movimientos)
+      window.BIOFIX_API_URL = 'PEGAR_ACA_LA_URL_EXEC_DE_ENVASADOS';
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="gas.js"></script>
+    <style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f9;
+    padding: 20px;
+    color: #333;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 800px;
+    margin: auto;
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  }
+  h2 {
+    color: #1a73e8;
+    text-align: center;
+    margin-bottom: 25px;
+    font-size: 26px;
+  }
+  fieldset {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  legend {
+    font-weight: bold;
+    color: #1a73e8;
+    padding: 0 5px;
+    font-size: 18px;
+  }
+  label {
+    font-weight: bold;
+    display: block;
+    margin-top: 15px;
+    font-size: 16px;
+  }
+  input, select {
+    width: 100%;
+    padding: 12px;
+    margin-top: 6px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+  }
+  .grupo-medida {
+    margin-top: 10px;
+  }
+  .fila-medida {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .fila-medida select { flex: 3; }
+  .fila-medida input { flex: 1; }
+
+  .panel-disponibilidad { margin-top: 6px; }
+  .aviso-disp { font-size: 13px; color: #555; margin-bottom: 6px; }
+  .aviso-vacio { font-style: italic; color: #888; }
+  .fila-disp {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    background: #eef6ff;
+    border: 1px solid #bcdfff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+  .fila-disp span { flex: 1; }
+  .fila-disp .in-tomar { width: 80px; padding: 6px; margin-top: 0; flex: none; }
+
+  .btn-add {
+    background: #34a853;
+    color: white;
+    border: none;
+    padding: 12px 18px;
+    margin-top: 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .btn-eliminar {
+    background: #ea4335;
+    color: white;
+    border: none;
+    padding: 12px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 15px;
+  }
+  button.enviar {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    padding: 16px;
+    width: 100%;
+    margin-top: 15px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 18px;
+    cursor: pointer;
+  }
+</style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Tabla de Envasados</h2>
+      <fieldset>
+        <legend>Datos Iniciales, Lote y Medidas</legend>
+
+        <label>Sistema:</label>
+        <select id="sistema" onchange="actualizarSistema()">
+          <option value="MP">MP (Monopieza)</option>
+          <option value="IBT">IBT (Monopieza Basal Tratado)</option>
+          <option value="IB">IB (Monopieza Basal Pulido)</option>
+          <option value="HI">HI (Hexágono Interno - Sin Tetón)</option>
+          <option value="HI-A">HI-A (Hexágono Interno - Con Tetón)</option>
+          <option value="HE">HE (Hexágono Externo)</option>
+          <option value="CMU">CMU (Compresivo Multi-Unit)</option>
+          <option value="CMU3">CMU3 (Compresivo Multi-Unit C3)</option>
+          <option value="CMHI">CMHI (Cono Morse)</option>
+        </select>
+
+        <label>Número de Lote (solo números):</label>
+        <input type="text" id="loteMp" inputmode="numeric" pattern="[0-9]*"
+               oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+               placeholder="Ej: 1023" required>
+
+        <label>Producto:</label>
+        <input type="text" id="producto" value="Monopieza" required readonly style="background-color: #e9ecef;">
+
+        <label>Medidas y Cantidades:</label>
+        <div id="contenedorMedidas">
+          <div class="grupo-medida">
+            <div class="fila-medida">
+              <select class="medida" required onchange="onMedidaChange(this)">
+                <option value="">Seleccione una medida...</option>
+              </select>
+              <input type="number" class="cantidad" placeholder="Cant." min="1" required>
+            </div>
+            <div class="panel-disponibilidad"></div>
+          </div>
+        </div>
+        <button type="button" class="btn-add" onclick="agregarFilaMedida()">+ Añadir otra medida</button>
+
+        <!-- Sección Dinámica para Componentes -->
+        <div id="seccionComponentes" class="seccion-componentes">
+          <label>Componentes (se autocompletan con el total de implantes, sin Ref):</label>
+          <div id="contenedorComponentes"></div>
+          <button type="button" class="btn-add" style="background:#0b57d0;" onclick="agregarFilaComponente()">+ Añadir componente</button>
+        </div>
+      </fieldset>
+      <button type="button" class="enviar" id="btnEnviar" onclick="enviarPaso1()">Guardar carga</button>
+      <div id="mensaje"></div>
+    </div>
+
+    <script>
+      var listaMedidasPorSistema = {
+        "MP": [
+          "IMPLANTE MONOPIEZA Ø3.0 X 6mm", "IMPLANTE MONOPIEZA Ø3.0 X 8mm", "IMPLANTE MONOPIEZA Ø3.0 X 10mm", "IMPLANTE MONOPIEZA Ø3.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø3.0 X 13mm", "IMPLANTE MONOPIEZA Ø3.0 X 15mm", "IMPLANTE MONOPIEZA Ø3.0 X 18mm", "IMPLANTE MONOPIEZA Ø3.0 X 20mm",
+          "IMPLANTE MONOPIEZA Ø3.5 X 6mm", "IMPLANTE MONOPIEZA Ø3.5 X 8mm", "IMPLANTE MONOPIEZA Ø3.5 X 10mm", "IMPLANTE MONOPIEZA Ø3.5 X 11,5mm", "IMPLANTE MONOPIEZA Ø3.5 X 13mm", "IMPLANTE MONOPIEZA Ø3.5 X 15mm", "IMPLANTE MONOPIEZA Ø3.5 X 18mm", "IMPLANTE MONOPIEZA Ø3.5 X 20mm",
+          "IMPLANTE MONOPIEZA Ø4.0 X 6mm", "IMPLANTE MONOPIEZA Ø4.0 X 8mm", "IMPLANTE MONOPIEZA Ø4.0 X 10mm", "IMPLANTE MONOPIEZA Ø4.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø4.0 X 13mm", "IMPLANTE MONOPIEZA Ø4.0 X 15mm", "IMPLANTE MONOPIEZA Ø4.0 X 18mm", "IMPLANTE MONOPIEZA Ø4.0 X 20mm",
+          "IMPLANTE MONOPIEZA Ø4.5X 6mm", "IMPLANTE MONOPIEZA Ø4.5X 8mm", "IMPLANTE MONOPIEZA Ø4.5X 10mm", "IMPLANTE MONOPIEZA Ø4.5X 11,5mm", "IMPLANTE MONOPIEZA Ø4.5X 13mm", "IMPLANTE MONOPIEZA Ø4.5X 15mm", "IMPLANTE MONOPIEZA Ø4.5X 18mm", "IMPLANTE MONOPIEZA Ø4.5X 20mm",
+          "IMPLANTE MONOPIEZA Ø5.0 X 6mm", "IMPLANTE MONOPIEZA Ø5.0 X 8mm", "IMPLANTE MONOPIEZA Ø5.0 X 10mm", "IMPLANTE MONOPIEZA Ø5.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø5.0 X 13mm",
+          "IMPLANTE MONOPIEZA Ø5.5 X 6mm", "IMPLANTE MONOPIEZA Ø5.5 X 8mm", "IMPLANTE MONOPIEZA Ø5.5 X 10mm", "IMPLANTE MONOPIEZA Ø5.5 X 11,5mm", "IMPLANTE MONOPIEZA Ø5.5 X 13mm"
+        ],
+        "IBT": [
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 9mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 18mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø6.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø6.5 X 12mm"
+        ],
+        "IB": [
+          "IMPLANTE MONOPIEZA BASAL Ø3.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL Ø3.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL Ø4.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 18mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 21mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 23mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 24mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 26mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL Ø4.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL Ø5.5 X 9mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 18mm",
+          "IMPLANTE MONOPIEZA BASAL Ø6.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø6.5 X 12mm"
+        ],
+        "HI": [
+          "IMPLANTE HEXAGONO INTERNO Ø3.30 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø3.75 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø4.2 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø5.0 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 16mm"
+        ],
+        "HI-A": [
+          "IMPLANTE HEXAGONO INTERNO Ø3.30 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø3.75 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø4.2 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø5.0 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 16mm"
+        ],
+        "HE": [
+          "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 6mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 15mm"
+        ],
+        "CMU": [
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 13mm"
+        ],
+        "CMU3": [
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 13mm C3"
+        ],
+        "CMHI": [
+          "IMPLANTE CONO MORSE Ø3.30 X 8mm", "IMPLANTE CONO MORSE Ø3.30 X 10mm", "IMPLANTE CONO MORSE Ø3.30 X 11.5mm", "IMPLANTE CONO MORSE Ø3.30 X 13mm", "IMPLANTE CONO MORSE Ø3.30 X 16mm",
+          "IMPLANTE CONO MORSE Ø3.75 X 8mm", "IMPLANTE CONO MORSE Ø3.75 X 10mm", "IMPLANTE CONO MORSE Ø3.75 X 11.5mm", "IMPLANTE CONO MORSE Ø3.75 X 13mm", "IMPLANTE CONO MORSE Ø3.75 X 16mm",
+          "IMPLANTE CONO MORSE Ø4.2 X 8mm", "IMPLANTE CONO MORSE Ø4.2 X 10mm", "IMPLANTE CONO MORSE Ø4.2 X 11.5mm", "IMPLANTE CONO MORSE Ø4.2 X 13mm", "IMPLANTE CONO MORSE Ø4.2 X 16mm",
+          "IMPLANTE CONO MORSE Ø5.0 X 8mm", "IMPLANTE CONO MORSE Ø5.0 X 10mm", "IMPLANTE CONO MORSE Ø5.0 X 11.5mm", "IMPLANTE CONO MORSE Ø5.0 X 13mm", "IMPLANTE CONO MORSE Ø5.0 X 16mm"
+        ]
+      };
+
+      var componentesPorSistema = {
+        "HE": ["PILAR MULTIFUNCIÓN 3.4", "PILAR MULTIFUNCIÓN 4.1", "PILAR MULTIFUNCIÓN 5.0", "TAPA DE CIERRE 3.4", "TAPA DE CIERRE 4.1", "TAPA DE CIERRE 5.0", "TORNILLO CUADRADO DE FIJACIÓN 2X0,4"],
+        "HI": ["PILAR MULTIFUNCIÓN", "TAPA DE CIERRE", "TORNILLO DE FIJACIÓN CUADRADO"],
+        "HI-A": ["TAPA DE CIERRE"]
+      };
+
+      var nombresProductos = {
+        "MP": "Monopieza",
+        "IBT": "Monopieza Basal Tratado",
+        "IB": "Monopieza Basal Pulido",
+        "HI": "Hexágono Interno",
+        "HI-A": "Hexágono Interno",
+        "HE": "Hexágono Externo",
+        "CMU": "Compresivo Multi-Unit",
+        "CMU3": "Compresivo Multi-Unit C3",
+        "CMHI": "Cono Morse"
+      };
+
+      // Disponibilidad real de Sala Blanca para el sistema elegido en este
+      // momento: { "<medida>": [{lote, referencia, disponible}, ...], ... }
+      var disponibilidadActual = {};
+      var pedidoDisp = 0;   // si se cambia de sistema rápido, solo vale la última respuesta
+
+      // Sala Blanca ya guarda el lote como "Lote 0932" (con el prefijo puesto).
+      function etiquetaLote_(lote) {
+        var s = String(lote == null ? '' : lote).trim();
+        if (!s) return '';
+        return /^lote\b/i.test(s) ? s : ('Lote ' + s);
+      }
+
+      function bloquearCantidadAuto_(inputCantidad) {
+        inputCantidad.value = '';
+        inputCantidad.readOnly = true;
+        inputCantidad.placeholder = 'Se completa solo ↑';
+        inputCantidad.style.backgroundColor = '#e9ecef';
+      }
+
+      function habilitarCantidadManual_(inputCantidad) {
+        inputCantidad.readOnly = false;
+        inputCantidad.placeholder = 'Cant.';
+        inputCantidad.style.backgroundColor = '';
+      }
+
+      function actualizarSistema() {
+        var sistemaSeleccionado = document.getElementById("sistema").value;
+        var inputProducto = document.getElementById("producto");
+        if (inputProducto && nombresProductos[sistemaSeleccionado]) {
+          inputProducto.value = nombresProductos[sistemaSeleccionado];
+        }
+
+        var medidas = listaMedidasPorSistema[sistemaSeleccionado] || [];
+        var selectsMedidas = document.querySelectorAll(".medida");
+
+        selectsMedidas.forEach(function (selectMedidas) {
+          var valorActual = selectMedidas.value;
+          selectMedidas.innerHTML = '<option value="">Seleccione una medida...</option>';
+          medidas.forEach(function (medida) {
+            var option = document.createElement("option");
+            option.value = medida;
+            option.text = medida;
+            selectMedidas.appendChild(option);
+          });
+          selectMedidas.value = valorActual;
+        });
+
+        var secComp = document.getElementById("seccionComponentes");
+        var contComp = document.getElementById("contenedorComponentes");
+        contComp.innerHTML = "";
+        if (componentesPorSistema[sistemaSeleccionado]) {
+          secComp.style.display = "block";
+        } else {
+          secComp.style.display = "none";
+        }
+
+        cargarDisponibilidadSistema(sistemaSeleccionado);
+      }
+
+      // Trae de Sala Blanca (Trazabilidad) lo disponible para este sistema y
+      // vuelve a pintar el panel de disponibilidad de cualquier fila que ya
+      // tenga una medida elegida.
+      function cargarDisponibilidadSistema(sistema) {
+        disponibilidadActual = {};
+        var n = ++pedidoDisp;
+        var msg = document.getElementById('mensaje');
+        var avisar = !msg.innerText || /^(Buscando|No se pudo cargar)/.test(msg.innerText);  // no tapar "Carga registrada…"
+        if (avisar) { msg.style.color = '#64748b'; msg.innerText = 'Buscando lo disponible en Sala Blanca…'; }
+        google.script.run
+          .withSuccessHandler(function (mapa) {
+            if (n !== pedidoDisp) return;
+            if (msg.innerText.indexOf('Buscando') === 0) msg.innerText = '';
+            disponibilidadActual = mapa || {};
+            document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
+              var sel = grupo.querySelector('.medida');
+              if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
+            });
+          })
+          .withFailureHandler(function (err) {
+            if (n !== pedidoDisp) return;
+            msg.style.color = 'red';
+            msg.innerText = 'No se pudo cargar lo disponible en Sala Blanca: ' + (err.message || err);
+          })
+          .obtenerDisponibilidadSalaBlanca(sistema);
+      }
+
+      function onMedidaChange(selectEl) {
+        var grupo = selectEl.closest('.grupo-medida');
+        mostrarDisponibilidadEnGrupo(grupo, selectEl.value);
+      }
+
+      function mostrarDisponibilidadEnGrupo(grupo, medida) {
+        var filaMedida = grupo.querySelector('.fila-medida');
+        var panel = grupo.querySelector('.panel-disponibilidad');
+        var inputCantidad = filaMedida.querySelector('.cantidad');
+        filaMedida.dataset.origen = '';
+
+        if (!medida) {
+          panel.style.display = 'none';
+          panel.innerHTML = '';
+          habilitarCantidadManual_(inputCantidad);
+          return;
+        }
+
+        var opciones = disponibilidadActual[medida] || [];
+        if (!opciones.length) {
+          panel.style.display = 'block';
+          panel.innerHTML = '<div class="aviso-disp aviso-vacio">No hay stock registrado en Sala Blanca para esta medida — cargá la cantidad a mano.</div>';
+          habilitarCantidadManual_(inputCantidad);
+          return;
+        }
+
+        bloquearCantidadAuto_(inputCantidad);
+
+        var html = '<div class="aviso-disp"><b>Disponible en Sala Blanca</b> (elegí cuánto tomar de cada lote):</div>';
+        opciones.forEach(function (op) {
+          var loteTexto = etiquetaLote_(op.lote);
+          html += '' +
+            '<div class="fila-disp" data-lote="' + op.lote + '" data-ref="' + op.referencia + '" data-max="' + op.disponible + '">' +
+              '<span>' + loteTexto + (op.referencia ? ' — Ref ' + op.referencia : '') + ' <i>(' + op.disponible + ' disp.)</i></span>' +
+              '<input type="number" class="in-tomar" min="0" max="' + op.disponible + '" value="0" oninput="recalcularCantidadGrupo(this)">' +
+            '</div>';
+        });
+        panel.innerHTML = html;
+        panel.style.display = 'block';
+      }
+
+      function recalcularCantidadGrupo(inputEl) {
+        var grupo = inputEl.closest('.grupo-medida');
+        var filaMedida = grupo.querySelector('.fila-medida');
+        var panel = grupo.querySelector('.panel-disponibilidad');
+        var inputCantidad = filaMedida.querySelector('.cantidad');
+        var total = 0;
+        var partes = [];
+        panel.querySelectorAll('.fila-disp').forEach(function (f) {
+          var inputTomar = f.querySelector('.in-tomar');
+          var max = Number(f.dataset.max) || 0;
+          var val = Number(inputTomar.value) || 0;
+          if (val > max) { val = max; inputTomar.value = max; }
+          if (val > 0) {
+            total += val;
+            partes.push(etiquetaLote_(f.dataset.lote) + (f.dataset.ref ? ' (Ref ' + f.dataset.ref + ')' : '') + ' x' + val);
+          }
+        });
+        inputCantidad.value = total > 0 ? total : '';
+        filaMedida.dataset.origen = partes.join('; ');
+      }
+
+      function agregarFilaMedida() {
+        var contenedor = document.getElementById('contenedorMedidas');
+        var primerGrupo = contenedor.children[0];
+        var nuevoGrupo = primerGrupo.cloneNode(true);
+
+        var nuevaFilaMedida = nuevoGrupo.querySelector('.fila-medida');
+        nuevaFilaMedida.dataset.origen = '';
+        var nuevoSelect = nuevaFilaMedida.querySelector('.medida');
+        nuevoSelect.selectedIndex = 0;
+        habilitarCantidadManual_(nuevaFilaMedida.querySelector('.cantidad'));
+        nuevaFilaMedida.querySelector('.cantidad').value = '';
+        nuevoGrupo.querySelector('.panel-disponibilidad').innerHTML = '';
+        nuevoGrupo.querySelector('.panel-disponibilidad').style.display = 'none';
+
+        if (!nuevaFilaMedida.querySelector('.btn-eliminar')) {
+          var btnEliminar = document.createElement('button');
+          btnEliminar.type = 'button';
+          btnEliminar.className = 'btn-eliminar';
+          btnEliminar.innerText = 'X';
+          btnEliminar.onclick = function () { nuevoGrupo.remove(); };
+          nuevaFilaMedida.appendChild(btnEliminar);
+        }
+        contenedor.appendChild(nuevoGrupo);
+      }
+
+      function agregarFilaComponente() {
+        var sistema = document.getElementById("sistema").value;
+        var listaComp = componentesPorSistema[sistema] || [];
+        if (!listaComp.length) return;
+
+        var contenedor = document.getElementById('contenedorComponentes');
+        var div = document.createElement('div');
+        div.className = 'fila-medida fila-componente';
+
+        var select = document.createElement('select');
+        select.className = 'componente-nombre';
+        select.innerHTML = '<option value="">Seleccione componente...</option>';
+        listaComp.forEach(function(c) {
+          select.innerHTML += '<option value="' + c + '">' + c + '</option>';
+        });
+
+        // Cantidad propia de este componente (ej. Pilar 3.4 = 80). Vacío = total de implantes.
+        var inputCant = document.createElement('input');
+        inputCant.type = 'number';
+        inputCant.min = '1';
+        inputCant.step = '1';
+        inputCant.className = 'componente-cantidad';
+        inputCant.placeholder = 'Cant. (vacío = total)';
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-eliminar';
+        btn.innerText = 'X';
+        btn.onclick = function() { div.remove(); };
+
+        div.appendChild(select);
+        div.appendChild(inputCant);
+        div.appendChild(btn);
+        contenedor.appendChild(div);
+      }
+
+      function resetFormulario() {
+        document.getElementById('loteMp').value = '';
+
+        var contMedidas = document.getElementById('contenedorMedidas');
+        while (contMedidas.children.length > 1) {
+          contMedidas.removeChild(contMedidas.lastChild);
+        }
+        var primerGrupo = contMedidas.children[0];
+        primerGrupo.querySelector('.medida').selectedIndex = 0;
+        var primeraFilaMedida = primerGrupo.querySelector('.fila-medida');
+        primeraFilaMedida.dataset.origen = '';
+        habilitarCantidadManual_(primeraFilaMedida.querySelector('.cantidad'));
+        primeraFilaMedida.querySelector('.cantidad').value = '';
+        var panel = primerGrupo.querySelector('.panel-disponibilidad');
+        panel.innerHTML = '';
+        panel.style.display = 'none';
+        var btnEliminarSobrante = primeraFilaMedida.querySelector('.btn-eliminar');
+        if (btnEliminarSobrante) btnEliminarSobrante.remove();
+
+        document.getElementById('contenedorComponentes').innerHTML = '';
+
+        actualizarSistema();
+      }
+
+      function enviarPaso1() {
+        var lote = document.getElementById('loteMp').value;
+        if (!lote || !/^[0-9]+$/.test(lote)) {
+          alert('El número de lote debe ser solo numérico.');
+          return;
+        }
+
+        var filas = document.querySelectorAll('#contenedorMedidas .fila-medida');
+        var detalles = [];
+        var incompleto = false;
+
+        // Si la medida tomó stock de más de un lote de Sala Blanca, se manda UNA fila por lote.
+        filas.forEach(function (fila) {
+          var med = fila.querySelector('.medida').value;
+          var cantInput = fila.querySelector('.cantidad');
+          var cant = cantInput.value;
+          if (!med || !cant) { incompleto = true; return; }
+
+          var grupo = fila.closest('.grupo-medida');
+          var panel = grupo ? grupo.querySelector('.panel-disponibilidad') : null;
+          var filasDisp = panel ? panel.querySelectorAll('.fila-disp') : [];
+          var huboLotes = false;
+
+          filasDisp.forEach(function (fd) {
+            var inputTomar = fd.querySelector('.in-tomar');
+            var tomado = Number(inputTomar ? inputTomar.value : 0) || 0;
+            if (tomado <= 0) return;
+            huboLotes = true;
+            var origenUnLote = etiquetaLote_(fd.dataset.lote) + (fd.dataset.ref ? ' (Ref ' + fd.dataset.ref + ')' : '') + ' x' + tomado;
+            detalles.push({ medida: med, cantidad: tomado, origen: origenUnLote });
+          });
+
+          if (!huboLotes) {
+            detalles.push({ medida: med, cantidad: cant, origen: '' });
+          }
+        });
+
+        var componentes = [];
+        var errorComp = '';
+        var filasComp = document.querySelectorAll('#contenedorComponentes .fila-componente');
+        filasComp.forEach(function(f) {
+          var nomElem = f.querySelector('.componente-nombre');
+          var nom = nomElem ? nomElem.value.trim() : "";
+          if (!nom) return;
+
+          var cantElem = f.querySelector('.componente-cantidad');
+          var cantTexto = cantElem ? cantElem.value.trim() : "";
+          if (cantTexto && !(Number(cantTexto) > 0 && Math.floor(Number(cantTexto)) === Number(cantTexto))) {
+            errorComp = 'La cantidad de "' + nom + '" tiene que ser un número entero mayor a 0 (o dejala vacía para usar el total).';
+          }
+
+          var tapElem = f.querySelector('.componente-tap');
+          var envaseElem = f.querySelector('.componente-envase');
+          componentes.push({
+            nombre: nom,
+            cantidad: cantTexto,  // "" = total de implantes
+            loteTap: (tapElem && tapElem.value.trim()) ? tapElem.value.trim() : "-",
+            loteEnvase: (envaseElem && envaseElem.value.trim()) ? envaseElem.value.trim() : "-"
+          });
+        });
+        if (errorComp) { alert(errorComp); return; }
+
+        if (incompleto) {
+          alert('Por favor complete todas las medidas y cantidades añadidas.');
+          return;
+        }
+
+        var datos = {
+          sistema: document.getElementById('sistema').value,
+          loteMp: lote,
+          producto: document.getElementById('producto').value,
+          detallesMedidas: detalles,
+          componentes: componentes
+        };
+
+        var btn = document.getElementById('btnEnviar');
+        var msg = document.getElementById('mensaje');
+        btn.disabled = true;
+        msg.style.color = "#333";
+        msg.innerText = "Guardando carga...";
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            msg.style.color = "green";
+            msg.innerText = res;
+            btn.disabled = false;
+            resetFormulario();
+          })
+          .withFailureHandler(function (err) {
+            msg.style.color = "red";
+            msg.innerText = "Error: " + err.message;
+            btn.disabled = false;
+          })
+          .guardarPaso1(datos);
+      }
+
+      window.onload = function () {
+        actualizarSistema();
+      };
+    </script>
+  </body>
+</html>
