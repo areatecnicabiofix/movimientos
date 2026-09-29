@@ -835,6 +835,36 @@ function refrescarTodo(silencioso) {
     var d = new Date();
     return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   }
+  /* Memoria en la tablet de la hora de inicio/fin de cada ciclo. Motivo: la lista de borradores se
+   * vuelve a dibujar cada 15 s con lo que está guardado; si el guardado del "Iniciar" todavía no había
+   * llegado, la hora de inicio se borraba de la tarjeta y al terminar el ciclo se guardaba solo la de fin. */
+  function cicloLocalKey_(f, n){ return 'abr_ciclo_' + f + '_' + n; }
+  function cicloLocalGet_(f, n){ try { return JSON.parse(localStorage.getItem(cicloLocalKey_(f, n)) || 'null') || {}; } catch (e) { return {}; } }
+  var BOR_REPARADO = {};
+  var BOR_LOTE = {};   // fila -> lote (para no mezclar tarjetas si cambian de fila)
+  function cicloLocalSet_(f, n, k, v){
+    try {
+      var c = cicloLocalGet_(f, n);
+      if (c.lote && BOR_LOTE[f] && c.lote !== BOR_LOTE[f]) c = {};
+      c[k] = v; c.lote = BOR_LOTE[f] || c.lote || '';
+      localStorage.setItem(cicloLocalKey_(f, n), JSON.stringify(c));
+    } catch (e) {}
+  }
+  function cicloLocalBorrar_(f){ for (var i = 1; i <= 3; i++) { try { localStorage.removeItem(cicloLocalKey_(f, i)); } catch (e) {} } }
+  // Completa lo que falta en lo guardado con lo que sabe esta tablet. Devuelve true si completó algo.
+  function completarCiclosLocal_(b){
+    var cambio = false;
+    b.ciclos = b.ciclos || [{ini:'',fin:''},{ini:'',fin:''},{ini:'',fin:''}];
+    for (var n = 1; n <= 3; n++) {
+      var c = b.ciclos[n-1] = b.ciclos[n-1] || { ini: '', fin: '' };
+      var loc = cicloLocalGet_(b.fila, n);
+      if (!loc.lote || loc.lote !== b.lote) continue;          // es de otro lote: no se usa
+      if (!c.ini && loc.ini) { c.ini = loc.ini; cambio = true; }
+      if (!c.fin && loc.fin && c.ini) { c.fin = loc.fin; cambio = true; }
+    }
+    return cambio;
+  }
+
   function bcMarcarListo_(f, n){
     var e = document.getElementById(cicloIdCrono(f,n));
     if (e) { e.textContent = 'Listo ✓'; e.style.background = '#dcfce7'; e.style.color = '#15803d'; }
@@ -901,6 +931,7 @@ function refrescarTodo(silencioso) {
 
     var ini = document.getElementById('bc'+n+'i_'+f);
   if (ini && !ini.value) ini.value = horaAhoraLav_();
+  if (ini) cicloLocalSet_(f, n, 'ini', ini.value);
     calcTotalCard(f);
   bcGuardarParcial_(f);
 
@@ -929,6 +960,9 @@ function refrescarTodo(silencioso) {
        localStorage.removeItem(storageKey);
 
         var fin = document.getElementById('bc'+n+'f_'+f).value = horaAhoraLav_();
+        cicloLocalSet_(f, n, 'fin', fin);
+        var iniEl = document.getElementById('bc'+n+'i_'+f), locI = cicloLocalGet_(f, n).ini;
+        if (iniEl && !iniEl.value && locI) iniEl.value = locI;   // por si la tarjeta se redibujó sin la hora de inicio
         calcTotalCard(f);
        bcMarcarListo_(f, n);
        bcGuardarParcial_(f);   
@@ -953,7 +987,7 @@ function refrescarTodo(silencioso) {
     if (elBtn) elBtn.style.display = 'none';
     if (restante <= 0) {
       var fin = document.getElementById('bc'+n+'f_'+f);
-      if (fin && !fin.value) { fin.value = horaAhoraLav_(); calcTotalCard(f); }
+      if (fin && !fin.value) { fin.value = horaAhoraLav_(); cicloLocalSet_(f, n, 'fin', fin.value); calcTotalCard(f); }
       bcMarcarListo_(f, n);
       bcAutoFinalizarSiCorresponde_(f); 
       if (n === 2) bcConsultarCicloTres_(f); 
@@ -969,7 +1003,9 @@ function refrescarTodo(silencioso) {
       if (BOR_CRONOS[key].seg <= 0){
       clearInterval(BOR_CRONOS[key].id); BOR_CRONOS[key].id = null;
       var finEl = document.getElementById('bc'+n+'f_'+f);
-      if (finEl) finEl.value = horaAhoraLav_();
+      if (finEl) { finEl.value = horaAhoraLav_(); cicloLocalSet_(f, n, 'fin', finEl.value); }
+      var iniEl2 = document.getElementById('bc'+n+'i_'+f), locI2 = cicloLocalGet_(f, n).ini;
+      if (iniEl2 && !iniEl2.value && locI2) iniEl2.value = locI2;
       calcTotalCard(f);
       bcMarcarListo_(f, n);
       bcGuardarParcial_(f);   
@@ -986,6 +1022,8 @@ function refrescarTodo(silencioso) {
     var cont = document.getElementById('listaBorradores');
     var respPrincipal = document.getElementById('responsable').value;
     if(!list.length){ cont.innerHTML = '<p style="color:var(--mut); font-size:13px;">No hay lotes en proceso.</p>'; return; }
+    var aReparar = [];
+    list.forEach(function(b){ BOR_LOTE[b.fila] = b.lote; if (completarCiclosLocal_(b)) aReparar.push(b.fila); });
     cont.innerHTML = list.map(function(b){
       var f = b.fila;
       var respTarjeta = b.responsable || respPrincipal || 'Javier';
@@ -1040,6 +1078,12 @@ function refrescarTodo(silencioso) {
         '</div></div>';
     }).join('');
     
+    // lo que faltaba en la hoja (p. ej. la hora de inicio) se vuelve a guardar
+    aReparar.forEach(function(f){
+      calcTotalCard(f);
+      if (Date.now() - (BOR_REPARADO[f] || 0) > 60000) { BOR_REPARADO[f] = Date.now(); bcGuardarParcial_(f); }   // como mucho 1 vez por minuto
+    });
+
     list.forEach(function(b){
       var f = b.fila;
       (b.ciclos||[]).forEach(function(c, idx){
@@ -1098,6 +1142,7 @@ function finalizarBorrador(f){
         for(var i=1; i<=3; i++) {
           localStorage.removeItem('crono_abs_' + f + '_' + i);
         }
+        cicloLocalBorrar_(f);
         msg(r.msg, true);
         actualizarInventarios();
         refrescarBorradores();
@@ -1114,6 +1159,7 @@ function finalizarBorrador(f){
         for(var i=1; i<=3; i++) {
           localStorage.removeItem('crono_abs_' + f + '_' + i);
         }
+        cicloLocalBorrar_(f);
         msg(r.msg, true);
         actualizarInventarios();
         refrescarBorradores();
