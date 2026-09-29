@@ -74,6 +74,7 @@
     <div class="tab" id="tb_lt" onclick="ver('lt')">Tiempos por etapa</div>
     <div class="tab" id="tb_rend" onclick="ver('rend')">Rendimiento</div>
     <div class="tab" id="tb_prod" onclick="ver('prod')">Productividad</div>
+    <div class="tab" id="tb_qp" onclick="ver('qp')">Qué producir</div>
     <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
   </div>
 
@@ -150,6 +151,9 @@
       <div class="mut">Si entra más de lo que sale, la cola de esa etapa crece (se está juntando trabajo). Incluye lo descartado como "sale".</div>
       <div class="leyenda"><span><i class="sq" style="background:var(--s1)"></i>Entra</span><span><i class="sq" style="background:var(--s2)"></i>Sale</span></div>
       <div class="mini-grid" id="gFlujo"><p class="mut">Cargando…</p></div></div>
+    <div class="card"><h2>Stock de cada etapa, día a día</h2>
+      <div class="mut" id="gHistNota">Foto del stock que se guarda todas las noches (desde el 29/09/2026). En semana o mes, se muestra el último día de cada período.</div>
+      <div class="mini-grid" id="gHist" style="margin-top:8px"><p class="mut">Cargando…</p></div></div>
     <div class="card"><h2>En proceso hoy, por etapa y antigüedad</h2>
       <div class="mut">Mismas cantidades que la pestaña En proceso (sin la carga inicial).</div>
       <div class="leyenda"><span><i class="sq" style="background:var(--o1)"></i>Hasta 7 días</span><span><i class="sq" style="background:var(--o2)"></i>8 a 14 días</span><span><i class="sq" style="background:var(--o3)"></i>Más de 14 días</span></div>
@@ -197,9 +201,27 @@
     </div>
     <div class="card"><h2>Blasting — bandejas por operario</h2><div class="tabla-wrap" id="pBand"></div></div>
     <div class="card"><h2>Blasting — control del lote</h2><div class="tabla-wrap" id="pBctl"></div></div>
+    <div class="card"><h2>Mecanizado — producción por operario</h2><div class="tabla-wrap" id="pMec"><p class="mut">Cargando…</p></div></div>
     <div class="card"><h2>Control de piezas (Mecanizado)</h2><div class="tabla-wrap" id="pPz"></div></div>
     <div class="card"><h2>Control de Calidad</h2><div class="tabla-wrap" id="pCc"></div></div>
     <div class="card"><h2>Motivos de pausa</h2><div class="tabla-wrap" id="pPausa"></div></div>
+  </div>
+
+  <!-- ================= QUÉ PRODUCIR ================= -->
+  <div id="p_qp" class="hide">
+    <div class="fila">
+      <select id="qpDias" onchange="cargarQp()">
+        <option value="60">Salidas de los últimos 60 días</option><option value="90" selected>Últimos 90 días</option><option value="180">Últimos 180 días</option>
+      </select>
+      <select id="qpProd" onchange="renderQp()"><option value="">Todos los productos</option></select>
+      <label class="mut"><input type="checkbox" id="qpSolo" checked onchange="renderQp()"> Solo medidas que salen</label>
+      <label class="mut"><input type="checkbox" id="qpJuntar" checked onchange="renderQp()"> Juntar con y sin tetón</label>
+      <label class="mut" title="El Basal se convierte en Tratado recién al pasar de Depósito a Control: el stock en proceso figura como Basal"><input type="checkbox" id="qpBasal" checked onchange="renderQp()"> Juntar Basal y Basal Tratado</label>
+    </div>
+    <p class="mut">Para cada medida: lo que hay (Sala Blanca + en proceso + lo que falta en máquina) y cuánto sale por semana (envasado: Sala Blanca → Salida).
+      <b>Cobertura</b> = cuántas semanas alcanza lo que hay al ritmo de salida. Arriba, las que primero se quedan sin stock.</p>
+    <div class="kpis" id="qpKpis"></div>
+    <div class="card"><div class="tabla-wrap" id="qpLista"><p class="mut">Cargando…</p></div></div>
   </div>
 
   <!-- ================= COTAS ================= -->
@@ -219,6 +241,7 @@
 
 <script>
 var GRA = null;
+var QP = null, MECOP = {};
 var AUD = [], COTAS = [], ACT = 'ale', WIP = null, WETAPA = '', ALE = [], LT = null, REND = null, PROD = null, AUD_OK = false, DERIVA = [];
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -230,7 +253,7 @@ function rpc(nombre, args){
 }
 function ver(t){
   ACT = t;
-  ['ale','aud','wip','lote','gra','lt','rend','prod','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
+  ['ale','aud','wip','lote','gra','lt','rend','prod','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
   if (t === 'cotas' && !COTAS.length) cargarCotas();
   if (t === 'wip' && !WIP) cargarWip();
   if (t === 'aud' && !AUD_OK) cargarAud();
@@ -238,6 +261,7 @@ function ver(t){
   if (t === 'gra' && !GRA) cargarGra();
   if (t === 'rend' && !REND) cargarRend();
   if (t === 'prod' && !PROD) cargarProd();
+  if (t === 'qp' && !QP) cargarQp();
 }
 
 /* ---------------- Auditoría ---------------- */
@@ -417,9 +441,11 @@ function cargarGra(){
   var r = rangoGra($('gDesde').value);
   $('gMini').innerHTML = '<p class="mut">Cargando…</p>';
   var pWip = WIP ? Promise.resolve(WIP) : rpc('wip_etapas').then(function(d){ WIP = d || []; return WIP; });
-  Promise.all([rpc('sector_diario', { p_desde: r.desde }), pWip, rpc('flujo_etapas', { p_desde: r.desde })]).then(function(res){
+  Promise.all([rpc('sector_diario', { p_desde: r.desde }), pWip, rpc('flujo_etapas', { p_desde: r.desde }),
+               rpc('stock_diario_etapas', { p_desde: r.desde }).catch(function(){ return []; })]).then(function(res){
     GRA = { datos: (res[0] || []).filter(function(x){ return x.dia <= r.hasta; }), r: r,
-            flujo: (res[2] || []).filter(function(x){ return x.dia <= r.hasta; }) };
+            flujo: (res[2] || []).filter(function(x){ return x.dia <= r.hasta; }),
+            hist: (res[3] || []).filter(function(x){ return x.dia <= r.hasta; }) };
     var prods = {}; GRA.datos.forEach(function(x){ prods[x.producto] = 1; }); (WIP || []).forEach(function(w){ if (w.producto) prods[w.producto] = 1; });
     var sel = $('gProd'), act = sel.value;
     sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+' value="'+esc(p)+'">'+esc(p)+'</option>'; }).join('');
@@ -501,6 +527,30 @@ function renderGra(){
     return '<div class="mini"><div class="t">'+esc(g.slice(2))+'</div><div class="s">Entraron '+num(te,0)+' · salieron '+num(ts,0)+' · '+txt+'</div>' +
       '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Entra y sale en '+esc(g.slice(2))+'">'+grid+bars+xl+hits+'</svg></div>';
   }).join('');
+  // ---- stock por etapa, día a día (nivel: en semana/mes se toma el último día del período)
+  var HS = {}, HO = {}, HD = {};
+  (GRA.hist || []).forEach(function(x){ if (PF && x.producto !== PF) return;
+    var e = x.etapa; HO[e] = +x.orden; var k = claveGra(x.dia, modo); var g = HS[e] = HS[e] || {};
+    var c = g[k] = g[k] || { dia: '', v: 0 };
+    if (x.dia > c.dia) { c.dia = x.dia; c.v = 0; }
+    if (x.dia === c.dia) c.v += +x.cantidad; HD[x.dia] = 1; });
+  var nDias = Object.keys(HD).length, etH = Object.keys(HS).sort(function(a, b){ return HO[a] - HO[b]; });
+  $('gHist').innerHTML = !etH.length ? '<p class="mut">Todavía no hay fotos guardadas en este período.</p>' : etH.map(function(e){
+    var serie = per.map(function(k){ return HS[e][k] ? HS[e][k].v : null; });
+    var vals = serie.filter(function(v){ return v != null; }), ult = vals.length ? vals[vals.length - 1] : 0;
+    var mx = niceMax(Math.max.apply(null, vals.concat([1])));
+    var W = 300, H = 110, pl = 38, pr = 8, pt = 8, pb = 18, n = per.length;
+    var X = function(i){ return pl + (n === 1 ? (W - pl - pr) / 2 : i * (W - pl - pr) / (n - 1)); }, Y = function(v){ return pt + (H - pt - pb) * (1 - v / mx); };
+    var d = '', ab = false, pts = '';
+    serie.forEach(function(v, i){ if (v == null){ ab = false; return; } d += (ab ? 'L' : 'M') + X(i) + ',' + Y(v); ab = true;
+      pts += '<circle cx="'+X(i)+'" cy="'+Y(v)+'" r="3" style="fill:var(--s1);stroke:var(--surface-1);stroke-width:1.5"><title>'+etqGra(per[i], modo, true)+': '+num(v,0)+'</title></circle>'; });
+    var grid = [0, mx/2, mx].map(function(v){ var y = Y(v); return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--grid)"/><text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end">'+num(v,0)+'</text>'; }).join('');
+    var xl = idxEtq(n).map(function(i){ return '<text x="'+X(i)+'" y="'+(H-4)+'" text-anchor="'+(n > 6 && i === n-1 ? 'end' : n > 6 && i === 0 ? 'start' : 'middle')+'">'+etqGra(per[i], modo, false)+'</text>'; }).join('');
+    return '<div class="mini"><div class="t">'+esc(e)+'</div><div class="s">Último: '+num(ult,0)+' piezas</div>' +
+      '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Stock de '+esc(e)+' por período">'+grid+'<path d="'+d+'" fill="none" style="stroke:var(--s1)" stroke-width="2" stroke-linejoin="round"/>'+pts+xl+'</svg></div>';
+  }).join('');
+  if (nDias < 2 && etH.length) $('gHist').insertAdjacentHTML('afterbegin', '<p class="mut" style="grid-column:1/-1">Hay una sola foto guardada: a partir de mañana se empieza a ver la evolución.</p>');
+
   // ---- barras horizontales apiladas: WIP por etapa y antigüedad
   var E = {}, ord = [];
   (WIP || []).forEach(function(w){ if (w.inicial || (PF && w.producto !== PF)) return; if (!E[w.etapa]){ E[w.etapa] = { o: w.orden, a: 0, b: 0, c: 0 }; ord.push(w.etapa); }
@@ -647,6 +697,70 @@ function cargarProd(){
     renderProd();
   }).catch(function(e){ $('pBand').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
+/* ---------- Mecanizado por operario (desde los movimientos de "En Máquina") ---------- */
+function renderMecOp(){
+  var dias = $('pDesde').value, pf = $('pProd').value, box = $('pMec');
+  function pintar(lista){
+    var R = {};
+    (lista || []).forEach(function(r){
+      if (pf && r.producto !== pf) return;
+      var o = R[r.responsable] = R[r.responsable] || { cierres: 0, dias: 0, buenas: 0, rech: 0, setup: 0, exc: 0, bt: 0, mt: 0 };
+      o.cierres += +r.cierres; o.dias = Math.max(o.dias, +r.dias); o.buenas += +r.buenas; o.rech += +r.rechazo; o.setup += +r.setup; o.exc += +r.excedente;
+      if (r.min_pieza != null && +r.buenas_con_tiempo > 0){ o.bt += +r.buenas_con_tiempo; o.mt += (+r.min_pieza) * (+r.buenas_con_tiempo); }
+    });
+    box.innerHTML = '<p class="mut">Piezas buenas que entregó cada uno al cerrar en máquina. Min/pieza = el que cargan al cerrar, promediado por cantidad. Rechazo = descarte de calidad en máquina.</p>' +
+      tablaSimple(['Operario', 'Cierres', 'Días con cierre', 'Piezas buenas', 'Rechazadas', '% rechazo', 'Setup', 'Excedente', 'Min/pieza', 'Piezas/hora'],
+        Object.keys(R).sort(function(a, b){ return R[b].buenas - R[a].buenas; }).map(function(k){
+          var o = R[k], tot = o.buenas + o.rech, mp = o.bt ? o.mt / o.bt : null;
+          return [esc(k), o.cierres, o.dias, num(o.buenas,0), num(o.rech,0), tot ? num(100 * o.rech / tot, 2) + ' %' : '—', num(o.setup,0), num(o.exc,0),
+            mp ? num(mp, 2) : '—', mp ? num(60 / mp, 1) : '—'];
+        }));
+  }
+  if (MECOP[dias]) { pintar(MECOP[dias]); return; }
+  box.innerHTML = '<p class="mut">Cargando…</p>';
+  rpc('mecanizado_operarios', { p_desde: desdeISO(Number(dias)) }).then(function(d){ MECOP[dias] = d || []; if ($('pDesde').value === dias) pintar(MECOP[dias]); })
+    .catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+
+/* ---------------- Qué producir ---------------- */
+function cargarQp(){
+  $('qpLista').innerHTML = '<p class="mut">Cargando…</p>';
+  rpc('que_producir', { p_dias: Number($('qpDias').value) }).then(function(d){
+    QP = d || [];
+    var prods = {}; QP.forEach(function(r){ prods[r.producto] = 1; });
+    var sel = $('qpProd'), act = sel.value;
+    sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+' value="'+esc(p)+'">'+esc(p)+'</option>'; }).join('');
+    renderQp();
+  }).catch(function(e){ $('qpLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+function renderQp(){
+  var pf = $('qpProd').value, solo = $('qpSolo').checked, juntar = $('qpJuntar').checked;
+  var base = QP || [];
+  if ($('qpBasal').checked) base = base.map(function(r){ return Object.assign({}, r, { producto: String(r.producto).replace(/^Monopieza Basal (Tratado|Pulido)$/i, 'Monopieza Basal') }); });
+  if (juntar || $('qpBasal').checked) {   // el tetón a veces queda cargado distinto en la salida que en producción: se suma por producto + medida
+    var J = {}, orden = [];
+    base.forEach(function(r){ var k = r.producto + '|' + r.medida + (juntar ? '' : '|' + r.teton);
+      if (!J[k]) { J[k] = { producto: r.producto, teton: '', medida: r.medida, sala_blanca: 0, en_proceso: 0, en_maquina: 0, salidas: 0, por_semana: 0, tet: {} }; orden.push(k); }
+      var o = J[k]; o.sala_blanca += +r.sala_blanca; o.en_proceso += +r.en_proceso; o.en_maquina += +r.en_maquina; o.salidas += +r.salidas; o.por_semana += +r.por_semana; if (r.teton) o.tet[r.teton] = 1; });
+    base = orden.map(function(k){ var o = J[k], tot = o.sala_blanca + o.en_proceso + o.en_maquina;
+      o.teton = Object.keys(o.tet).join(' / '); o.cobertura_semanas = o.por_semana > 0 ? Math.round(10 * tot / o.por_semana) / 10 : null; return o; });
+    base.sort(function(a, b){ var ca = a.cobertura_semanas == null ? 1e9 : a.cobertura_semanas, cb = b.cobertura_semanas == null ? 1e9 : b.cobertura_semanas; return ca - cb || b.salidas - a.salidas; });
+  }
+  var lista = base.filter(function(r){ return (!pf || r.producto === pf) && (!solo || +r.salidas > 0); });
+  var sin = lista.filter(function(r){ return +r.salidas > 0 && (+r.sala_blanca + +r.en_proceso + +r.en_maquina) <= 0; }).length;
+  var bajo = lista.filter(function(r){ return r.cobertura_semanas != null && +r.cobertura_semanas > 0 && +r.cobertura_semanas < 4; }).length;
+  $('qpKpis').innerHTML = [['Medidas que salen y no hay nada', sin], ['Alcanza menos de 4 semanas', bajo], ['Medidas en la lista', lista.length]]
+    .map(function(k){ return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>'; }).join('');
+  if (!lista.length){ $('qpLista').innerHTML = '<p class="mut">Sin datos para ese filtro.</p>'; return; }
+  $('qpLista').innerHTML = '<table><thead><tr><th>Producto</th><th>Tetón</th><th>Medida</th><th>Sala Blanca</th><th>En proceso</th><th>En máquina</th><th>Total</th><th>Sale por semana</th><th>Cobertura</th></tr></thead><tbody>' +
+    lista.map(function(r){
+      var tot = +r.sala_blanca + +r.en_proceso + +r.en_maquina, c = r.cobertura_semanas;
+      var pill = c == null ? '<span class="mut">no sale</span>' : '<span class="pill '+(+c < 4 ? 'd14' : +c < 8 ? 'd7' : 'd0')+'">'+(+c <= 0 ? 'sin stock' : num(c,1)+' sem.')+'</span>';
+      return '<tr><td>'+esc(r.producto)+'</td><td>'+esc(r.teton)+'</td><td><b>'+esc(r.medida)+'</b></td><td class="r">'+num(r.sala_blanca,0)+'</td><td class="r">'+num(r.en_proceso,0)+'</td>' +
+        '<td class="r">'+(+r.en_maquina ? num(r.en_maquina,0) : '')+'</td><td class="r"><b>'+num(tot,0)+'</b></td><td class="r">'+(+r.por_semana ? num(r.por_semana,1) : '')+'</td><td>'+pill+'</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
 function tablaSimple(cols, filas){
   if (!filas.length) return '<p class="mut">Sin datos en ese período.</p>';
   return '<table><thead><tr>' + cols.map(function(c){ return '<th>'+c+'</th>'; }).join('') + '</tr></thead><tbody>' +
@@ -713,6 +827,7 @@ function renderProd(){
   });
   $('pCc').innerHTML = tablaSimple(['Responsable', 'Controles', 'Piezas', 'Min por pieza', 'Rechazadas', 'Pausa total (min)'],
     Object.keys(cc).sort().map(function(k){ var o = cc[k]; return [esc(k), o.n, num(o.pz,0), d2(o.min, o.pz), num(o.rech,0), num(o.pausa,0)]; }));
+  renderMecOp();
   $('pPausa').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces'],
     Object.keys(mot).sort(function(a, b){ return mot[b] - mot[a]; }).map(function(k){ var kk = k.split('|'); return [esc(kk[0]), esc(kk[1]), mot[k]]; }))
     .replace(/<td class="r">([^<]*)<\/td><td class="r">/g, '<td>$1</td><td class="r">');
