@@ -1025,7 +1025,11 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     };
   }
   function prcGuardarAvance(f){
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcActualizar(prcDatosCard(f));
+    if (mecOcupado_('prc'+f)) { prcMsg('Todavía se está guardando, esperá un momento…', true); return; }
+    prcMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); })
+      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); })
+      .prcActualizar(prcDatosCard(f));
   }
   function prcPausar(f){
     if (mecOcupado_('prc'+f)) return;
@@ -1043,8 +1047,11 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       .prcReanudar({ fila:f, hora:prcHoraAhora() });
   }
   function prcCerrarControl(f){
+    if (mecOcupado_('prc'+f)) { prcMsg('Todavía se está guardando, esperá un momento…', true); return; }
     var d = prcDatosCard(f); d.hora = prcHoraAhora();
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcCerrar(d);
+    prcMsg('Cerrando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcActualizar(); })
+      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); }).prcCerrar(d);
   }
   function prcEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control? El lote vuelve a la lista de espera.', function(ok){
@@ -1196,7 +1203,11 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   };
 }
   function pcpGuardarAvance(f){
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcActualizar(pcpDatosCard(f));
+    if (mecOcupado_('pcp'+f)) { pcpMsg('Todavía se está guardando, esperá un momento…', true); return; }
+    pcpMsg('Guardando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); })
+      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); })
+      .prcActualizar(pcpDatosCard(f));
   }
   function pcpPausar(f){
     if (mecOcupado_('pcp'+f)) return;
@@ -1214,8 +1225,11 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       .prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
   }
   function pcpCerrarControl(f){
+    if (mecOcupado_('pcp'+f)) { pcpMsg('Todavía se está guardando, esperá un momento…', true); return; }
     var d = pcpDatosCard(f); d.hora = prcHoraAhora();
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcCerrar(d);
+    pcpMsg('Cerrando…', true);
+    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); })
+      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); }).prcCerrar(d);
   }
   function pcpEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control de prueba? Vuelve a la lista de espera.', function(ok){
