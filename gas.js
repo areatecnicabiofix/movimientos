@@ -386,6 +386,37 @@
     avisosCargar(); setInterval(avisosCargar, 5 * 60000);
   });
 
+  /* ---------------- Tiempo real ----------------
+   * Cuando alguien guarda algo, Supabase marca qué cambió (tabla "cambios": 'movimientos',
+   * 'hoja:<nombre>', 'asignaciones'). Una página que define
+   *   window.BIOFIX_REFRESCAR = function () { ... }     (qué recargar)
+   *   window.BIOFIX_CAMBIOS   = ['movimientos', 'hoja:Control de Calidad']   (opcional: qué le importa)
+   * se refresca sola a los 1-2 segundos, sin esperar a su recarga periódica. */
+  sesionLista.then(function () { setTimeout(function () {   // se espera a que la página termine de definir sus funciones
+    if (typeof window.BIOFIX_REFRESCAR !== 'function' || !sb.channel) return;
+    var t = null;
+    function interesa(clave) { var filtro = window.BIOFIX_CAMBIOS; return !filtro || filtro.some(function (f) { return String(clave || '').indexOf(f) === 0; }); }
+    try {
+      sb.channel('bf-cambios-' + (PANTALLA || 'x'))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cambios' }, function (p) {
+          var clave = (p && p.new && p.new.clave) || (p && p.old && p.old.clave);
+          if (!interesa(clave)) return;
+          clearTimeout(t);
+          t = setTimeout(function () {
+            if (document.hidden) { window.BIOFIX_PENDIENTE_REFRESCO = true; return; }
+            try { window.BIOFIX_REFRESCAR(); } catch (e) { console.warn('refresco: ' + e.message); }
+          }, 1500);
+        })
+        .subscribe();
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && window.BIOFIX_PENDIENTE_REFRESCO) {
+          window.BIOFIX_PENDIENTE_REFRESCO = false;
+          try { window.BIOFIX_REFRESCAR(); } catch (e) { }
+        }
+      });
+    } catch (e) { console.warn('tiempo real no disponible: ' + e.message); }
+  }, 1000); });
+
   window.BIOFIX = {
     supabase: sb,
     llamar: llamar,
