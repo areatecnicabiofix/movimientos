@@ -224,9 +224,25 @@
     return colaVaciada().then(function () { return intentar(0); });   // primero lo que estaba pendiente
   }
 
-  function llamarSinMedir(fn, args, rid) {
+  /* Sesión siempre al día: el permiso del puesto (token) dura 1 hora. Si la tablet estuvo suspendida
+   * o sin señal, el renovador automático puede no haber corrido: acá se renueva antes de usarlo si le
+   * queda menos de 2 minutos, y si igual el servidor lo rechaza, se renueva y se reintenta una vez. */
+  function sesionFresca(forzar) {
     return sesionLista.then(function () { return sb.auth.getSession(); }).then(function (r) {
       var s = r.data && r.data.session;
+      if (!s) return null;
+      var vence = (Number(s.expires_at) || 0) * 1000;
+      if (!forzar && vence - Date.now() > 120000) return s;
+      return sb.auth.refreshSession().then(function (rr) {
+        return (rr && rr.data && rr.data.session) || (forzar ? null : s);
+      }, function () { return forzar ? null : s; });
+    });
+  }
+  window.addEventListener('online', function () { sesionFresca(false); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) sesionFresca(false); });
+
+  function llamarSinMedir(fn, args, rid, reintento) {
+    return sesionFresca(!!reintento).then(function (s) {
       if (!s) { mostrarLogin(); throw new Error('Sesión vencida. Volvé a ingresar.'); }
       return fetch(CFG.apiUrl, {
         method: 'POST',
@@ -236,6 +252,9 @@
       if (!resp.ok) throw new Error('Apps Script respondió ' + resp.status);
       return resp.json();
     }).then(function (j) {
+      if (j && !j.ok && !reintento && /sesi[oó]n (vencida|no iniciada)/i.test(j.error || '')) {
+        return llamarSinMedir(fn, args, rid, true);            // se renueva el permiso y se prueba otra vez
+      }
       if (!j || !j.ok) throw new Error((j && j.error) || 'Error desconocido');
       if (j.t) {   // botones que guardan: el Apps Script informa cuánto tardó cada parte
         try {
@@ -267,7 +286,7 @@
   function ejecutar(fn, args) {
     var L = local(fn);
     if (L) {
-      return sesionLista.then(function () {
+      return sesionLista.then(function () { return sesionFresca(false); }).then(function () {   // permiso al día antes de leer
         var t0 = performance.now();
         return Promise.resolve().then(function () { return L.apply(null, args); }).then(
           function (d) { medir(fn + ' [supabase]', t0, true); return d; },
