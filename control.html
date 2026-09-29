@@ -120,6 +120,18 @@
     });
     return out;
   }
+  /* Pausa/Reanudar: el Apps Script ya respondió, pero la copia en Supabase puede tardar en ponerse
+   * al día. Mientras tanto se muestra lo que respondió el Apps Script (hasta 20 min o hasta que coincidan). */
+  window.BF_PAUSA_OVR = window.BF_PAUSA_OVR || {};
+  function aplicarPausaLocal(lista) {
+    var ovr = window.BF_PAUSA_OVR, ahora = Date.now();
+    (lista || []).forEach(function (x) {
+      var o = ovr[x.id]; if (!o) return;
+      if (ahora - o.t > 20 * 60000 || x.enPausa === o.en) { delete ovr[x.id]; return; }
+      x.enPausa = o.en; x.pausaDesde = o.en ? (o.desde || x.pausaDesde || '') : '';
+    });
+    return lista;
+  }
   function conPlanB(fn, calc) {
     return function () {
       return datos().then(calc).catch(function (e) {
@@ -130,7 +142,7 @@
   }
   window.BIOFIX_LOCAL = {
     ctlObtenerLotesParaControl: conPlanB('ctlObtenerLotesParaControl', lotesParaControl),
-    ctlListarEnControl:         conPlanB('ctlListarEnControl', listarEnControl)
+    ctlListarEnControl:         conPlanB('ctlListarEnControl', function (d) { return aplicarPausaLocal(listarEnControl(d)); })
   };
 
   // ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado arriba
@@ -775,18 +787,43 @@
     setTimeout(function () { esperarLoteLibre_(f, cb, intentos - 1); }, 200);
   }
 
+  // Pausa / Reanudar: un solo toque (el botón queda "Guardando…" hasta que responde) y la tarjeta
+  // muestra enseguida lo que respondió el Apps Script, sin esperar a que se actualice la copia.
+  var PAUSA_EN_CURSO = {};
+  function marcarPausaLocal_(f, en, desde) { window.BF_PAUSA_OVR[f] = { en: en, desde: desde || '', t: Date.now() }; }
+  function botonesPausa_(f, texto) {
+    document.querySelectorAll('button[onclick="pausar(\''+f+'\')"], button[onclick="reanudar(\''+f+'\')"]').forEach(function (b) {
+      b.disabled = true; b.textContent = texto;
+    });
+  }
   function pausar(f) {
+    if (PAUSA_EN_CURSO[f]) return;
+    PAUSA_EN_CURSO[f] = true;
     var sel = document.getElementById('motivo_'+f);
-    var motivo = sel ? sel.value : '';
+    var motivo = sel ? sel.value : '', hora = horaAhoraCdc();
+    botonesPausa_(f, 'Pausando…');
     google.script.run
-      .withSuccessHandler(function(r){ msg(r.msg, true); refrescarEnControl(); })
-      .withFailureHandler(function(e){ msg(e.message, false); })
-      .ctlPausar({ id: f, hora: horaAhoraCdc(), motivo: motivo });
+      .withSuccessHandler(function(r){ delete PAUSA_EN_CURSO[f]; marcarPausaLocal_(f, true, hora); msg(r.msg, true); refrescarEnControl(); })
+      .withFailureHandler(function(e){
+        delete PAUSA_EN_CURSO[f];
+        if (/ya est[aá] en pausa/i.test(e.message)) { marcarPausaLocal_(f, true, ''); msg('Ya estaba en pausa (se actualiza la tarjeta).', true); }
+        else msg(e.message, false);
+        refrescarEnControl();
+      })
+      .ctlPausar({ id: f, hora: hora, motivo: motivo });
   }
   function reanudar(f) {
+    if (PAUSA_EN_CURSO[f]) return;
+    PAUSA_EN_CURSO[f] = true;
+    botonesPausa_(f, 'Reanudando…');
     google.script.run
-      .withSuccessHandler(function(r){ msg(r.msg, true); refrescarEnControl(); })
-      .withFailureHandler(function(e){ msg(e.message, false); })
+      .withSuccessHandler(function(r){ delete PAUSA_EN_CURSO[f]; marcarPausaLocal_(f, false); msg(r.msg, true); refrescarEnControl(); })
+      .withFailureHandler(function(e){
+        delete PAUSA_EN_CURSO[f];
+        if (/no estaba en pausa/i.test(e.message)) { marcarPausaLocal_(f, false); msg('Ya estaba reanudado (se actualiza la tarjeta).', true); }
+        else msg(e.message, false);
+        refrescarEnControl();
+      })
       .ctlReanudar({ id: f, hora: horaAhoraCdc() });
   }
 
