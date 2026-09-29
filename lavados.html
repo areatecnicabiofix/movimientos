@@ -6,6 +6,9 @@
 <title>Lavados Grueso / Final — Bio-Fix</title>
 <!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
 <script>window.BIOFIX_PANTALLA = 'lavados';</script>
+<script>/* Tiempo real: cuando cambia algo en Supabase, la pantalla se recarga sola (ver gas.js) */
+window.BIOFIX_REFRESCAR = function () { refrescarTodo(); };
+window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'hoja:Lavado Grueso'];</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
