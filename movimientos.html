@@ -70,9 +70,7 @@
 <body>
 
 <datalist id="listaResponsables">
-  <option value="Pablo"><option value="Miguel"><option value="Marcos"><option value="Javier">
-  <option value="Gabriela"><option value="Luciano"><option value="Marcela"><option value="Romina">
-  <option value="Lourdes Deasis">
+  <option value="Sol Caprino">
 </datalist>
 
 <div class="card">
@@ -102,7 +100,7 @@
       <div class="bloque-falla hidden" id="bloqueFalla">
         <span>Revisión con falla:</span>
         <input type="text" id="inMotivo" class="ancho" placeholder="Motivo de la falla">
-        <input type="text" id="inResp" class="ancho" placeholder="Responsable revisión" list="listaResponsables">
+        <input type="text" id="inResp" class="ancho" value="Sol Caprino" placeholder="Responsable revisión" list="listaResponsables">
       </div>
     </div>
   </div>
@@ -138,7 +136,7 @@
       </div>
       <div>
         <label>Responsable de la revisión</label>
-        <input id="revResp" list="listaResponsables" placeholder="Nombre">
+        <input id="revResp" list="listaResponsables" value="Sol Caprino" placeholder="Nombre">
       </div>
       <div class="r-full" style="display:flex;justify-content:flex-end">
         <button class="btn-rojo" id="btnFalla" onclick="registrarFalla()">Registrar falla y mandar a Lavado Final</button>
