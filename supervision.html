@@ -74,6 +74,7 @@
     <div class="tab" id="tb_lt" onclick="ver('lt')">Tiempos por etapa</div>
     <div class="tab" id="tb_rend" onclick="ver('rend')">Rendimiento</div>
     <div class="tab" id="tb_prod" onclick="ver('prod')">Productividad</div>
+    <div class="tab" id="tb_rp" onclick="ver('rp')">Rechazos y pausas</div>
     <div class="tab" id="tb_qp" onclick="ver('qp')">Qué producir</div>
     <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
   </div>
@@ -170,7 +171,7 @@
         <option value="90" selected>Últimos 90 días</option><option value="3650">Todos</option>
       </select>
     </div>
-    <p class="mut">Días entre la primera vez que el lote llegó a cada etapa y la primera vez que llegó a la siguiente. En rojo, el tramo que más tarda de cada producto.</p>
+    <p class="mut">Tiempo (días y horas) entre la primera vez que el lote llegó a cada etapa y la primera vez que llegó a la siguiente. En rojo, el tramo que más tarda de cada producto.</p>
     <div class="kpis" id="ltKpis"></div>
     <div class="card"><h2>Promedio por producto</h2><div class="tabla-wrap" id="ltProm"></div></div>
     <div class="card"><h2>Lote por lote</h2><div class="tabla-wrap" id="ltLista"></div></div>
@@ -205,6 +206,26 @@
     <div class="card"><h2>Control de piezas (Mecanizado)</h2><div class="tabla-wrap" id="pPz"></div></div>
     <div class="card"><h2>Control de Calidad</h2><div class="tabla-wrap" id="pCc"></div></div>
     <div class="card"><h2>Motivos de pausa</h2><div class="tabla-wrap" id="pPausa"></div></div>
+  </div>
+
+  <!-- ================= RECHAZOS Y PAUSAS ================= -->
+  <div id="p_rp" class="hide">
+    <div class="fila">
+      <select id="rpDesde" onchange="renderRp()">
+        <option value="30">Últimos 30 días</option><option value="90" selected>Últimos 90 días</option><option value="180">Últimos 180 días</option><option value="365">Último año</option>
+      </select>
+      <select id="rpEtapa" onchange="renderRp()"><option value="">Todas las etapas</option></select>
+      <select id="rpProd" onchange="renderRp()"><option value="">Todos los productos</option></select>
+    </div>
+    <div class="kpis" id="rpKpis"></div>
+    <div class="card"><h2>Rechazo por etapa</h2>
+      <p class="mut">Piezas que pasaron por cada etapa y cuántas se descartaron por calidad. "Cada cuántos días" = días del período ÷ días en que hubo algún rechazo. Setup y excedente (Mecanizado) van aparte: no son rechazo de calidad.</p>
+      <div class="tabla-wrap" id="rpEtapas"><p class="mut">Cargando…</p></div></div>
+    <div class="card"><h2>Rechazo por mes</h2><div class="tabla-wrap" id="rpMeses"></div></div>
+    <div class="card"><h2>Descartes uno por uno</h2><div class="tabla-wrap" id="rpLista"></div></div>
+    <div class="card"><h2>Motivos de pausa por sector</h2>
+      <p class="mut">Cuántas veces se pausó por cada motivo (un control o bandeja con varios motivos suma uno en cada motivo).</p>
+      <div class="tabla-wrap" id="rpPausas"><p class="mut">Cargando…</p></div></div>
   </div>
 
   <!-- ================= QUÉ PRODUCIR ================= -->
@@ -249,7 +270,7 @@ function rpc(nombre, args){
 }
 function ver(t){
   ACT = t;
-  ['ale','aud','wip','lote','gra','lt','rend','prod','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
+  ['ale','aud','wip','lote','gra','lt','rend','prod','rp','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
   if (t === 'cotas' && !COTAS.length) cargarCotas();
   if (t === 'wip' && !WIP) cargarWip();
   if (t === 'aud' && !AUD_OK) cargarAud();
@@ -258,6 +279,7 @@ function ver(t){
   if (t === 'rend' && !REND) cargarRend();
   if (t === 'prod' && !PROD) cargarProd();
   if (t === 'qp' && !QP) cargarQp();
+  if (t === 'rp' && !RP) cargarRp();
 }
 
 /* ---------------- Auditoría ---------------- */
@@ -600,14 +622,16 @@ function cargarLt(){
     renderLt();
   }).catch(function(e){ $('ltLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
-function fmtD(x){ return x == null ? '<span class="mut">—</span>' : num(x, 1); }
+// Días con decimales -> "2 d 5 h" (más fácil de leer que "2,2")
+function dh(x){ if (x == null) return '—'; var h = Math.round(x * 24); if (h < 24) return h + ' h'; var d = Math.floor(h / 24); h = h % 24; return d + ' d' + (h ? ' ' + h + ' h' : ''); }
+function fmtD(x){ return x == null ? '<span class="mut">—</span>' : dh(x); }
 function renderLt(){
   var p = $('ltProd').value, lim = Date.now() - Number($('ltDesde').value) * 86400000;
   var lista = (LT || []).filter(function(l){ return (!p || l.producto === p) && new Date(l.maq).getTime() >= lim; });
   var term = lista.filter(function(l){ return l.sala; });
   var tots = term.map(function(l){ return diasEntre(l.maq, l.sala); }).filter(function(x){ return x != null; }).sort(function(a,b){ return a-b; });
   var med = tots.length ? tots[Math.floor(tots.length / 2)] : null, prom = tots.length ? tots.reduce(function(s,x){ return s+x; },0)/tots.length : null;
-  $('ltKpis').innerHTML = [['Lotes salidos de máquina', lista.length], ['Ya en Sala Blanca', term.length], ['Días promedio máquina → Sala Blanca', prom==null?'—':num(prom,1)], ['Mediana (días)', med==null?'—':num(med,1)]]
+  $('ltKpis').innerHTML = [['Lotes salidos de máquina', lista.length], ['Ya en Sala Blanca', term.length], ['Promedio máquina → Sala Blanca', dh(prom)], ['Mediana', dh(med)]]
     .map(function(k){ return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>'; }).join('');
   // promedio por producto
   var por = {};
@@ -621,7 +645,7 @@ function renderLt(){
     Object.keys(por).sort().map(function(k){
       var r = por[k], av = r.t.map(avg), mx = Math.max.apply(null, av.map(function(x){ return x == null ? -1 : x; }));
       return '<tr><td>'+esc(k)+'</td><td class="r">'+r.n+'</td>' + av.map(function(x, i){
-        return '<td class="r">'+(x != null && x === mx && mx > 0 ? '<span class="pill d14">'+num(x,1)+'</span>' : fmtD(x))+(r.t[i].length?'<div class="mut" style="font-size:10px">'+r.t[i].length+' lote(s)</div>':'')+'</td>'; }).join('') +
+        return '<td class="r">'+(x != null && x === mx && mx > 0 ? '<span class="pill d14">'+dh(x)+'</span>' : fmtD(x))+(r.t[i].length?'<div class="mut" style="font-size:10px">'+r.t[i].length+' lote(s)</div>':'')+'</td>'; }).join('') +
         '<td class="r"><b>'+fmtD(avg(r.tot))+'</b>'+(r.tot.length?'<div class="mut" style="font-size:10px">'+r.tot.length+' lote(s)</div>':'')+'</td></tr>';
     }).join('') + '</tbody></table>';
   // lote por lote
@@ -630,7 +654,7 @@ function renderLt(){
       var tr = tramosDe(l), tot = diasEntre(l.maq, l.sala), enc = tot == null ? diasEntre(l.maq, new Date().toISOString()) : null;
       return '<tr class="click" onclick="irLote(\''+esc(l.lote)+'\')"><td><b>'+esc(l.lote)+'</b></td><td>'+esc(l.producto)+'</td><td>'+esc(l.medida)+'</td><td>'+fecha(l.maq)+'</td>' +
         tr.map(function(x){ return '<td class="r">'+fmtD(x)+'</td>'; }).join('') +
-        '<td class="r">'+(tot != null ? '<b>'+num(tot,1)+'</b>' : '<span class="pill reg">en curso · '+num(enc,0)+' d</span>')+'</td></tr>';
+        '<td class="r">'+(tot != null ? '<b>'+dh(tot)+'</b>' : '<span class="pill reg">en curso · '+num(enc,0)+' d</span>')+'</td></tr>';
     }).join('') + '</tbody></table>';
 }
 
@@ -716,6 +740,91 @@ function renderMecOp(){
   box.innerHTML = '<p class="mut">Cargando…</p>';
   rpc('mecanizado_operarios', { p_desde: desdeISO(Number(dias)) }).then(function(d){ MECOP[dias] = d || []; if ($('pDesde').value === dias) pintar(MECOP[dias]); })
     .catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+
+/* ---------------- Rechazos y pausas ---------------- */
+var RP = null;
+function cargarRp(){
+  $('rpEtapas').innerHTML = '<p class="mut">Cargando…</p>';
+  var desde = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
+  Promise.all([rpc('rechazos_detalle', { p_desde: desde }), rpc('sector_diario', { p_desde: desde }), PROD ? Promise.resolve(PROD) : rpc('productividad_datos')])
+    .then(function(r){
+      if (!PROD) PROD = r[2] || {};
+      RP = { lista: r[0] || [], dia: r[1] || [] };
+      var et = {}, pr = {};
+      RP.dia.forEach(function(x){ et[x.grupo] = 1; if (x.producto) pr[x.producto] = 1; });
+      RP.lista.forEach(function(x){ if (x.etapa) et[x.etapa] = 1; if (x.producto) pr[x.producto] = 1; });
+      $('rpEtapa').innerHTML = '<option value="">Todas las etapas</option>' + Object.keys(et).sort().map(function(e){ return '<option value="'+esc(e)+'">'+esc(e.slice(2))+'</option>'; }).join('');
+      $('rpProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(pr).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+      renderRp();
+    }).catch(function(e){ $('rpEtapas').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+function renderRp(){
+  if (!RP) return;
+  var dias = Number($('rpDesde').value), lim = new Date(Date.now() - dias * 86400000), limDia = lim.toISOString().slice(0, 10);
+  var fe = $('rpEtapa').value, fp = $('rpProd').value;
+  var ok = function(etapa, prod){ return (!fe || etapa === fe) && (!fp || prod === fp); };
+  var lista = RP.lista.filter(function(x){ return String(x.dia) >= limDia && ok(x.etapa, x.producto); });
+  var dia = RP.dia.filter(function(x){ return String(x.dia) >= limDia && ok(x.grupo, x.producto); });
+  // --- por etapa
+  var E = {};
+  function e(k){ return E[k] || (E[k] = { proc: 0, rech: 0, ev: 0, dias: {}, max: 0, setup: 0, exc: 0, ult: '' }); }
+  dia.forEach(function(x){ var o = e(x.grupo); o.proc += (+x.buenas || 0) + (+x.rechazo || 0); });
+  lista.forEach(function(x){
+    var o = e(x.etapa || '? Sin etapa'), n = +x.cantidad || 0;
+    if (x.tipo === 'Rechazo') { o.rech += n; o.ev++; o.dias[x.dia] = 1; if (n > o.max) o.max = n; if (String(x.dia) > o.ult) o.ult = String(x.dia); }
+    else if (x.tipo === 'Setup') o.setup += n; else if (x.tipo === 'Excedente') o.exc += n;
+  });
+  var tProc = 0, tRech = 0, tEv = 0;
+  $('rpEtapas').innerHTML = tablaSimple(['Etapa', 'Piezas procesadas', 'Rechazadas', '% rechazo', 'Veces con rechazo', 'Cada cuántos días', 'Promedio por vez', 'Máximo en una vez', 'Último rechazo', 'Setup', 'Excedente'],
+    Object.keys(E).sort().map(function(k){
+      var o = E[k], nd = Object.keys(o.dias).length; tProc += o.proc; tRech += o.rech; tEv += o.ev;
+      var pc = o.proc > 0 ? 100 * o.rech / o.proc : null;
+      return [esc(k.slice(2)), num(o.proc,0), o.rech ? '<b>'+num(o.rech,0)+'</b>' : '0', pc == null ? '—' : '<span class="pill '+(pc >= 5 ? 'd14' : pc >= 2 ? 'd7' : 'd0')+'">'+num(pc,1)+' %</span>',
+        o.ev || '', nd ? 'cada ' + num(dias / nd, 0) + ' días' : '<span class="mut">sin rechazos</span>', o.ev ? num(o.rech / o.ev, 1) : '', o.max || '', o.ult ? fecha(o.ult) : '',
+        o.setup ? num(o.setup,0) : '', o.exc ? num(o.exc,0) : ''];
+    }));
+  $('rpKpis').innerHTML = [['Piezas rechazadas', num(tRech,0)], ['% de rechazo', tProc ? num(100 * tRech / tProc, 1) + ' %' : '—'], ['Veces con rechazo', tEv], ['Promedio por semana', num(tRech / (dias / 7), 1) + ' pzs']]
+    .map(function(k){ return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>'; }).join('');
+  // --- por mes
+  var M = {}, etapas = {};
+  function m(mes, et){ etapas[et] = 1; var k = mes + '|' + et; return M[k] || (M[k] = { proc: 0, rech: 0 }); }
+  dia.forEach(function(x){ m(String(x.dia).slice(0, 7), x.grupo).proc += (+x.buenas || 0) + (+x.rechazo || 0); });
+  lista.forEach(function(x){ if (x.tipo === 'Rechazo') m(String(x.dia).slice(0, 7), x.etapa || '? Sin etapa').rech += +x.cantidad || 0; });
+  var meses = {}; Object.keys(M).forEach(function(k){ meses[k.split('|')[0]] = 1; });
+  var ets = Object.keys(etapas).sort(), ms = Object.keys(meses).sort().reverse();
+  var nomMes = function(k){ var p = k.split('-'); return ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+p[1] - 1] + ' ' + p[0]; };
+  $('rpMeses').innerHTML = ms.length ? '<table><thead><tr><th>Mes</th>' + ets.map(function(t){ return '<th>'+esc(t.slice(2))+'</th>'; }).join('') + '</tr></thead><tbody>' +
+    ms.map(function(mes){ return '<tr><td><b>'+nomMes(mes)+'</b></td>' + ets.map(function(t){ var o = M[mes + '|' + t];
+      if (!o || (!o.proc && !o.rech)) return '<td class="r"><span class="mut">—</span></td>';
+      return '<td class="r">'+(o.rech ? '<b>'+num(o.rech,0)+'</b>' : '0')+' <span class="mut">de '+num(o.proc,0)+(o.proc ? ' · '+num(100*o.rech/o.proc,1)+' %' : '')+'</span></td>'; }).join('') + '</tr>'; }).join('') +
+    '</tbody></table>' : '<p class="mut">Sin datos en ese período.</p>';
+  // --- uno por uno
+  $('rpLista').innerHTML = lista.length ? '<table><thead><tr><th>Fecha</th><th>Etapa</th><th>Tipo</th><th>Lote</th><th>Producto</th><th>Medida</th><th>Cantidad</th><th>Responsable</th><th>Motivo / observación</th></tr></thead><tbody>' +
+    lista.slice(0, 400).map(function(x){
+      return '<tr class="click" onclick="irLote(\''+esc(x.lote)+'\')"><td>'+fecha(x.dia)+'</td><td>'+esc(String(x.etapa || '').slice(2))+'</td><td>'+(x.tipo === 'Rechazo' ? '<span class="pill d14">Rechazo</span>' : esc(x.tipo))+'</td>' +
+        '<td><b>'+esc(x.lote)+'</b></td><td>'+esc(x.producto)+(x.teton && x.teton !== '-' ? ' <span class="mut">'+esc(x.teton)+'</span>' : '')+'</td><td>'+esc(x.medida)+'</td><td class="r"><b>'+num(x.cantidad,0)+'</b></td>' +
+        '<td>'+esc(x.responsable || '')+'</td><td style="max-width:420px;font-size:12px">'+esc(x.motivo || '')+'</td></tr>';
+    }).join('') + '</tbody></table>' + (lista.length > 400 ? '<p class="mut">Se muestran los 400 más recientes.</p>' : '') : '<p class="mut">Sin descartes en ese período.</p>';
+  // --- motivos de pausa
+  var P = {};
+  function pausa(sector, txt, cuando, prod){
+    if (!cuando || cuando < lim || (fp && prod !== fp)) return;
+    String(txt || '').split(',').forEach(function(mo){ mo = mo.trim(); if (!mo) return;
+      var k = sector + '|' + mo, o = P[k] || (P[k] = { n: 0, ult: null }); o.n++; if (!o.ult || cuando > o.ult) o.ult = cuando; });
+  }
+  var ind = PROD.ind || { h: [], filas: [] }, h = ind.h || [], ix = function(n){ return h.indexOf(n); };
+  var cT = ix('tipo'), cF = ix('fecha'), cP = ix('producto'), cMot = ix('motivos pausa');
+  (ind.filas || []).forEach(function(f){ var v = f.v || [];
+    pausa(String(v[cT] || '').toLowerCase() === 'control' ? 'Blasting (control)' : 'Blasting (bandejas)', v[cMot], fechaDMY(v[cF]), v[cP]); });
+  (PROD.pz || []).forEach(function(r){ pausa('Control de piezas (Mecanizado)', r.motivos, r.inicio ? new Date(r.inicio) : null, r.producto); });
+  (PROD.cc || []).forEach(function(r){ pausa('Control de Calidad', r.motivos, r.inicio ? new Date(r.inicio) : null, r.producto); });
+  var totSec = {}; Object.keys(P).forEach(function(k){ var s = k.split('|')[0]; totSec[s] = (totSec[s] || 0) + P[k].n; });
+  $('rpPausas').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces', '% de las pausas del sector', 'Última vez'],
+    Object.keys(P).sort(function(a, b){ var sa = a.split('|')[0], sb = b.split('|')[0]; return sa === sb ? P[b].n - P[a].n : (sa < sb ? -1 : 1); }).map(function(k){
+      var kk = k.split('|'), o = P[k];
+      return [esc(kk[0]), esc(kk[1]), o.n, num(100 * o.n / totSec[kk[0]], 0) + ' %', o.ult ? o.ult.toLocaleDateString('es-AR') : ''];
+    })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>');
 }
 
 /* ---------------- Qué producir ---------------- */
