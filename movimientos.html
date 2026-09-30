@@ -1,71 +1,71 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pendientes Salida a Depósito</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f4f8;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:2rem 1rem}
-    .card{background:#fff;border:0.5px solid #e2e8f0;border-radius:16px;padding:2rem;width:100%;max-width:min(1400px,95vw);box-shadow:0 4px 24px rgba(0,0,0,0.06)}
-    .header{margin-bottom:1.25rem}
-    .header-title{font-size:20px;font-weight:600;color:#0f172a;margin-bottom:4px}
-    .header-sub{font-size:13px;color:#64748b}
-    .hidden{display:none!important}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depósito — Ingreso y revisión — Bio-Fix</title>
+<!-- GitHub: login del puesto (solo técnica) + lecturas/escrituras al Apps Script de STOCK por JSONP -->
+<script>window.BIOFIX_PANTALLA = 'stock'; window.BIOFIX_SOLO_ADMIN = true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#f0f4f8;min-height:100vh;padding:16px}
+  .card{background:#fff;border:0.5px solid #e2e8f0;border-radius:16px;padding:20px;width:100%;max-width:1400px;margin:0 auto;box-shadow:0 4px 24px rgba(0,0,0,0.06)}
+  .header{margin-bottom:14px}
+  .header-title{font-size:20px;font-weight:600;color:#0f172a;margin-bottom:4px}
+  .header-sub{font-size:13px;color:#64748b}
+  .hidden{display:none!important}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px;font-weight:600;color:#475569;cursor:pointer}
+  .tab.activa{background:#0f172a;color:#fff;border-color:#0f172a}
+  .btn-ghost{padding:7px 12px;border-radius:8px;border:1px solid #93c5fd;background:#fff;color:#0369a1;font-size:13px;font-weight:600;cursor:pointer;margin-left:auto}
 
-    /* Pestañas */
-    .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-    .tab{padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px;font-weight:600;color:#475569;cursor:pointer}
-    .tab.activa{background:#0f172a;color:#fff;border-color:#0f172a}
+  #panelPend{border:1px solid #e0c040;background:#fff9e6;border-radius:12px;padding:14px 16px}
+  .p-titulo{font-weight:600;margin-bottom:6px;color:#7a5c00;font-size:14px}
+  .ayuda{font-size:12px;color:#7a5c00;margin-bottom:8px;line-height:1.4}
+  .msg{font-size:13px;padding:6px 0}
+  .vacio{font-size:13px;color:#6b7280;padding:10px;font-style:italic}
+  .pend-seccion{font-size:12px;font-weight:600;color:#7a5c00;margin:10px 0 4px;padding-top:6px;border-top:1px dashed #e0c040}
+  .pend-seccion:first-child{border-top:none;padding-top:0;margin-top:0}
+  .pend-seccion a{font-weight:400;color:#1d6f42;text-decoration:none;margin-left:8px}
+  .pend-fila{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #eee;border-radius:8px;padding:6px 10px;margin-bottom:5px;font-size:13px;flex-wrap:wrap}
+  .pend-fila.tildada{border-color:#2e7d32;background:#f3faf3}
+  .pend-fila.con-falla{border-color:#c62828;background:#fdf3f3}
+  .pend-fila label{flex:1 1 220px;cursor:pointer;color:#374151}
+  .pend-fila input[type="checkbox"]{width:17px;height:17px;cursor:pointer}
+  .pend-fila input[type="number"]{width:64px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;text-align:center}
+  .pend-fila input.in-falla{border-color:#f0b4b4}
+  .mini{font-size:11px;color:#6b7280}
+  .gris{color:#888}
+  .controles{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff9e6;border-top:2px solid #e0c040;padding:10px 0 2px;margin-top:10px}
+  .controles select,.controles input[type="text"]{padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#f9fafb}
+  .controles input.corto{width:90px}
+  .controles input.ancho{width:200px}
+  .btn-verde{padding:8px 14px;border:none;border-radius:6px;background:#2e7d32;color:#fff;cursor:pointer;font-size:13px;font-weight:600}
+  .btn-verde:disabled{background:#999;cursor:default}
+  .contador{font-size:12px;color:#7a5c00}
+  .bloque-falla{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%;padding-top:6px;border-top:1px dashed #f0b4b4}
+  .bloque-falla span{font-size:12px;color:#c62828;font-weight:600}
 
-    /* ===== Panel: Pendientes Salida ===== */
-    #panelPendientesSalida{border:1px solid #e0c040;background:#fff9e6;border-radius:12px;padding:14px 16px}
-    .pendientes-salida-titulo{font-weight:600;margin-bottom:8px;color:#7a5c00;font-size:14px}
-    .ayuda{font-size:12px;color:#7a5c00;margin-bottom:8px;line-height:1.4}
-    .pend-seccion{font-size:12px;font-weight:600;color:#7a5c00;margin:10px 0 4px;padding-top:6px;border-top:1px dashed #e0c040}
-    .pend-seccion:first-of-type{border-top:none;padding-top:0;margin-top:0}
-    .pend-seccion a{font-weight:400;color:#1d6f42;text-decoration:none;margin-left:8px}
-    .pend-seccion a:hover{text-decoration:underline}
-    .pend-fila{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #eee;border-radius:8px;padding:6px 10px;margin-bottom:5px;font-size:13px;flex-wrap:wrap}
-    .pend-fila.tildada{border-color:#2e7d32;background:#f3faf3}
-    .pend-fila.con-falla{border-color:#c62828;background:#fdf3f3}
-    .pend-fila label{flex:1 1 auto;min-width:160px;cursor:pointer;color:#374151}
-    .pend-fila input[type="checkbox"]{width:17px;height:17px;cursor:pointer;flex:0 0 auto}
-    .pend-fila input[type="number"]{width:64px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;text-align:center;flex:0 0 auto}
-    .pend-fila input.in-falla{border-color:#f0b4b4}
-    .mini{font-size:11px;color:#6b7280;flex:0 0 auto}
-    .pend-controles-globales{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff9e6;border-top:2px solid #e0c040;padding:10px 0 2px;margin-top:10px}
-    .pend-controles-globales select,.pend-controles-globales input[type="text"]{padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#f9fafb}
-    .pend-controles-globales input[type="text"]{width:90px}
-    .pend-controles-globales input.ancho{width:200px}
-    .pend-controles-globales button{padding:8px 14px;border:none;border-radius:6px;background:#2e7d32;color:#fff;cursor:pointer;font-size:13px;font-weight:600}
-    .pend-controles-globales button:disabled{background:#999;cursor:default}
-    .pend-contador{font-size:12px;color:#7a5c00}
-    .bloque-falla{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%;padding-top:6px;border-top:1px dashed #f0b4b4}
-    .bloque-falla span{font-size:12px;color:#c62828;font-weight:600}
-
-    /* ===== Panel: Revisión en depósito ===== */
-    #panelRevision{border:1px solid #f0b4b4;background:#fffafa;border-radius:12px;padding:14px 16px}
-    .rev-titulo{font-weight:600;margin-bottom:6px;color:#9b1c1c;font-size:14px}
-    .rev-ayuda{font-size:12px;color:#7f1d1d;margin-bottom:10px;line-height:1.4}
-    .rev-barra{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-    .rev-barra select,.rev-barra input{padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff}
-    .rev-barra input{flex:1 1 200px}
-    .rev-lista{max-height:340px;overflow:auto;border:1px solid #f3dcdc;border-radius:8px;background:#fff}
-    .rev-item{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #f6e7e7;font-size:13px;cursor:pointer}
-    .rev-item:hover{background:#fdf1f1}
-    .rev-item.sel{background:#fde2e2;font-weight:600}
-    .rev-item .st{color:#374151;font-weight:600;white-space:nowrap}
-    .rev-form{margin-top:12px;padding:12px;border:1px solid #f0b4b4;border-radius:10px;background:#fff;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
-    .rev-form label{display:block;font-size:12px;color:#6b7280;margin-bottom:3px}
-    .rev-form input,.rev-form select{width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
-    .rev-sel{grid-column:1/-1;font-size:13px;color:#0f172a}
-    .rev-acciones{grid-column:1/-1;display:flex;justify-content:flex-end}
-    .btn-rojo{padding:9px 16px;border:none;border-radius:8px;background:#b91c1c;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
-    .btn-rojo:disabled{background:#d6a0a0;cursor:default}
-    .msg{font-size:13px;padding:6px 0}
-    .vacio{font-size:13px;color:#6b7280;padding:10px;font-style:italic}
-  </style>
+  #panelRev{border:1px solid #f0b4b4;background:#fffafa;border-radius:12px;padding:14px 16px}
+  .r-titulo{font-weight:600;margin-bottom:6px;color:#9b1c1c;font-size:14px}
+  .r-ayuda{font-size:12px;color:#7f1d1d;margin-bottom:10px;line-height:1.4}
+  .r-barra{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .r-barra select,.r-barra input{padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff}
+  .r-barra input{flex:1 1 200px}
+  .r-lista{max-height:340px;overflow:auto;border:1px solid #f3dcdc;border-radius:8px;background:#fff}
+  .r-item{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #f6e7e7;font-size:13px;cursor:pointer}
+  .r-item:hover{background:#fdf1f1}
+  .r-item.sel{background:#fde2e2;font-weight:600}
+  .r-form{margin-top:12px;padding:12px;border:1px solid #f0b4b4;border-radius:10px;background:#fff;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .r-form label{display:block;font-size:12px;color:#6b7280;margin-bottom:3px}
+  .r-form input,.r-form select{width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
+  .r-full{grid-column:1/-1}
+  .btn-rojo{padding:9px 16px;border:none;border-radius:8px;background:#b91c1c;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+  .btn-rojo:disabled{background:#d6a0a0;cursor:default}
+</style>
 </head>
 <body>
 
@@ -78,35 +78,48 @@
 <div class="card">
   <div class="header">
     <div class="header-title">Depósito — Ingreso y revisión</div>
-    <div class="header-sub">Carga a Depósito de lo que salió de Sala Blanca, y revisión de implantes (antes de ingresarlos o ya en Depósito)</div>
+    <div class="header-sub">Carga a Depósito de lo que salió de Sala Blanca y revisión de implantes (antes de ingresarlos o ya en Depósito)</div>
   </div>
 
   <div class="tabs">
     <button class="tab activa" id="tabPend" onclick="verTab('pend')">Pendientes Salida</button>
     <button class="tab" id="tabRev" onclick="verTab('rev')">Revisión de stock en depósito</button>
+    <button class="btn-ghost" onclick="recargar()">↻ Actualizar</button>
   </div>
 
-  <div id="panelPendientesSalida">
-    <div class="pendientes-salida-titulo" id="pendientesSalidaTitulo">Pendientes Salida (0)</div>
-    <div class="ayuda">Revisión antes de ingresar: si al revisar un ítem hay piezas con falla, cargalas en <b>Falla</b>. Las buenas entran al lote de Depósito y las falladas vuelven a Lavado Final (IPA) con un lote de reproceso propio. Los papeles ya liberados no se tocan.</div>
-    <div id="pendientesSalidaMsg"></div>
-    <div id="pendientesSalidaLista"></div>
+  <!-- ===== Pendientes Salida ===== -->
+  <div id="panelPend">
+    <div class="p-titulo" id="pendTitulo">Pendientes Salida</div>
+    <div class="ayuda">Si al revisar un ítem hay piezas con falla, cargalas en <b>Falla</b>: las buenas entran al lote de Depósito y las falladas vuelven a Lavado Final (IPA) con un lote de reproceso propio. Los papeles ya liberados no se tocan.</div>
+    <div id="pendMsg" class="msg"></div>
+    <div id="pendLista"><div class="vacio">Cargando…</div></div>
+    <div class="controles" id="controles">
+      <select id="selTipo"><option value="">— Tipo de implante —</option></select>
+      <span class="mini" style="color:#7a5c00">Lote de Depósito:</span>
+      <input type="text" id="inLote" class="corto" placeholder="Ej: 0190">
+      <button class="btn-verde" id="btnConfirmar" disabled onclick="confirmar()">Confirmar seleccionados</button>
+      <span class="contador" id="contador">0 ítems tildados</span>
+      <div class="bloque-falla hidden" id="bloqueFalla">
+        <span>Revisión con falla:</span>
+        <input type="text" id="inMotivo" class="ancho" placeholder="Motivo de la falla">
+        <input type="text" id="inResp" class="ancho" placeholder="Responsable revisión" list="listaResponsables">
+      </div>
+    </div>
   </div>
 
-  <div id="panelRevision" class="hidden">
-    <div class="rev-titulo">Revisión de stock en depósito</div>
-    <div class="rev-ayuda">Si al revisar implantes que ya están en Depósito aparece una falla: elegí el lote y la medida, de qué lote de origen son y cuántas. Se descuentan del lote de Depósito (queda en HOJA MOVIMIENTOS como "Revisión - falla") y vuelven a Lavado Final (IPA) en Trazabilidad. Lo liberado en los papeles no cambia: queda registrado aparte en la hoja "Revisiones Depósito".</div>
-    <div class="rev-barra">
-      <select id="revTipo" onchange="cargarRevision()">
-        <option value="">— Tipo de implante —</option>
-      </select>
+  <!-- ===== Revisión de stock en depósito ===== -->
+  <div id="panelRev" class="hidden">
+    <div class="r-titulo">Revisión de stock en depósito</div>
+    <div class="r-ayuda">Si al revisar implantes que ya están en Depósito aparece una falla: elegí el lote y la medida, de qué lote de origen son y cuántas. Se descuentan del lote de Depósito (queda en HOJA MOVIMIENTOS como "Revisión - falla") y vuelven a Lavado Final (IPA) en Trazabilidad. Lo liberado en los papeles no cambia: queda registrado aparte en la hoja "Revisiones Depósito".</div>
+    <div class="r-barra">
+      <select id="revTipo" onchange="cargarRevision()"><option value="">— Tipo de implante —</option></select>
       <input id="revBuscar" placeholder="Buscar lote o medida…" oninput="filtrarRevision()">
     </div>
     <div id="revMsg" class="msg"></div>
-    <div id="revLista" class="rev-lista"><div class="vacio">Elegí un tipo de implante.</div></div>
+    <div id="revLista" class="r-lista"><div class="vacio">Elegí un tipo de implante.</div></div>
 
-    <div id="revForm" class="rev-form hidden">
-      <div class="rev-sel" id="revSel"></div>
+    <div id="revForm" class="r-form hidden">
+      <div class="r-full" id="revSel"></div>
       <div>
         <label>Lote de origen (Trazabilidad)</label>
         <select id="revOrigen" onchange="cambioOrigen()"></select>
@@ -127,7 +140,7 @@
         <label>Responsable de la revisión</label>
         <input id="revResp" list="listaResponsables" placeholder="Nombre">
       </div>
-      <div class="rev-acciones">
+      <div class="r-full" style="display:flex;justify-content:flex-end">
         <button class="btn-rojo" id="btnFalla" onclick="registrarFalla()">Registrar falla y mandar a Lavado Final</button>
       </div>
     </div>
@@ -135,261 +148,165 @@
 </div>
 
 <script>
-var ITEMS_PENDIENTES_INICIALES = <?!= itemsPendientesJson ?>;
-var PENDIENTES_ERROR_INICIAL = <?!= JSON.stringify(pendientesError) ?>;
-var CONFIRMACION_RESULTADO = <?!= confirmacionJson ?>;
+/* Apps Script del proyecto STOCK (Depósito de producto terminado).
+ * Si cambiás la implementación, actualizá esta URL. */
+var STOCK_API = 'https://script.google.com/macros/s/AKfycbyXrENRjsytBzAnhJTU5a01dHqnaPmXWsgnYb_GdVLv5SRlypsJFeFIZouO7Q0STewgcA/exec';
 
-var URL_API = 'https://script.google.com/macros/s/AKfycbyKaSr4ORoHHEmSoUR0VTsW6GOldpAxqca8gpVi6tcSMJxpD3j525FYTSxHVjZQaEhLYQ/exec';
+var TIPOS = ['MP', 'HI', 'HISM', 'HE', 'CMHI', 'CMU', 'CMU3', 'MBP', 'MBT'];
+var PEND = [];      // pendientes ordenados
+var REV_ITEMS = [];
+var REV_SEL = null;
 
-var TIPOS_IMP_PENDIENTES_SALIDA = ['MP', 'HI', 'HISM', 'HE', 'CMHI', 'CMU', 'CMU3', 'MBP', 'MBT'];
-
-window.onload = function() {
-  mostrarPendientesIniciales();
-  var selTipo = document.getElementById('revTipo');
-  TIPOS_IMP_PENDIENTES_SALIDA.forEach(function (t) {
-    var o = document.createElement('option'); o.value = t; o.textContent = t; selTipo.appendChild(o);
+/* ---------- JSONP al Apps Script de STOCK (el doGet ya responde con callback) ---------- */
+function stockApi(accion, params) {
+  return new Promise(function (resolve, reject) {
+    var cb = 'bfStock_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    var qs = ['accion=' + encodeURIComponent(accion), 'callback=' + cb];
+    Object.keys(params || {}).forEach(function (k) {
+      if (params[k] != null) qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+    });
+    var s = document.createElement('script');
+    var timer = setTimeout(function () { limpiar(); reject(new Error('El servidor tardó demasiado. Probá de nuevo.')); }, 90000);
+    function limpiar() { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } if (s.parentNode) s.parentNode.removeChild(s); }
+    window[cb] = function (data) { limpiar(); resolve(data); };
+    s.onerror = function () { limpiar(); reject(new Error('No se pudo conectar con el Apps Script de STOCK.')); };
+    s.src = STOCK_API + '?' + qs.join('&');
+    document.body.appendChild(s);
   });
-};
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
+function msg(id, t, ok) { var m = document.getElementById(id); m.textContent = t || ''; m.style.color = ok ? '#2e7d32' : '#c62828'; }
 
 function verTab(cual) {
-  document.getElementById('panelPendientesSalida').classList.toggle('hidden', cual !== 'pend');
-  document.getElementById('panelRevision').classList.toggle('hidden', cual !== 'rev');
+  document.getElementById('panelPend').classList.toggle('hidden', cual !== 'pend');
+  document.getElementById('panelRev').classList.toggle('hidden', cual !== 'rev');
   document.getElementById('tabPend').classList.toggle('activa', cual === 'pend');
   document.getElementById('tabRev').classList.toggle('activa', cual === 'rev');
 }
-
-function mostrarPendientesIniciales() {
-  var msgTop = document.getElementById('pendientesSalidaMsg');
-  if (CONFIRMACION_RESULTADO) {
-    var okConf = !!CONFIRMACION_RESULTADO.ok;
-    msgTop.innerHTML = '<div style="font-size:13px;padding:6px 0;color:' + (okConf ? '#2e7d32' : '#c62828') + '">' +
-      esc(okConf ? (CONFIRMACION_RESULTADO.mensaje || 'Confirmado.') : ('Atención: ' + (CONFIRMACION_RESULTADO.error || 'No se pudo confirmar.'))) +
-      '</div>';
-  } else {
-    msgTop.innerHTML = '';
-  }
-
-  if (PENDIENTES_ERROR_INICIAL) {
-    document.getElementById('pendientesSalidaTitulo').textContent = 'Pendientes Salida (error del servidor)';
-    document.getElementById('pendientesSalidaLista').innerHTML =
-      '<div style="font-size:13px;color:#c62828;padding:6px 0;">El servidor respondió con un error: ' + esc(PENDIENTES_ERROR_INICIAL) + '</div>';
-    return;
-  }
-
-  renderPendientesSalida(ITEMS_PENDIENTES_INICIALES || []);
+function recargar() {
+  cargarPendientes();
+  if (document.getElementById('revTipo').value) cargarRevision();
 }
 
-// Lista PLANA de pendientes, con un casillero por ítem. Cada ítem tiene
-// "Buenas" (van al lote de Depósito) y "Falla" (vuelven a Lavado Final como
-// reproceso IPA). Todo vive en UN solo <form method="GET"> que navega a URL_API.
-function renderPendientesSalida(items) {
-  var titulo = document.getElementById('pendientesSalidaTitulo');
-  var cont = document.getElementById('pendientesSalidaLista');
+/* ===================== Pendientes Salida ===================== */
+function cargarPendientes() {
+  document.getElementById('pendLista').innerHTML = '<div class="vacio">Cargando…</div>';
+  stockApi('obtenerPendientesSalida').then(function (r) {
+    if (!r || !r.ok) throw new Error((r && r.error) || 'Error del servidor.');
+    pintarPendientes(r.items || []);
+  }).catch(function (e) {
+    document.getElementById('pendLista').innerHTML = '<div class="msg" style="color:#c62828">' + esc(e.message) + '</div>';
+  });
+}
 
-  titulo.textContent = 'Pendientes Salida (' + items.length + ' ítem' + (items.length === 1 ? '' : 's') + ')';
-
-  if (!items.length) {
-    cont.innerHTML = '<div style="font-size:13px;color:#7a5c00;padding:6px 0;">No hay pendientes de Salida en este momento.</div>';
-    return;
-  }
-
-  var itemsOrdenados = items.slice().sort(function (a, b) {
+function pintarPendientes(items) {
+  PEND = items.slice().sort(function (a, b) {
     var ka = (a.tipoImpSugerido || '') + '||' + (a.fecha || '');
     var kb = (b.tipoImpSugerido || '') + '||' + (b.fecha || '');
     return ka < kb ? -1 : (ka > kb ? 1 : 0);
   });
+  document.getElementById('pendTitulo').textContent = 'Pendientes Salida (' + PEND.length + ' ítem' + (PEND.length === 1 ? '' : 's') + ')';
+  var cont = document.getElementById('pendLista');
+  if (!PEND.length) { cont.innerHTML = '<div class="vacio">No hay pendientes de Salida en este momento.</div>'; actualizarContador(); return; }
 
-  cont.innerHTML = '';
-
-  var form = document.createElement('form');
-  form.method = 'GET';
-  form.action = URL_API;
-  form.target = '_top';
-  form.id = 'formPendientesSalida';
-
-  var hiddenAccion = document.createElement('input');
-  hiddenAccion.type = 'hidden'; hiddenAccion.name = 'accion'; hiddenAccion.value = 'confirmarPendienteSalidaForm';
-  form.appendChild(hiddenAccion);
-
-  var hiddenItems = document.createElement('input');
-  hiddenItems.type = 'hidden'; hiddenItems.name = 'items_json';
-  form.appendChild(hiddenItems);
-
-  var seccionActual = null;
-  itemsOrdenados.forEach(function (it, idx) {
-    var claveSeccion = (it.tipoImpSugerido || '(sin tipo sugerido)') + '||' + (it.fecha || '?');
-    if (claveSeccion !== seccionActual) {
-      seccionActual = claveSeccion;
-      var header = document.createElement('div');
-      header.className = 'pend-seccion';
-      header.innerHTML = esc(it.tipoImpSugerido || '?') + ' · Salida del ' + esc(it.fecha || '?') +
-        ' <a href="#" data-check-seccion="' + esc(claveSeccion) + '">tildar todos estos</a>';
-      form.appendChild(header);
+  var html = '', seccion = null, nSec = -1;
+  PEND.forEach(function (it, i) {
+    var clave = (it.tipoImpSugerido || '?') + '||' + (it.fecha || '?');
+    if (clave !== seccion) {
+      seccion = clave; nSec++;
+      html += '<div class="pend-seccion">' + esc(it.tipoImpSugerido || '?') + ' · Salida del ' + esc(it.fecha || '?') +
+        ' <a href="#" onclick="tildarSeccion(' + nSec + ');return false;">tildar todos estos</a></div>';
     }
-
-    var fila = document.createElement('div');
-    fila.className = 'pend-fila';
-    fila.setAttribute('data-seccion', claveSeccion);
-
-    var chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.id = 'chk_' + idx;
-    chk.addEventListener('change', function () {
-      fila.classList.toggle('tildada', chk.checked);
-      actualizarContadorPendientes_();
-    });
-
-    var lbl = document.createElement('label');
-    lbl.setAttribute('for', chk.id);
-    lbl.innerHTML = esc(it.medida || '') + (it.teton ? ' <span style="color:#888;">(' + esc(it.teton) + ')</span>' : '') +
-      ' <span style="color:#888;">· Sistema ' + esc(it.sistema || '') + ' · Lote origen ' + esc(it.lote || '') + ' · salieron ' + esc(it.cantidad) + ' u.</span>';
-
-    var lBuenas = document.createElement('span'); lBuenas.className = 'mini'; lBuenas.textContent = 'Buenas';
-    var inputCant = document.createElement('input');
-    inputCant.type = 'number'; inputCant.min = '0'; inputCant.value = it.cantidad; inputCant.id = 'cant_' + idx;
-
-    var lFalla = document.createElement('span'); lFalla.className = 'mini'; lFalla.textContent = 'Falla';
-    var inputFalla = document.createElement('input');
-    inputFalla.type = 'number'; inputFalla.min = '0'; inputFalla.value = '0'; inputFalla.id = 'falla_' + idx;
-    inputFalla.className = 'in-falla';
-    inputFalla.addEventListener('input', function () {
-      // Al cargar falla, las buenas se ajustan solas al resto (se pueden corregir a mano)
-      var f = Math.max(0, Number(inputFalla.value) || 0);
-      inputCant.value = Math.max(0, (Number(it.cantidad) || 0) - f);
-      fila.classList.toggle('con-falla', f > 0);
-      if (f > 0 && !chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change')); }
-      actualizarContadorPendientes_();
-    });
-
-    fila.appendChild(chk);
-    fila.appendChild(lbl);
-    fila.appendChild(lBuenas);
-    fila.appendChild(inputCant);
-    fila.appendChild(lFalla);
-    fila.appendChild(inputFalla);
-    form.appendChild(fila);
+    html += '<div class="pend-fila" id="fila_' + i + '" data-seccion="' + nSec + '">' +
+      '<input type="checkbox" id="chk_' + i + '" onchange="cambioFila(' + i + ')">' +
+      '<label for="chk_' + i + '">' + esc(it.medida) + (it.teton ? ' <span class="gris">(' + esc(it.teton) + ')</span>' : '') +
+        ' <span class="gris">· Sistema ' + esc(it.sistema) + ' · Lote origen ' + esc(it.lote) + ' · salieron ' + esc(it.cantidad) + ' u.</span></label>' +
+      '<span class="mini">Buenas</span><input type="number" min="0" id="cant_' + i + '" value="' + esc(it.cantidad) + '">' +
+      '<span class="mini">Falla</span><input type="number" min="0" class="in-falla" id="falla_' + i + '" value="0" oninput="cambioFalla(' + i + ')">' +
+      '</div>';
   });
-
-  var controles = document.createElement('div');
-  controles.className = 'pend-controles-globales';
-
-  var selectTipo = document.createElement('select');
-  selectTipo.name = 'tipo_imp';
-  selectTipo.required = true;
-  var optVacia = document.createElement('option');
-  optVacia.value = ''; optVacia.textContent = '— Tipo de implante —';
-  selectTipo.appendChild(optVacia);
-  TIPOS_IMP_PENDIENTES_SALIDA.forEach(function (t) {
-    var opt = document.createElement('option'); opt.value = t; opt.textContent = t; selectTipo.appendChild(opt);
-  });
-
-  var labelLote = document.createElement('span');
-  labelLote.textContent = 'Lote de Depósito:';
-  labelLote.style.fontSize = '12px'; labelLote.style.color = '#7a5c00';
-
-  var inputLote = document.createElement('input');
-  inputLote.type = 'text'; inputLote.name = 'lote_numero'; inputLote.placeholder = 'Ej: 0190'; inputLote.required = true;
-
-  var contador = document.createElement('span');
-  contador.className = 'pend-contador'; contador.id = 'pendContador'; contador.textContent = '0 ítems tildados';
-
-  var btn = document.createElement('button');
-  btn.type = 'submit'; btn.id = 'btnConfirmarPendientes'; btn.textContent = 'Confirmar seleccionados'; btn.disabled = true;
-
-  // Datos de la revisión (solo se piden si algún ítem tiene falla)
-  var bloqueFalla = document.createElement('div');
-  bloqueFalla.className = 'bloque-falla hidden';
-  bloqueFalla.id = 'bloqueFalla';
-  bloqueFalla.innerHTML = '<span>Revisión con falla:</span>';
-  var inMotivo = document.createElement('input');
-  inMotivo.type = 'text'; inMotivo.name = 'motivo_falla'; inMotivo.placeholder = 'Motivo de la falla'; inMotivo.className = 'ancho';
-  var inResp = document.createElement('input');
-  inResp.type = 'text'; inResp.name = 'responsable_revision'; inResp.placeholder = 'Responsable revisión'; inResp.className = 'ancho';
-  inResp.setAttribute('list', 'listaResponsables');
-  bloqueFalla.appendChild(inMotivo);
-  bloqueFalla.appendChild(inResp);
-
-  controles.appendChild(selectTipo);
-  controles.appendChild(labelLote);
-  controles.appendChild(inputLote);
-  controles.appendChild(btn);
-  controles.appendChild(contador);
-  controles.appendChild(bloqueFalla);
-  form.appendChild(controles);
-
-  form.addEventListener('submit', function (ev) {
-    var seleccionados = [];
-    var hayFalla = false, error = '';
-    itemsOrdenados.forEach(function (it, idx) {
-      var chk = document.getElementById('chk_' + idx);
-      if (!chk || !chk.checked) return;
-      var buenas = Math.max(0, Number(document.getElementById('cant_' + idx).value) || 0);
-      var falla = Math.max(0, Number(document.getElementById('falla_' + idx).value) || 0);
-      if (buenas + falla <= 0) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': cargá buenas o falla.');
-      if (buenas + falla > (Number(it.cantidad) || 0)) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': buenas + falla supera lo que salió (' + it.cantidad + ').');
-      if (falla > 0) hayFalla = true;
-      seleccionados.push({ fila: it.fila, cantidad: buenas, falla: falla });
-    });
-    if (!seleccionados.length) error = 'Tildá al menos un ítem antes de confirmar.';
-    if (!error && hayFalla && (!inMotivo.value.trim() || !inResp.value.trim())) error = 'Hay ítems con falla: completá el motivo y el responsable de la revisión.';
-    if (error) { ev.preventDefault(); alert(error); return; }
-    hiddenItems.value = JSON.stringify(seleccionados);
-    btn.disabled = true; btn.textContent = 'Confirmando…';
-  });
-
-  cont.appendChild(form);
-
-  cont.querySelectorAll('[data-check-seccion]').forEach(function (link) {
-    link.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      var clave = link.getAttribute('data-check-seccion');
-      cont.querySelectorAll('.pend-fila').forEach(function (filaEl) {
-        if (filaEl.getAttribute('data-seccion') !== clave) return;
-        var chk = filaEl.querySelector('input[type="checkbox"]');
-        if (chk && !chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change')); }
-      });
-    });
-  });
-
-  actualizarContadorPendientes_();
+  cont.innerHTML = html;
+  actualizarContador();
 }
 
-function actualizarContadorPendientes_() {
-  var cont = document.getElementById('pendientesSalidaLista');
-  var contador = document.getElementById('pendContador');
-  var btn = document.getElementById('btnConfirmarPendientes');
-  if (!cont || !contador || !btn) return;
-  var n = cont.querySelectorAll('input[type="checkbox"]:checked').length;
-  var fallas = 0;
-  cont.querySelectorAll('.pend-fila').forEach(function (f) {
-    var chk = f.querySelector('input[type="checkbox"]');
-    var inF = f.querySelector('input.in-falla');
-    if (chk && chk.checked && inF) fallas += Math.max(0, Number(inF.value) || 0);
+function cambioFila(i) {
+  document.getElementById('fila_' + i).classList.toggle('tildada', document.getElementById('chk_' + i).checked);
+  actualizarContador();
+}
+function cambioFalla(i) {
+  var f = Math.max(0, Number(document.getElementById('falla_' + i).value) || 0);
+  document.getElementById('cant_' + i).value = Math.max(0, (Number(PEND[i].cantidad) || 0) - f);
+  document.getElementById('fila_' + i).classList.toggle('con-falla', f > 0);
+  var chk = document.getElementById('chk_' + i);
+  if (f > 0 && !chk.checked) { chk.checked = true; }
+  cambioFila(i);
+}
+function tildarSeccion(nSec) {
+  PEND.forEach(function (it, i) {
+    var el = document.getElementById('fila_' + i);
+    if (el && el.getAttribute('data-seccion') === String(nSec)) { document.getElementById('chk_' + i).checked = true; cambioFila(i); }
   });
-  contador.textContent = n + ' ítem' + (n === 1 ? '' : 's') + ' tildado' + (n === 1 ? '' : 's') +
-    (fallas ? ' · ' + fallas + ' u. con falla' : '');
-  btn.disabled = (n === 0);
-  var bloque = document.getElementById('bloqueFalla');
-  if (bloque) bloque.classList.toggle('hidden', fallas === 0);
+}
+function actualizarContador() {
+  var n = 0, fallas = 0;
+  PEND.forEach(function (it, i) {
+    var chk = document.getElementById('chk_' + i);
+    if (chk && chk.checked) { n++; fallas += Math.max(0, Number(document.getElementById('falla_' + i).value) || 0); }
+  });
+  document.getElementById('contador').textContent = n + ' ítem' + (n === 1 ? '' : 's') + ' tildado' + (n === 1 ? '' : 's') + (fallas ? ' · ' + fallas + ' u. con falla' : '');
+  document.getElementById('btnConfirmar').disabled = n === 0;
+  document.getElementById('bloqueFalla').classList.toggle('hidden', fallas === 0);
 }
 
+function confirmar() {
+  var tipo = document.getElementById('selTipo').value;
+  var lote = document.getElementById('inLote').value.trim();
+  var motivo = document.getElementById('inMotivo').value.trim();
+  var resp = document.getElementById('inResp').value.trim();
+  var sel = [], hayFalla = false, error = '';
+  PEND.forEach(function (it, i) {
+    if (!document.getElementById('chk_' + i).checked) return;
+    var buenas = Math.max(0, Number(document.getElementById('cant_' + i).value) || 0);
+    var falla = Math.max(0, Number(document.getElementById('falla_' + i).value) || 0);
+    if (buenas + falla <= 0) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': cargá buenas o falla.');
+    if (buenas + falla > (Number(it.cantidad) || 0)) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': buenas + falla supera lo que salió (' + it.cantidad + ').');
+    if (falla > 0) hayFalla = true;
+    sel.push({ fila: it.fila, cantidad: buenas, falla: falla });
+  });
+  if (!sel.length) error = 'Tildá al menos un ítem.';
+  else if (!tipo) error = 'Elegí el tipo de implante.';
+  else if (!lote) error = 'Ingresá el lote de Depósito.';
+  else if (hayFalla && (!motivo || !resp)) error = 'Hay ítems con falla: completá el motivo y el responsable de la revisión.';
+  if (error) { msg('pendMsg', error, false); return; }
+
+  var btn = document.getElementById('btnConfirmar');
+  btn.disabled = true; btn.textContent = 'Confirmando…';
+  msg('pendMsg', '', true);
+  stockApi('confirmarPendienteSalida', {
+    tipo_imp: tipo, lote_numero: lote, items_json: JSON.stringify(sel),
+    motivo_falla: motivo, responsable_revision: resp
+  }).then(function (r) {
+    btn.textContent = 'Confirmar seleccionados';
+    if (r && r.ok) {
+      msg('pendMsg', r.mensaje || 'Confirmado.', true);
+      document.getElementById('inLote').value = '';
+      document.getElementById('inMotivo').value = '';
+    } else {
+      msg('pendMsg', 'Atención: ' + ((r && (r.error || r.mensaje)) || 'No se pudo confirmar.'), false);
+    }
+    cargarPendientes();
+  }).catch(function (e) {
+    btn.textContent = 'Confirmar seleccionados'; btn.disabled = false;
+    msg('pendMsg', e.message + ' Antes de reintentar, tocá Actualizar para ver si se llegó a cargar.', false);
+  });
+}
 
 /* ===================== Revisión de stock en depósito ===================== */
-var REV_ITEMS = [];
-var REV_SEL = null;
-
-function revMsg(t, ok) {
-  var m = document.getElementById('revMsg');
-  m.textContent = t || '';
-  m.style.color = ok ? '#2e7d32' : '#c62828';
-}
-
 function cargarRevision() {
   var tipo = document.getElementById('revTipo').value;
   REV_SEL = null;
@@ -397,30 +314,26 @@ function cargarRevision() {
   var lista = document.getElementById('revLista');
   if (!tipo) { lista.innerHTML = '<div class="vacio">Elegí un tipo de implante.</div>'; return; }
   lista.innerHTML = '<div class="vacio">Cargando…</div>';
-  google.script.run
-    .withSuccessHandler(function (res) {
-      if (!res || !res.ok) { lista.innerHTML = ''; revMsg((res && res.error) || 'No se pudo leer el stock.', false); return; }
-      REV_ITEMS = res.items || [];
-      pintarRevision();
-    })
-    .withFailureHandler(function (e) { lista.innerHTML = ''; revMsg(e.message, false); })
-    .obtenerDatosRevision(tipo);
+  stockApi('obtenerDatosRevision', { tipo_imp: tipo }).then(function (r) {
+    if (!r || !r.ok) throw new Error((r && r.error) || 'No se pudo leer el stock.');
+    REV_ITEMS = r.items || [];
+    pintarRevision();
+  }).catch(function (e) { lista.innerHTML = ''; msg('revMsg', e.message, false); });
 }
 
 function pintarRevision() {
   var lista = document.getElementById('revLista');
   if (!REV_ITEMS.length) { lista.innerHTML = '<div class="vacio">No hay stock de este tipo en Depósito.</div>'; return; }
   lista.innerHTML = REV_ITEMS.map(function (it, i) {
-    return '<div class="rev-item' + (REV_SEL === i ? ' sel' : '') + '" data-i="' + i + '" onclick="elegirRevision(' + i + ')">' +
-      '<span>' + esc(it.lote) + ' · ' + esc(it.medidaTxt || it.medida) + '</span>' +
-      '<span class="st">' + esc(it.stock) + ' u.</span></div>';
+    return '<div class="r-item' + (REV_SEL === i ? ' sel' : '') + '" data-i="' + i + '" onclick="elegirRevision(' + i + ')">' +
+      '<span>' + esc(it.lote) + ' · ' + esc(it.medidaTxt || it.medida) + '</span><b>' + esc(it.stock) + ' u.</b></div>';
   }).join('');
   filtrarRevision();
 }
 
 function filtrarRevision() {
   var q = (document.getElementById('revBuscar').value || '').toLowerCase().trim();
-  document.querySelectorAll('#revLista .rev-item').forEach(function (el) {
+  document.querySelectorAll('#revLista .r-item').forEach(function (el) {
     el.style.display = (!q || el.textContent.toLowerCase().indexOf(q) >= 0) ? '' : 'none';
   });
 }
@@ -428,71 +341,70 @@ function filtrarRevision() {
 function elegirRevision(i) {
   REV_SEL = i;
   var it = REV_ITEMS[i];
-  document.querySelectorAll('#revLista .rev-item').forEach(function (el) {
+  document.querySelectorAll('#revLista .r-item').forEach(function (el) {
     el.classList.toggle('sel', Number(el.getAttribute('data-i')) === i);
   });
   document.getElementById('revSel').innerHTML = 'Seleccionado: <b>' + esc(it.lote) + '</b> · ' + esc(it.medidaTxt || it.medida) + ' · stock ' + esc(it.stock) + ' u.';
   var sel = document.getElementById('revOrigen');
-  sel.innerHTML = '';
-  (it.origenes || []).forEach(function (o, k) {
-    var opt = document.createElement('option');
-    opt.value = String(k);
-    opt.textContent = o.lote + ' · ' + o.confirmado + ' u. confirmadas' + (o.fallasPrevias ? ' (' + o.fallasPrevias + ' ya con falla)' : '');
-    sel.appendChild(opt);
-  });
-  var optOtro = document.createElement('option');
-  optOtro.value = 'manual';
-  optOtro.textContent = (it.origenes && it.origenes.length) ? 'Otro (escribirlo)' : 'Escribir lote de origen';
-  sel.appendChild(optOtro);
+  sel.innerHTML = (it.origenes || []).map(function (o, k) {
+    return '<option value="' + k + '">' + esc(o.lote) + ' · ' + esc(o.confirmado) + ' u. confirmadas' + (o.fallasPrevias ? ' (' + esc(o.fallasPrevias) + ' ya con falla)' : '') + '</option>';
+  }).join('') + '<option value="manual">' + ((it.origenes && it.origenes.length) ? 'Otro (escribirlo)' : 'Escribir lote de origen') + '</option>';
   cambioOrigen();
   var inCant = document.getElementById('revCant');
   inCant.max = String(it.stock); inCant.value = '1';
   document.getElementById('revForm').classList.remove('hidden');
-  revMsg('', true);
+  msg('revMsg', '', true);
 }
 
 function cambioOrigen() {
-  var manual = document.getElementById('revOrigen').value === 'manual';
-  document.getElementById('revOrigenManualBox').classList.toggle('hidden', !manual);
+  document.getElementById('revOrigenManualBox').classList.toggle('hidden', document.getElementById('revOrigen').value !== 'manual');
 }
 
 function registrarFalla() {
-  if (REV_SEL == null) { revMsg('Elegí un lote y medida de la lista.', false); return; }
+  if (REV_SEL == null) { msg('revMsg', 'Elegí un lote y medida de la lista.', false); return; }
   var it = REV_ITEMS[REV_SEL];
   var selO = document.getElementById('revOrigen').value;
   var cant = Number(document.getElementById('revCant').value) || 0;
   var motivo = document.getElementById('revMotivo').value.trim();
   var resp = document.getElementById('revResp').value.trim();
-  var payload = { tipo_imp: it.tipo, lote: it.lote, medida: it.medida, cantidad: cant, motivo: motivo, responsable: resp };
+  var p = { tipo_imp: it.tipo, lote: it.lote, medida: it.medida, cantidad: cant, motivo: motivo, responsable: resp };
   if (selO === 'manual') {
-    payload.lote_origen = document.getElementById('revOrigenManual').value.trim();
-    if (!payload.lote_origen) { revMsg('Escribí el lote de origen.', false); return; }
+    p.lote_origen = document.getElementById('revOrigenManual').value.trim();
+    if (!p.lote_origen) { msg('revMsg', 'Escribí el lote de origen.', false); return; }
   } else {
     var o = it.origenes[Number(selO)];
-    payload.lote_origen = o.lote; payload.fila_origen = o.fila;
+    p.lote_origen = o.lote; p.fila_origen = o.fila;
   }
-  if (!(cant > 0)) { revMsg('Ingresá la cantidad con falla.', false); return; }
-  if (cant > Number(it.stock)) { revMsg('No hay tanto stock en ese lote (' + it.stock + ' u.).', false); return; }
-  if (!motivo || !resp) { revMsg('Completá el motivo y el responsable.', false); return; }
+  if (!(cant > 0)) { msg('revMsg', 'Ingresá la cantidad con falla.', false); return; }
+  if (cant > Number(it.stock)) { msg('revMsg', 'No hay tanto stock en ese lote (' + it.stock + ' u.).', false); return; }
+  if (!motivo || !resp) { msg('revMsg', 'Completá el motivo y el responsable.', false); return; }
   if (!confirm('Descontar ' + cant + ' u. de ' + it.lote + ' (' + (it.medidaTxt || it.medida) + ') y mandarlas a Lavado Final (IPA)?')) return;
 
   var btn = document.getElementById('btnFalla');
   btn.disabled = true;
-  google.script.run
-    .withSuccessHandler(function (r) {
-      btn.disabled = false;
-      if (r && r.ok) {
-        revMsg(r.mensaje, true);
-        document.getElementById('revMotivo').value = '';
-        cargarRevision();
-        setTimeout(function () { revMsg(r.mensaje, true); }, 50);
-      } else {
-        revMsg((r && r.error) || 'No se pudo registrar.', false);
-      }
-    })
-    .withFailureHandler(function (e) { btn.disabled = false; revMsg(e.message, false); })
-    .registrarFallaEnDeposito(payload);
+  stockApi('registrarFallaEnDeposito', p).then(function (r) {
+    btn.disabled = false;
+    if (r && r.ok) {
+      document.getElementById('revMotivo').value = '';
+      cargarRevision();
+      msg('revMsg', r.mensaje, true);
+    } else {
+      msg('revMsg', (r && r.error) || 'No se pudo registrar.', false);
+    }
+  }).catch(function (e) {
+    btn.disabled = false;
+    msg('revMsg', e.message + ' Antes de reintentar, tocá Actualizar para ver si se descontó.', false);
+  });
 }
+
+/* ===================== Arranque (después del login) ===================== */
+document.addEventListener('DOMContentLoaded', function () {
+  ['selTipo', 'revTipo'].forEach(function (id) {
+    var s = document.getElementById(id);
+    TIPOS.forEach(function (t) { var o = document.createElement('option'); o.value = t; o.textContent = t; s.appendChild(o); });
+  });
+});
+BIOFIX.sesion.then(function () { cargarPendientes(); });
 </script>
 </body>
 </html>
