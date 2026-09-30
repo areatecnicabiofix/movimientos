@@ -624,6 +624,7 @@ function cargarLt(){
 }
 // Días con decimales -> "2 d 5 h" (más fácil de leer que "2,2")
 function dh(x){ if (x == null) return '—'; var h = Math.round(x * 24); if (h < 24) return h + ' h'; var d = Math.floor(h / 24); h = h % 24; return d + ' d' + (h ? ' ' + h + ' h' : ''); }
+function fmtMin(m){ m = Math.round(m); if (m < 60) return m + ' min'; var h = Math.floor(m / 60), r = m % 60; if (h < 24) return h + ' h' + (r ? ' ' + r + ' min' : ''); return dh(m / 1440); }
 function fmtD(x){ return x == null ? '<span class="mut">—</span>' : dh(x); }
 function renderLt(){
   var p = $('ltProd').value, lim = Date.now() - Number($('ltDesde').value) * 86400000;
@@ -747,10 +748,9 @@ var RP = null;
 function cargarRp(){
   $('rpEtapas').innerHTML = '<p class="mut">Cargando…</p>';
   var desde = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
-  Promise.all([rpc('rechazos_detalle', { p_desde: desde }), rpc('sector_diario', { p_desde: desde }), PROD ? Promise.resolve(PROD) : rpc('productividad_datos')])
+  Promise.all([rpc('rechazos_detalle', { p_desde: desde }), rpc('sector_diario', { p_desde: desde }), rpc('pausas_motivos', { p_desde: desde })])
     .then(function(r){
-      if (!PROD) PROD = r[2] || {};
-      RP = { lista: r[0] || [], dia: r[1] || [] };
+      RP = { lista: r[0] || [], dia: r[1] || [], pausas: r[2] || [] };
       var et = {}, pr = {};
       RP.dia.forEach(function(x){ et[x.grupo] = 1; if (x.producto) pr[x.producto] = 1; });
       RP.lista.forEach(function(x){ if (x.etapa) et[x.etapa] = 1; if (x.producto) pr[x.producto] = 1; });
@@ -806,25 +806,28 @@ function renderRp(){
         '<td><b>'+esc(x.lote)+'</b></td><td>'+esc(x.producto)+(x.teton && x.teton !== '-' ? ' <span class="mut">'+esc(x.teton)+'</span>' : '')+'</td><td>'+esc(x.medida)+'</td><td class="r"><b>'+num(x.cantidad,0)+'</b></td>' +
         '<td>'+esc(x.responsable || '')+'</td><td style="max-width:420px;font-size:12px">'+esc(x.motivo || '')+'</td></tr>';
     }).join('') + '</tbody></table>' + (lista.length > 400 ? '<p class="mut">Se muestran los 400 más recientes.</p>' : '') : '<p class="mut">Sin descartes en ese período.</p>';
-  // --- motivos de pausa
-  var P = {};
-  function pausa(sector, txt, cuando, prod){
-    if (!cuando || cuando < lim || (fp && prod !== fp)) return;
-    String(txt || '').split(',').forEach(function(mo){ mo = mo.trim(); if (!mo) return;
-      var k = sector + '|' + mo, o = P[k] || (P[k] = { n: 0, ult: null }); o.n++; if (!o.ult || cuando > o.ult) o.ult = cuando; });
-  }
-  var ind = PROD.ind || { h: [], filas: [] }, h = ind.h || [], ix = function(n){ return h.indexOf(n); };
-  var cT = ix('tipo'), cF = ix('fecha'), cP = ix('producto'), cMot = ix('motivos pausa');
-  (ind.filas || []).forEach(function(f){ var v = f.v || [];
-    pausa(String(v[cT] || '').toLowerCase() === 'control' ? 'Blasting (control)' : 'Blasting (bandejas)', v[cMot], fechaDMY(v[cF]), v[cP]); });
-  (PROD.pz || []).forEach(function(r){ pausa('Control de piezas (Mecanizado)', r.motivos, r.inicio ? new Date(r.inicio) : null, r.producto); });
-  (PROD.cc || []).forEach(function(r){ pausa('Control de Calidad', r.motivos, r.inicio ? new Date(r.inicio) : null, r.producto); });
-  var totSec = {}; Object.keys(P).forEach(function(k){ var s = k.split('|')[0]; totSec[s] = (totSec[s] || 0) + P[k].n; });
-  $('rpPausas').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces', '% de las pausas del sector', 'Última vez'],
+  // --- motivos de pausa (todos los sectores que anotan motivo; los controles abiertos también)
+  var P = {}, secMin = {};
+  var lindo = function(t){ t = t.trim().toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
+  (RP.pausas || []).forEach(function(r){
+    if (!r.dia || String(r.dia) < limDia || (fp && r.producto !== fp)) return;
+    var mots = String(r.motivos || '').split(',').map(lindo).filter(function(x){ return x; });
+    if (!mots.length) return;
+    var min = (+r.minutos || 0) / mots.length;   // los minutos del registro se reparten entre sus pausas (aprox.)
+    mots.forEach(function(mo){
+      var k = r.sector + '|' + mo, o = P[k] || (P[k] = { n: 0, min: 0, ult: '', lotes: {} });
+      o.n++; o.min += min; o.lotes[r.lote] = 1; if (String(r.dia) > o.ult) o.ult = String(r.dia);
+    });
+    secMin[r.sector] = (secMin[r.sector] || 0) + (+r.minutos || 0);
+  });
+  var totSec = {}; Object.keys(P).forEach(function(k){ var sc = k.split('|')[0]; totSec[sc] = (totSec[sc] || 0) + P[k].n; });
+  var sinDatos = ['Control de piezas (Mecanizado)', 'Grabado Láser'].filter(function(x){ return !totSec[x]; });
+  $('rpPausas').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces', '% de las pausas del sector', 'Tiempo en pausa (aprox.)', 'Lotes', 'Última vez'],
     Object.keys(P).sort(function(a, b){ var sa = a.split('|')[0], sb = b.split('|')[0]; return sa === sb ? P[b].n - P[a].n : (sa < sb ? -1 : 1); }).map(function(k){
       var kk = k.split('|'), o = P[k];
-      return [esc(kk[0]), esc(kk[1]), o.n, num(100 * o.n / totSec[kk[0]], 0) + ' %', o.ult ? o.ult.toLocaleDateString('es-AR') : ''];
-    })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>');
+      return [esc(kk[0]), esc(kk[1]), o.n, num(100 * o.n / totSec[kk[0]], 0) + ' %', o.min ? fmtMin(o.min) : '—', Object.keys(o.lotes).length, o.ult ? fecha(o.ult) : ''];
+    })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>') +
+    (sinDatos.length ? '<p class="mut" style="margin-top:6px">Sin pausas con motivo anotadas en el período: ' + sinDatos.join(', ') + '. Mecanizado (máquina) y Lavados no piden motivo al pausar.</p>' : '');
 }
 
 /* ---------------- Qué producir ---------------- */
