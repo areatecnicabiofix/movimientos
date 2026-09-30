@@ -410,7 +410,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
         document.getElementById('comboLotes').value = '';
         actualizarInventarios();
       })
-      .withFailureHandler(function(e){ if(b) b.disabled = false; msg(e.message, false); })
+      .withFailureHandler(function(e){
+        if(b) b.disabled = false;
+        if (yaHecho_(e)) { msg('Ese lote ya estaba abierto (seguramente por el toque anterior). Se actualizó la lista: buscalo abajo en "Lotes en Control".', true); actualizarInventarios(); return; }
+        msg(e.message, false);
+      })
       .ctlCrearBorradorSeguro({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp });
   }
 
@@ -732,6 +736,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
       })
       .withFailureHandler(function (e) {
         SAVE_EN_CURSO[f] = false;
+        if (yaHecho_(e)) { msg('Este control ya se cerró. Se actualizó la pantalla.', true); olvidarLote_(f); SAVE_PENDIENTE[f] = false; actualizarInventarios(); return; }
         msg('No se pudo guardar: ' + e.message, false);
         var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
         if (pend) encolarGuardado(f);
@@ -848,6 +853,13 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
         })
         .withFailureHandler(function(e){
           delete CERRANDO[f];
+          if (yaHecho_(e)) {   // el cierre anterior SÍ se guardó (la respuesta tardó o se cortó)
+            msg('Este control ya estaba cerrado (se guardó en el intento anterior). Se actualizó la pantalla.', true);
+            olvidarLote_(f);
+            delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f];
+            actualizarInventarios();
+            return;
+          }
           msg(e.message, false);
           if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
           refrescarEnControl();
@@ -864,6 +876,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
       .ctlEliminarBorrador({ id: f });
   }
 
+  // Respuestas que significan "eso ya estaba hecho": pasa cuando el guardado anterior SÍ se hizo
+  // pero la respuesta tardó o se cortó y se volvió a tocar. No es un error: se actualiza la pantalla.
+  function yaHecho_(e) {
+    return /ya fue cerrado|ya no existe|ya no est[aá] esperando control/i.test((e && e.message) || String(e || ''));
+  }
   function msg(t, ok) {
     var m = document.getElementById('msg');
     m.textContent = t;
