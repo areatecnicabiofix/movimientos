@@ -215,7 +215,8 @@
       </select>
       <select id="qpProd" onchange="renderQp()"><option value="">Todos los productos</option></select>
       <label class="mut"><input type="checkbox" id="qpSolo" checked onchange="renderQp()"> Solo medidas que salen</label>
-      <label class="mut"><input type="checkbox" id="qpJuntar" checked onchange="renderQp()"> Juntar con y sin tetón</label>
+      <label class="mut"><input type="checkbox" id="qpJuntar" onchange="renderQp()"> Juntar con y sin tetón</label>
+      <select id="qpOrden" onchange="renderQp()"><option value="medida" selected>Ordenar por medida (menor a mayor)</option><option value="cob">Ordenar por lo que primero se acaba</option></select>
       <label class="mut" title="El Basal se convierte en Tratado recién al pasar de Depósito a Control: el stock en proceso figura como Basal"><input type="checkbox" id="qpBasal" checked onchange="renderQp()"> Juntar Basal y Basal Tratado</label>
     </div>
     <p class="mut">Para cada medida: lo que hay (Sala Blanca + en proceso + lo que falta en máquina) y cuánto sale por semana (envasado: Sala Blanca → Salida).
@@ -733,6 +734,22 @@ function cargarQp(){
     renderQp();
   }).catch(function(e){ $('qpLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
+// "3.75 X 11,5mm" -> [3.75, 11.5]: para ordenar por diámetro y después por largo
+function qpNums(m){ return (String(m || '').replace(/,/g, '.').match(/\d+(\.\d+)?/g) || []).map(Number); }
+function qpPorMedida(a, b){
+  var p = String(a.producto).localeCompare(String(b.producto), 'es'); if (p) return p;
+  var x = qpNums(a.medida), y = qpNums(b.medida);
+  for (var i = 0; i < Math.max(x.length, y.length); i++){
+    if (x[i] == null) return -1; if (y[i] == null) return 1;
+    if (x[i] !== y[i]) return x[i] - y[i];
+  }
+  var m = String(a.medida).localeCompare(String(b.medida), 'es'); if (m) return m;
+  return String(a.teton).localeCompare(String(b.teton), 'es');   // "con teton" antes que "sin teton"
+}
+function qpPorCobertura(a, b){
+  var ca = a.cobertura_semanas == null ? 1e9 : +a.cobertura_semanas, cb = b.cobertura_semanas == null ? 1e9 : +b.cobertura_semanas;
+  return ca - cb || b.salidas - a.salidas || qpPorMedida(a, b);
+}
 function renderQp(){
   var pf = $('qpProd').value, solo = $('qpSolo').checked, juntar = $('qpJuntar').checked;
   var base = QP || [];
@@ -744,9 +761,9 @@ function renderQp(){
       var o = J[k]; o.sala_blanca += +r.sala_blanca; o.en_proceso += +r.en_proceso; o.en_maquina += +r.en_maquina; o.salidas += +r.salidas; o.por_semana += +r.por_semana; if (r.teton) o.tet[r.teton] = 1; });
     base = orden.map(function(k){ var o = J[k], tot = o.sala_blanca + o.en_proceso + o.en_maquina;
       o.teton = Object.keys(o.tet).join(' / '); o.cobertura_semanas = o.por_semana > 0 ? Math.round(10 * tot / o.por_semana) / 10 : null; return o; });
-    base.sort(function(a, b){ var ca = a.cobertura_semanas == null ? 1e9 : a.cobertura_semanas, cb = b.cobertura_semanas == null ? 1e9 : b.cobertura_semanas; return ca - cb || b.salidas - a.salidas; });
   }
   var lista = base.filter(function(r){ return (!pf || r.producto === pf) && (!solo || +r.salidas > 0); });
+  lista.sort($('qpOrden').value === 'cob' ? qpPorCobertura : qpPorMedida);
   var sin = lista.filter(function(r){ return +r.salidas > 0 && (+r.sala_blanca + +r.en_proceso + +r.en_maquina) <= 0; }).length;
   var bajo = lista.filter(function(r){ return r.cobertura_semanas != null && +r.cobertura_semanas > 0 && +r.cobertura_semanas < 4; }).length;
   $('qpKpis').innerHTML = [['Medidas que salen y no hay nada', sin], ['Alcanza menos de 4 semanas', bajo], ['Medidas en la lista', lista.length]]
