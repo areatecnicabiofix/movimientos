@@ -210,17 +210,12 @@
   <!-- ================= QUÉ PRODUCIR ================= -->
   <div id="p_qp" class="hide">
     <div class="fila">
-      <select id="qpDias" onchange="cargarQp()">
-        <option value="60">Salidas de los últimos 60 días</option><option value="90" selected>Últimos 90 días</option><option value="180">Últimos 180 días</option>
-      </select>
       <select id="qpProd" onchange="renderQp()"><option value="">Todos los productos</option></select>
-      <label class="mut"><input type="checkbox" id="qpSolo" checked onchange="renderQp()"> Solo medidas que salen</label>
       <label class="mut"><input type="checkbox" id="qpJuntar" onchange="renderQp()"> Juntar con y sin tetón</label>
-      <select id="qpOrden" onchange="renderQp()"><option value="medida" selected>Ordenar por medida (menor a mayor)</option><option value="cob">Ordenar por lo que primero se acaba</option></select>
       <label class="mut" title="El Basal se convierte en Tratado recién al pasar de Depósito a Control: el stock en proceso figura como Basal"><input type="checkbox" id="qpBasal" checked onchange="renderQp()"> Juntar Basal y Basal Tratado</label>
+      <label class="mut" title="Medidas que alguna vez salieron y hoy no tienen nada en ningún lado"><input type="checkbox" id="qpCeros" onchange="renderQp()"> Mostrar también las que están en 0</label>
     </div>
-    <p class="mut">Para cada medida: lo que hay (Sala Blanca + en proceso + lo que falta en máquina) y cuánto sale por semana (envasado: Sala Blanca → Salida).
-      <b>Cobertura</b> = cuántas semanas alcanza lo que hay al ritmo de salida. Arriba, las que primero se quedan sin stock.</p>
+    <p class="mut">Para cada medida: lo que hay en Sala Blanca, lo que está en proceso y lo que falta sacar de máquina. Ordenado por producto y medida, de menor a mayor.</p>
     <div class="kpis" id="qpKpis"></div>
     <div class="card"><div class="tabla-wrap" id="qpLista"><p class="mut">Cargando…</p></div></div>
   </div>
@@ -726,7 +721,7 @@ function renderMecOp(){
 /* ---------------- Qué producir ---------------- */
 function cargarQp(){
   $('qpLista').innerHTML = '<p class="mut">Cargando…</p>';
-  rpc('que_producir', { p_dias: Number($('qpDias').value) }).then(function(d){
+  rpc('que_producir', { p_dias: 365 }).then(function(d){
     QP = d || [];
     var prods = {}; QP.forEach(function(r){ prods[r.producto] = 1; });
     var sel = $('qpProd'), act = sel.value;
@@ -746,35 +741,27 @@ function qpPorMedida(a, b){
   var m = String(a.medida).localeCompare(String(b.medida), 'es'); if (m) return m;
   return String(a.teton).localeCompare(String(b.teton), 'es');   // "con teton" antes que "sin teton"
 }
-function qpPorCobertura(a, b){
-  var ca = a.cobertura_semanas == null ? 1e9 : +a.cobertura_semanas, cb = b.cobertura_semanas == null ? 1e9 : +b.cobertura_semanas;
-  return ca - cb || b.salidas - a.salidas || qpPorMedida(a, b);
-}
 function renderQp(){
-  var pf = $('qpProd').value, solo = $('qpSolo').checked, juntar = $('qpJuntar').checked;
+  var pf = $('qpProd').value, juntar = $('qpJuntar').checked, ceros = $('qpCeros').checked;
   var base = QP || [];
   if ($('qpBasal').checked) base = base.map(function(r){ return Object.assign({}, r, { producto: String(r.producto).replace(/^Monopieza Basal (Tratado|Pulido)$/i, 'Monopieza Basal') }); });
-  if (juntar || $('qpBasal').checked) {   // el tetón a veces queda cargado distinto en la salida que en producción: se suma por producto + medida
-    var J = {}, orden = [];
-    base.forEach(function(r){ var k = r.producto + '|' + r.medida + (juntar ? '' : '|' + r.teton);
-      if (!J[k]) { J[k] = { producto: r.producto, teton: '', medida: r.medida, sala_blanca: 0, en_proceso: 0, en_maquina: 0, salidas: 0, por_semana: 0, tet: {} }; orden.push(k); }
-      var o = J[k]; o.sala_blanca += +r.sala_blanca; o.en_proceso += +r.en_proceso; o.en_maquina += +r.en_maquina; o.salidas += +r.salidas; o.por_semana += +r.por_semana; if (r.teton) o.tet[r.teton] = 1; });
-    base = orden.map(function(k){ var o = J[k], tot = o.sala_blanca + o.en_proceso + o.en_maquina;
-      o.teton = Object.keys(o.tet).join(' / '); o.cobertura_semanas = o.por_semana > 0 ? Math.round(10 * tot / o.por_semana) / 10 : null; return o; });
-  }
-  var lista = base.filter(function(r){ return (!pf || r.producto === pf) && (!solo || +r.salidas > 0); });
-  lista.sort($('qpOrden').value === 'cob' ? qpPorCobertura : qpPorMedida);
-  var sin = lista.filter(function(r){ return +r.salidas > 0 && (+r.sala_blanca + +r.en_proceso + +r.en_maquina) <= 0; }).length;
-  var bajo = lista.filter(function(r){ return r.cobertura_semanas != null && +r.cobertura_semanas > 0 && +r.cobertura_semanas < 4; }).length;
-  $('qpKpis').innerHTML = [['Medidas que salen y no hay nada', sin], ['Alcanza menos de 4 semanas', bajo], ['Medidas en la lista', lista.length]]
+  var J = {}, orden = [];   // se suma por producto + medida (+ tetón si no se juntan)
+  base.forEach(function(r){ var k = r.producto + '|' + r.medida + (juntar ? '' : '|' + r.teton);
+    if (!J[k]) { J[k] = { producto: r.producto, teton: juntar ? '' : r.teton, medida: r.medida, sala_blanca: 0, en_proceso: 0, en_maquina: 0, tet: {} }; orden.push(k); }
+    var o = J[k]; o.sala_blanca += +r.sala_blanca || 0; o.en_proceso += +r.en_proceso || 0; o.en_maquina += +r.en_maquina || 0; if (r.teton) o.tet[r.teton] = 1; });
+  var lista = orden.map(function(k){ var o = J[k]; if (juntar) o.teton = Object.keys(o.tet).sort().join(' / '); o.total = o.sala_blanca + o.en_proceso + o.en_maquina; return o; })
+    .filter(function(r){ return (!pf || r.producto === pf) && (ceros || r.total > 0); });
+  lista.sort(qpPorMedida);
+  var tot = lista.reduce(function(s, r){ return s + r.total; }, 0);
+  var sinSala = lista.filter(function(r){ return r.sala_blanca <= 0; }).length;
+  $('qpKpis').innerHTML = [['Medidas en la lista', lista.length], ['Piezas en total', num(tot,0)], ['Sin nada en Sala Blanca', sinSala]]
     .map(function(k){ return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>'; }).join('');
   if (!lista.length){ $('qpLista').innerHTML = '<p class="mut">Sin datos para ese filtro.</p>'; return; }
-  $('qpLista').innerHTML = '<table><thead><tr><th>Producto</th><th>Tetón</th><th>Medida</th><th>Sala Blanca</th><th>En proceso</th><th>En máquina</th><th>Total</th><th>Sale por semana</th><th>Cobertura</th></tr></thead><tbody>' +
+  $('qpLista').innerHTML = '<table><thead><tr><th>Producto</th><th>Tetón</th><th>Medida</th><th>Sala Blanca</th><th>En proceso</th><th>En máquina</th><th>Total</th></tr></thead><tbody>' +
     lista.map(function(r){
-      var tot = +r.sala_blanca + +r.en_proceso + +r.en_maquina, c = r.cobertura_semanas;
-      var pill = c == null ? '<span class="mut">no sale</span>' : '<span class="pill '+(+c < 4 ? 'd14' : +c < 8 ? 'd7' : 'd0')+'">'+(+c <= 0 ? 'sin stock' : num(c,1)+' sem.')+'</span>';
-      return '<tr><td>'+esc(r.producto)+'</td><td>'+esc(r.teton)+'</td><td><b>'+esc(r.medida)+'</b></td><td class="r">'+num(r.sala_blanca,0)+'</td><td class="r">'+num(r.en_proceso,0)+'</td>' +
-        '<td class="r">'+(+r.en_maquina ? num(r.en_maquina,0) : '')+'</td><td class="r"><b>'+num(tot,0)+'</b></td><td class="r">'+(+r.por_semana ? num(r.por_semana,1) : '')+'</td><td>'+pill+'</td></tr>';
+      return '<tr><td>'+esc(r.producto)+'</td><td>'+esc(r.teton)+'</td><td><b>'+esc(r.medida)+'</b></td>' +
+        '<td class="r">'+(r.sala_blanca ? num(r.sala_blanca,0) : '<span class="mut">0</span>')+'</td><td class="r">'+(r.en_proceso ? num(r.en_proceso,0) : '')+'</td>' +
+        '<td class="r">'+(r.en_maquina ? num(r.en_maquina,0) : '')+'</td><td class="r"><b>'+num(r.total,0)+'</b></td></tr>';
     }).join('') + '</tbody></table>';
 }
 
