@@ -205,7 +205,6 @@
     <div class="card"><h2>Mecanizado — producción por operario</h2><div class="tabla-wrap" id="pMec"><p class="mut">Cargando…</p></div></div>
     <div class="card"><h2>Control de piezas (Mecanizado)</h2><div class="tabla-wrap" id="pPz"></div></div>
     <div class="card"><h2>Control de Calidad</h2><div class="tabla-wrap" id="pCc"></div></div>
-    <div class="card"><h2>Motivos de pausa</h2><div class="tabla-wrap" id="pPausa"></div></div>
   </div>
 
   <!-- ================= RECHAZOS ================= -->
@@ -919,9 +918,6 @@ function renderProd(){
   $('pCc').innerHTML = tablaSimple(['Responsable', 'Controles', 'Piezas', 'Min por pieza', 'Rechazadas', 'Pausa total (min)'],
     Object.keys(cc).sort().map(function(k){ var o = cc[k]; return [esc(k), o.n, num(o.pz,0), d2(o.min, o.pz), num(o.rech,0), num(o.pausa,0)]; }));
   renderMecOp();
-  $('pPausa').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces'],
-    Object.keys(mot).sort(function(a, b){ return mot[b] - mot[a]; }).map(function(k){ var kk = k.split('|'); return [esc(kk[0]), esc(kk[1]), mot[k]]; }))
-    .replace(/<td class="r">([^<]*)<\/td><td class="r">/g, '<td>$1</td><td class="r">');
 }
 
 /* ---------------- Historia de lote ---------------- */
