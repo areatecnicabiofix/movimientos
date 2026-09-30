@@ -74,7 +74,7 @@
     <div class="tab" id="tb_lt" onclick="ver('lt')">Tiempos por etapa</div>
     <div class="tab" id="tb_rend" onclick="ver('rend')">Rendimiento</div>
     <div class="tab" id="tb_prod" onclick="ver('prod')">Productividad</div>
-    <div class="tab" id="tb_rp" onclick="ver('rp')">Rechazos y pausas</div>
+    <div class="tab" id="tb_rp" onclick="ver('rp')">Rechazos</div>
     <div class="tab" id="tb_qp" onclick="ver('qp')">Qué producir</div>
     <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
   </div>
@@ -208,7 +208,7 @@
     <div class="card"><h2>Motivos de pausa</h2><div class="tabla-wrap" id="pPausa"></div></div>
   </div>
 
-  <!-- ================= RECHAZOS Y PAUSAS ================= -->
+  <!-- ================= RECHAZOS ================= -->
   <div id="p_rp" class="hide">
     <div class="fila">
       <select id="rpDesde" onchange="renderRp()">
@@ -223,9 +223,6 @@
       <div class="tabla-wrap" id="rpEtapas"><p class="mut">Cargando…</p></div></div>
     <div class="card"><h2>Rechazo por mes</h2><div class="tabla-wrap" id="rpMeses"></div></div>
     <div class="card"><h2>Descartes uno por uno</h2><div class="tabla-wrap" id="rpLista"></div></div>
-    <div class="card"><h2>Motivos de pausa por sector</h2>
-      <p class="mut">Cuántas veces se pausó por cada motivo (un control o bandeja con varios motivos suma uno en cada motivo).</p>
-      <div class="tabla-wrap" id="rpPausas"><p class="mut">Cargando…</p></div></div>
   </div>
 
   <!-- ================= QUÉ PRODUCIR ================= -->
@@ -743,14 +740,14 @@ function renderMecOp(){
     .catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 
-/* ---------------- Rechazos y pausas ---------------- */
+/* ---------------- Rechazos ---------------- */
 var RP = null;
 function cargarRp(){
   $('rpEtapas').innerHTML = '<p class="mut">Cargando…</p>';
   var desde = new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10);
-  Promise.all([rpc('rechazos_detalle', { p_desde: desde }), rpc('sector_diario', { p_desde: desde }), rpc('pausas_motivos', { p_desde: desde })])
+  Promise.all([rpc('rechazos_detalle', { p_desde: desde }), rpc('sector_diario', { p_desde: desde })])
     .then(function(r){
-      RP = { lista: r[0] || [], dia: r[1] || [], pausas: r[2] || [] };
+      RP = { lista: r[0] || [], dia: r[1] || [] };
       var et = {}, pr = {};
       RP.dia.forEach(function(x){ et[x.grupo] = 1; if (x.producto) pr[x.producto] = 1; });
       RP.lista.forEach(function(x){ if (x.etapa) et[x.etapa] = 1; if (x.producto) pr[x.producto] = 1; });
@@ -806,28 +803,6 @@ function renderRp(){
         '<td><b>'+esc(x.lote)+'</b></td><td>'+esc(x.producto)+(x.teton && x.teton !== '-' ? ' <span class="mut">'+esc(x.teton)+'</span>' : '')+'</td><td>'+esc(x.medida)+'</td><td class="r"><b>'+num(x.cantidad,0)+'</b></td>' +
         '<td>'+esc(x.responsable || '')+'</td><td style="max-width:420px;font-size:12px">'+esc(x.motivo || '')+'</td></tr>';
     }).join('') + '</tbody></table>' + (lista.length > 400 ? '<p class="mut">Se muestran los 400 más recientes.</p>' : '') : '<p class="mut">Sin descartes en ese período.</p>';
-  // --- motivos de pausa (todos los sectores que anotan motivo; los controles abiertos también)
-  var P = {}, secMin = {};
-  var lindo = function(t){ t = t.trim().toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
-  (RP.pausas || []).forEach(function(r){
-    if (!r.dia || String(r.dia) < limDia || (fp && r.producto !== fp)) return;
-    var mots = String(r.motivos || '').split(',').map(lindo).filter(function(x){ return x; });
-    if (!mots.length) return;
-    var min = (+r.minutos || 0) / mots.length;   // los minutos del registro se reparten entre sus pausas (aprox.)
-    mots.forEach(function(mo){
-      var k = r.sector + '|' + mo, o = P[k] || (P[k] = { n: 0, min: 0, ult: '', lotes: {} });
-      o.n++; o.min += min; o.lotes[r.lote] = 1; if (String(r.dia) > o.ult) o.ult = String(r.dia);
-    });
-    secMin[r.sector] = (secMin[r.sector] || 0) + (+r.minutos || 0);
-  });
-  var totSec = {}; Object.keys(P).forEach(function(k){ var sc = k.split('|')[0]; totSec[sc] = (totSec[sc] || 0) + P[k].n; });
-  var sinDatos = ['Control de piezas (Mecanizado)', 'Grabado Láser'].filter(function(x){ return !totSec[x]; });
-  $('rpPausas').innerHTML = tablaSimple(['Sector', 'Motivo', 'Veces', '% de las pausas del sector', 'Tiempo en pausa (aprox.)', 'Lotes', 'Última vez'],
-    Object.keys(P).sort(function(a, b){ var sa = a.split('|')[0], sb = b.split('|')[0]; return sa === sb ? P[b].n - P[a].n : (sa < sb ? -1 : 1); }).map(function(k){
-      var kk = k.split('|'), o = P[k];
-      return [esc(kk[0]), esc(kk[1]), o.n, num(100 * o.n / totSec[kk[0]], 0) + ' %', o.min ? fmtMin(o.min) : '—', Object.keys(o.lotes).length, o.ult ? fecha(o.ult) : ''];
-    })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>') +
-    (sinDatos.length ? '<p class="mut" style="margin-top:6px">Sin pausas con motivo anotadas en el período: ' + sinDatos.join(', ') + '. Mecanizado (máquina) y Lavados no piden motivo al pausar.</p>' : '');
 }
 
 /* ---------------- Qué producir ---------------- */
