@@ -88,13 +88,10 @@
   <!-- ===== Pendientes Salida ===== -->
   <div id="panelPend">
     <div class="p-titulo" id="pendTitulo">Pendientes Salida</div>
-    <div class="ayuda">Si al revisar un ítem hay piezas con falla, cargalas en <b>Falla</b>: las buenas entran al lote de Depósito y las falladas vuelven a Lavado Final (IPA) con un lote de reproceso propio. Los papeles ya liberados no se tocan.</div>
+    <div class="ayuda">La lista sale del <b>Anexo</b> (Envasados y Anexos): cada lote de Depósito con lo liberado por medida y lote de origen. Ya viene descontado lo que se cargó antes, así que solo aparece lo que falta. Si al revisar hay piezas con falla, cargalas en <b>Falla</b>: las buenas entran al lote de Depósito y las falladas vuelven a Lavado Final (IPA).</div>
     <div id="pendMsg" class="msg"></div>
     <div id="pendLista"><div class="vacio">Cargando…</div></div>
     <div class="controles" id="controles">
-      <select id="selTipo"><option value="">— Tipo de implante —</option></select>
-      <span class="mini" style="color:#7a5c00">Lote de Depósito:</span>
-      <input type="text" id="inLote" class="corto" placeholder="Ej: 0190">
       <button class="btn-verde" id="btnConfirmar" disabled onclick="confirmar()">Confirmar seleccionados</button>
       <span class="contador" id="contador">0 ítems tildados</span>
       <div class="bloque-falla hidden" id="bloqueFalla">
@@ -194,7 +191,7 @@ function recargar() {
 /* ===================== Pendientes Salida ===================== */
 function cargarPendientes() {
   document.getElementById('pendLista').innerHTML = '<div class="vacio">Cargando…</div>';
-  stockApi('obtenerPendientesSalida').then(function (r) {
+  stockApi('obtenerPendientesAnexo').then(function (r) {
     if (!r || !r.ok) throw new Error((r && r.error) || 'Error del servidor.');
     pintarPendientes(r.items || []);
   }).catch(function (e) {
@@ -204,27 +201,30 @@ function cargarPendientes() {
 
 function pintarPendientes(items) {
   PEND = items.slice().sort(function (a, b) {
-    var ka = (a.tipoImpSugerido || '') + '||' + (a.fecha || '');
-    var kb = (b.tipoImpSugerido || '') + '||' + (b.fecha || '');
-    return ka < kb ? -1 : (ka > kb ? 1 : 0);
+    var ka = a.tipo + '||' + a.loteDeposito, kb = b.tipo + '||' + b.loteDeposito;
+    return ka < kb ? -1 : (ka > kb ? 1 : (a.filaAnexo - b.filaAnexo));
   });
-  document.getElementById('pendTitulo').textContent = 'Pendientes Salida (' + PEND.length + ' ítem' + (PEND.length === 1 ? '' : 's') + ')';
+  var total = PEND.reduce(function (s, it) { return s + (Number(it.pendiente) || 0); }, 0);
+  document.getElementById('pendTitulo').textContent = 'Pendientes Salida (' + PEND.length + ' ítem' + (PEND.length === 1 ? '' : 's') + ' · ' + total + ' u.)';
   var cont = document.getElementById('pendLista');
-  if (!PEND.length) { cont.innerHTML = '<div class="vacio">No hay pendientes de Salida en este momento.</div>'; actualizarContador(); return; }
+  if (!PEND.length) { cont.innerHTML = '<div class="vacio">No hay nada pendiente: todo lo del Anexo ya está cargado en Depósito.</div>'; actualizarContador(); return; }
 
   var html = '', seccion = null, nSec = -1;
   PEND.forEach(function (it, i) {
-    var clave = (it.tipoImpSugerido || '?') + '||' + (it.fecha || '?');
+    var clave = it.tipo + '||' + it.loteDeposito;
     if (clave !== seccion) {
       seccion = clave; nSec++;
-      html += '<div class="pend-seccion">' + esc(it.tipoImpSugerido || '?') + ' · Salida del ' + esc(it.fecha || '?') +
+      html += '<div class="pend-seccion">' + esc(it.tipo) + ' · Lote de Depósito <b>' + esc(it.loteDeposito) + '</b>' +
+        ' <span class="gris">(Anexo ' + esc(it.loteAnexo) + ')</span>' +
         ' <a href="#" onclick="tildarSeccion(' + nSec + ');return false;">tildar todos estos</a></div>';
     }
+    var parcial = Number(it.cargado) > 0 ? ' · ya cargadas ' + esc(it.cargado) : '';
     html += '<div class="pend-fila" id="fila_' + i + '" data-seccion="' + nSec + '">' +
       '<input type="checkbox" id="chk_' + i + '" onchange="cambioFila(' + i + ')">' +
-      '<label for="chk_' + i + '">' + esc(it.medida) + (it.teton ? ' <span class="gris">(' + esc(it.teton) + ')</span>' : '') +
-        ' <span class="gris">· Sistema ' + esc(it.sistema) + ' · Lote origen ' + esc(it.lote) + ' · salieron ' + esc(it.cantidad) + ' u.</span></label>' +
-      '<span class="mini">Buenas</span><input type="number" min="0" id="cant_' + i + '" value="' + esc(it.cantidad) + '">' +
+      '<label for="chk_' + i + '">' + esc(it.medida) +
+        ' <span class="gris">· Lote origen ' + esc(it.origen) + (it.ref ? ' · ' + esc(it.ref) : '') +
+        ' · liberadas ' + esc(it.liberado) + parcial + ' · <b>faltan ' + esc(it.pendiente) + '</b></span></label>' +
+      '<span class="mini">Buenas</span><input type="number" min="0" id="cant_' + i + '" value="' + esc(it.pendiente) + '">' +
       '<span class="mini">Falla</span><input type="number" min="0" class="in-falla" id="falla_' + i + '" value="0" oninput="cambioFalla(' + i + ')">' +
       '</div>';
   });
@@ -238,7 +238,7 @@ function cambioFila(i) {
 }
 function cambioFalla(i) {
   var f = Math.max(0, Number(document.getElementById('falla_' + i).value) || 0);
-  document.getElementById('cant_' + i).value = Math.max(0, (Number(PEND[i].cantidad) || 0) - f);
+  document.getElementById('cant_' + i).value = Math.max(0, (Number(PEND[i].pendiente) || 0) - f);
   document.getElementById('fila_' + i).classList.toggle('con-falla', f > 0);
   var chk = document.getElementById('chk_' + i);
   if (f > 0 && !chk.checked) { chk.checked = true; }
@@ -262,37 +262,33 @@ function actualizarContador() {
 }
 
 function confirmar() {
-  var tipo = document.getElementById('selTipo').value;
-  var lote = document.getElementById('inLote').value.trim();
   var motivo = document.getElementById('inMotivo').value.trim();
   var resp = document.getElementById('inResp').value.trim();
-  var sel = [], hayFalla = false, error = '';
+  var sel = [], hayFalla = false, error = '', lotes = {};
   PEND.forEach(function (it, i) {
     if (!document.getElementById('chk_' + i).checked) return;
     var buenas = Math.max(0, Number(document.getElementById('cant_' + i).value) || 0);
     var falla = Math.max(0, Number(document.getElementById('falla_' + i).value) || 0);
-    if (buenas + falla <= 0) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': cargá buenas o falla.');
-    if (buenas + falla > (Number(it.cantidad) || 0)) error = error || ('Ítem ' + it.medida + ' / ' + it.lote + ': buenas + falla supera lo que salió (' + it.cantidad + ').');
+    if (buenas + falla <= 0) error = error || (it.medida + ' / ' + it.origen + ': cargá buenas o falla.');
+    if (buenas + falla > (Number(it.pendiente) || 0)) error = error || (it.medida + ' / ' + it.origen + ': buenas + falla supera lo que falta (' + it.pendiente + ').');
     if (falla > 0) hayFalla = true;
-    sel.push({ fila: it.fila, cantidad: buenas, falla: falla });
+    lotes[it.loteDeposito] = true;
+    sel.push({ id: it.hojaAnexo + '#' + it.filaAnexo, medida: it.medida, cantidad: buenas, falla: falla });
   });
   if (!sel.length) error = 'Tildá al menos un ítem.';
-  else if (!tipo) error = 'Elegí el tipo de implante.';
-  else if (!lote) error = 'Ingresá el lote de Depósito.';
   else if (hayFalla && (!motivo || !resp)) error = 'Hay ítems con falla: completá el motivo y el responsable de la revisión.';
   if (error) { msg('pendMsg', error, false); return; }
+  if (!confirm('Cargar ' + sel.length + ' ítem(s) a ' + Object.keys(lotes).join(', ') + '?')) return;
 
   var btn = document.getElementById('btnConfirmar');
   btn.disabled = true; btn.textContent = 'Confirmando…';
   msg('pendMsg', '', true);
-  stockApi('confirmarPendienteSalida', {
-    tipo_imp: tipo, lote_numero: lote, items_json: JSON.stringify(sel),
-    motivo_falla: motivo, responsable_revision: resp
+  stockApi('confirmarPendientesAnexo', {
+    items_json: JSON.stringify(sel), motivo_falla: motivo, responsable_revision: resp
   }).then(function (r) {
     btn.textContent = 'Confirmar seleccionados';
     if (r && r.ok) {
       msg('pendMsg', r.mensaje || 'Confirmado.', true);
-      document.getElementById('inLote').value = '';
       document.getElementById('inMotivo').value = '';
     } else {
       msg('pendMsg', 'Atención: ' + ((r && (r.error || r.mensaje)) || 'No se pudo confirmar.'), false);
@@ -346,7 +342,8 @@ function elegirRevision(i) {
   var sel = document.getElementById('revOrigen');
   sel.innerHTML = (it.origenes || []).map(function (o, k) {
     return '<option value="' + k + '">' + esc(o.lote) + ' · ' + esc(o.confirmado) + ' u. confirmadas' + (o.fallasPrevias ? ' (' + esc(o.fallasPrevias) + ' ya con falla)' : '') + '</option>';
-  }).join('') + '<option value="manual">' + ((it.origenes && it.origenes.length) ? 'Otro (escribirlo)' : 'Escribir lote de origen') + '</option>';
+  }).join('') + '<option value="manual">' + ((it.origenes && it.origenes.length) ? 'Otro (escribirlo)' : 'Escribir lote de origen') + '</option>' +
+    '<option value="nn">NN — no se sabe el lote de origen (se suma a un lote de Sala Blanca de esa medida)</option>';
   cambioOrigen();
   var inCant = document.getElementById('revCant');
   inCant.max = String(it.stock); inCant.value = '1';
@@ -366,7 +363,10 @@ function registrarFalla() {
   var motivo = document.getElementById('revMotivo').value.trim();
   var resp = document.getElementById('revResp').value.trim();
   var p = { tipo_imp: it.tipo, lote: it.lote, medida: it.medida, cantidad: cant, motivo: motivo, responsable: resp };
-  if (selO === 'manual') {
+  if (selO === 'nn') {
+    p.lote_origen = 'NN'; p.nn = 1;
+    if (it.origenes && it.origenes.length) p.fila_origen = it.origenes[0].fila; // solo para producto/tetón/sistema
+  } else if (selO === 'manual') {
     p.lote_origen = document.getElementById('revOrigenManual').value.trim();
     if (!p.lote_origen) { msg('revMsg', 'Escribí el lote de origen.', false); return; }
   } else {
@@ -397,7 +397,7 @@ function registrarFalla() {
 
 /* ===================== Arranque (después del login) ===================== */
 document.addEventListener('DOMContentLoaded', function () {
-  ['selTipo', 'revTipo'].forEach(function (id) {
+  ['revTipo'].forEach(function (id) {
     var s = document.getElementById(id);
     TIPOS.forEach(function (t) { var o = document.createElement('option'); o.value = t; o.textContent = t; s.appendChild(o); });
   });
