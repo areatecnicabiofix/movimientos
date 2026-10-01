@@ -2,242 +2,6 @@
 <html>
 <head>
 <base target="_top"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blasting — Bio-Fix</title>
-<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
-<script>window.BIOFIX_PANTALLA = 'blasting';</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js"></script>
-<script src="gas.js"></script>
-<script>
-/* ===== Lecturas rápidas desde Supabase (Blasting: borradores y bandejas) =====
- * Estas lecturas salen de UNA consulta a Supabase (función blasting_datos) en vez de ir al Apps Script,
- * con la misma lógica que el .gs. Si algo falla (o la hoja todavía no está copiada), cae solo al Apps Script.
- * ?modo=hoja en la dirección -> siempre Apps Script (plan B).
- * ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado abajo a la izquierda. */
-(function () {
-  var RPC = 'blasting_datos';
-  var cache = null, cacheT = 0;
-  function datos() {
-    var ahora = Date.now();
-    if (cache && ahora - cacheT < 3000) return cache;   // las lecturas de un mismo refresco comparten la consulta
-    cacheT = ahora;
-    cache = BIOFIX.supabase.rpc(RPC).then(function (r) {
-      if (r.error) throw new Error(r.error.message);
-      return r.data || {};
-    });
-    cache.catch(function () { cache = null; });
-    return cache;
-  }
-  function falta() { throw new Error('la copia de la hoja todavía no está en Supabase'); }
-  /* ---- ayudantes comunes (mismas reglas que Codigo.gs) ---- */
-  function N(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
-  function T(v) { return String(v == null ? '' : v).trim(); }
-  // Valor "como lo devuelve getValues": los números vuelven a ser números.
-  function V(x) { if (x == null) return ''; var s = String(x).trim(); return /^-?\d+([.,]\d+)?$/.test(s) ? Number(s.replace(',', '.')) : String(x); }
-  function num(x) { var v = V(x); return typeof v === 'number' ? v : (Number(v) || 0); }
-  function pad2(n) { return ('0' + n).slice(-2); }
-  function hora(x) { var s = T(x), m = s.match(/^(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : s; }          // HH:mm
-  function fecha(x) { var s = T(x), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] : s; }
-  // Columna como mecCol_ (primer encabezado que coincide, en el orden de los nombres)
-  function colPri(h, nombres) { for (var i = 0; i < nombres.length; i++) { var j = h.indexOf(N(nombres[i])); if (j >= 0) return j; } return -1; }
-  // Columna como bndMap_ (si el encabezado se repite, gana el último)
-  function colUlt(h, nombre) { var k = N(nombre), j = -1; for (var i = 0; i < h.length; i++) if (h[i] === k) j = i; return j; }
-  function celda(v, c) { return c >= 0 ? v[c] : ''; }
-  var LET = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-  function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
-    var p = N(producto), conTeton = N(teton).indexOf('con') >= 0;
-    if (p.indexOf('hexagono interno') >= 0) return 'O';
-    if (p.indexOf('cono morse') >= 0) return 'M';
-    if (p.indexOf('compresivo multi') >= 0 || p.indexOf('cmu3') >= 0) return 'M';
-    if (p.indexOf('basal') >= 0) {
-      if (conTeton) return 'M';
-      var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
-      var dd = mm ? parseFloat(mm[1].replace(',', '.')) : null;
-      return (dd != null && dd >= 5.5) ? 'K' : 'J';
-    }
-    if (p.indexOf('monopieza') >= 0) return 'M';
-    if (p.indexOf('tapon porta implante') >= 0) return 'F';
-    return 'O';
-  }
-  function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
-  function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
-
-  /* ---- Blasting: bla* y bnd* (= Codigo.gs / bandejas.gs) ---- */
-  function listaBla(d) { if (!d.espejo) falta(); return d.enBlasting || []; }              // = blaListar
-  function ind(d) { if (!d.espejo || !d.ind || !Array.isArray(d.ind.h)) falta(); return d.ind; }
-  function claveL(p, m, l) { return N(p) + '|' + N(m) + '|' + N(l); }                      // = bndClaveL_
-  var CERRADOS = ['finalizada', 'reprocesada', 'enviada', 'control registrado', ''];
-  function I(d) {   // columnas + filas de "Indicadores de Blasting"
-    var h = ind(d).h, c = {};
-    ['Fecha','Tipo','N° Bandeja','Operario','Producto','Lote','Medida','Teton','Cant. Implantes',
-     'Hora Inicio Armado','Hora Fin Armado','Pausa Armado (min)','Hora Inicio Blastinado','Hora Fin Blastinado',
-     'Pausa Blastinado (min)','Hora Inicio Control','Pausa Control (min)','Motivos Pausa','Observaciones',
-     'Tiempo Armado (min)','Tiempo Blastinado (min)','Estado','Pausa Desde'].forEach(function (n) { c[n] = colUlt(h, n); });
-    return { c: c, filas: d.ind.filas || [] };
-  }
-  function g(x, f, n) { return celda(f.v || [], x.c[n]); }
-  function esControl(x, f) { return x.c['Tipo'] >= 0 && N(g(x, f, 'Tipo')) === 'control'; }
-  function leer(x, f) {   // = bndLeer_
-    return { fila: f.fila, fecha: fecha(g(x, f, 'Fecha')), bandeja: V(g(x, f, 'N° Bandeja')), operario: V(g(x, f, 'Operario')),
-      producto: V(g(x, f, 'Producto')), lote: V(g(x, f, 'Lote')), medida: V(g(x, f, 'Medida')), teton: V(g(x, f, 'Teton')),
-      cantidad: V(g(x, f, 'Cant. Implantes')),
-      hIniArm: hora(g(x, f, 'Hora Inicio Armado')), hFinArm: hora(g(x, f, 'Hora Fin Armado')), pausaArm: num(g(x, f, 'Pausa Armado (min)')),
-      hIniBla: hora(g(x, f, 'Hora Inicio Blastinado')), hFinBla: hora(g(x, f, 'Hora Fin Blastinado')), pausaBla: num(g(x, f, 'Pausa Blastinado (min)')),
-      motivos: V(g(x, f, 'Motivos Pausa')), observaciones: V(g(x, f, 'Observaciones')),
-      tArm: V(g(x, f, 'Tiempo Armado (min)')), tBla: V(g(x, f, 'Tiempo Blastinado (min)')),
-      estado: V(g(x, f, 'Estado')), pausaDesde: hora(g(x, f, 'Pausa Desde')) };
-  }
-  function progreso(d, producto, medida, lote) {   // = bndProgresoLote
-    var x = I(d), hecho = 0, enProceso = 0, obj = claveL(producto, medida, lote);
-    x.filas.forEach(function (f) {
-      if (esControl(x, f)) return;
-      if (claveL(g(x, f, 'Producto'), g(x, f, 'Medida'), g(x, f, 'Lote')) !== obj) return;
-      var est = N(g(x, f, 'Estado')), cant = num(g(x, f, 'Cant. Implantes'));
-      if (est === 'finalizada') hecho += cant;
-      else if (est !== 'reprocesada' && est !== 'enviada') enProceso += cant;
-    });
-    var pedido = 0;
-    listaBla(d).forEach(function (b) { if (claveL(b.producto, b.medida, b.lote) === obj) pedido += Number(b.cantidad) || 0; });
-    return { pedido: pedido, hecho: hecho, enProceso: enProceso, disponible: Math.max(0, pedido - hecho - enProceso),
-             completo: (pedido > 0 && hecho >= pedido && enProceso === 0) };
-  }
-  var SACAR = {
-    blaObtenerDisponibles: function (d) { if (!d.espejo) falta(); return d.disponibles; },
-    blaListar: function (d) { return listaBla(d); },
-    bndActual: function (d) {
-      var x = I(d);
-      if (x.c['Estado'] < 0) return null;
-      for (var i = 0; i < x.filas.length; i++) {
-        var f = x.filas[i];
-        if (x.c['Tipo'] >= 0) { var tipo = N(g(x, f, 'Tipo')); if (tipo && tipo !== 'bandeja') continue; }
-        if (CERRADOS.indexOf(N(g(x, f, 'Estado'))) < 0) return leer(x, f);
-      }
-      return null;
-    },
-    bndControlEnCurso: function (d) {
-      var x = I(d);
-      if (x.c['Estado'] < 0 || x.c['Tipo'] < 0) return null;
-      for (var i = 0; i < x.filas.length; i++) {
-        var f = x.filas[i];
-        if (N(g(x, f, 'Tipo')) !== 'control') continue;
-        if (CERRADOS.indexOf(N(g(x, f, 'Estado'))) >= 0) continue;
-        return { fila: f.fila, producto: V(g(x, f, 'Producto')), medida: V(g(x, f, 'Medida')), lote: V(g(x, f, 'Lote')),
-          teton: V(g(x, f, 'Teton')), cantidad: num(g(x, f, 'Cant. Implantes')),
-          horaInicio: hora(g(x, f, 'Hora Inicio Control')), pausaMin: num(g(x, f, 'Pausa Control (min)')),
-          pausaDesde: hora(g(x, f, 'Pausa Desde')), enPausa: !!N(g(x, f, 'Pausa Desde')) };
-      }
-      return null;
-    },
-    bndLotes: function (d) {
-      var out = [];
-      listaBla(d).forEach(function (b) {
-        var pr = progreso(d, b.producto, b.medida, b.lote);
-        if (pr.disponible > 0) out.push({ producto: b.producto, teton: b.teton || '', medida: b.medida || '—', lote: b.lote,
-          cantidad: pr.disponible, pedido: pr.pedido, hecho: pr.hecho, enProceso: pr.enProceso });
-      });
-      return out;
-    },
-    bndLotesCompletos: function (d) {
-      var out = [], vistos = {};
-      listaBla(d).forEach(function (b) {
-        var k = claveL(b.producto, b.medida, b.lote); if (vistos[k]) return; vistos[k] = 1;
-        var pr = progreso(d, b.producto, b.medida, b.lote);
-        if (pr.completo) out.push({ producto: b.producto, teton: b.teton || '', medida: b.medida, lote: b.lote, cantidad: pr.hecho });
-      });
-      return out;
-    },
-    bndPanel: function (d) {
-      var x = I(d), lotes = {}, orden = [];
-      x.filas.forEach(function (f) {
-        if (esControl(x, f)) return;
-        var est = N(g(x, f, 'Estado'));
-        if (est === 'reprocesada' || est === 'enviada') return;
-        var prod = V(g(x, f, 'Producto')), med = V(g(x, f, 'Medida')), lote = V(g(x, f, 'Lote')), cant = num(g(x, f, 'Cant. Implantes'));
-        var k = claveL(prod, med, lote);
-        if (!lotes[k]) { lotes[k] = { producto: prod, medida: med, lote: lote, hecho: 0, enProceso: 0 }; orden.push(k); }
-        if (est === 'finalizada') lotes[k].hecho += cant; else lotes[k].enProceso += cant;
-      });
-      listaBla(d).forEach(function (b) {
-        var k = claveL(b.producto, b.medida, b.lote);
-        if (!lotes[k]) { lotes[k] = { producto: b.producto, medida: b.medida, lote: b.lote, hecho: 0, enProceso: 0 }; orden.push(k); }
-        lotes[k].pedido = (lotes[k].pedido || 0) + (Number(b.cantidad) || 0);
-      });
-      var arr = [];
-      orden.forEach(function (k) { var L = lotes[k]; L.pedido = L.pedido || 0; if (L.pedido > 0 || L.enProceso > 0) arr.push(L); });
-      return arr;
-    },
-    bndProximoNumero: function (d, a) {
-      var x = I(d), maxN = 0, obj = claveL(a[0], a[1], a[2]);
-      if (x.c['N° Bandeja'] < 0) return 1;
-      x.filas.forEach(function (f) {
-        if (claveL(g(x, f, 'Producto'), g(x, f, 'Medida'), g(x, f, 'Lote')) !== obj) return;
-        var n = Number(V(g(x, f, 'N° Bandeja'))); if (!isNaN(n) && n > maxN) maxN = n;
-      });
-      return maxN + 1;
-    },
-    bndPromedio: function (d, a) {
-      var x = I(d), MIN = 20, sa = 0, na = 0, sb = 0, nb = 0, tot = 0, obj = N(a[0]) + '|' + N(a[1]);
-      x.filas.forEach(function (f) {
-        if (N(g(x, f, 'Estado')) !== 'finalizada') return;
-        if (N(g(x, f, 'Producto')) + '|' + N(g(x, f, 'Medida')) !== obj) return;
-        tot++;
-        var ra = V(g(x, f, 'Tiempo Armado (min)')), rb = V(g(x, f, 'Tiempo Blastinado (min)'));
-        var va = Number(ra); if (!isNaN(va) && ra !== '') { sa += va; na++; }
-        var vb = Number(rb); if (!isNaN(vb) && rb !== '') { sb += vb; nb++; }
-      });
-      if (tot < MIN) return { hay: false, n: tot, minimo: MIN };
-      function pr(s, n) { return n ? Math.round(s / n) : '—'; }
-      return { hay: true, n: tot, minimo: MIN, armado: pr(sa, na), blastinado: pr(sb, nb) };
-    }
-  };
-  var COMPARAR = [['blaObtenerDisponibles'], ['blaListar'], ['bndActual'], ['bndControlEnCurso'],
-                  ['bndLotes'], ['bndLotesCompletos'], ['bndPanel']];
-
-  function planB(fn) {
-    return function () {
-      var args = Array.prototype.slice.call(arguments);
-      return datos().then(function (d) { return SACAR[fn](d, args); }).catch(function (e) {
-        console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
-        return BIOFIX.llamar(fn, args);
-      });
-    };
-  }
-  window.BIOFIX_LOCAL = {};
-  Object.keys(SACAR).forEach(function (fn) { window.BIOFIX_LOCAL[fn] = planB(fn); });
-
-  if (/[?&]comparar=1\b/.test(location.search)) {
-    window.addEventListener('load', function () {
-      function clave(x) {
-        if (x == null || typeof x !== 'object') return String(x == null ? '' : x);
-        return Object.keys(x).sort().map(function (k) {
-          var v = x[k];
-          return k + ':' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v == null ? '' : v).trim());
-        }).join('|');
-      }
-      function lista(r) { var a = Array.isArray(r) ? r : (r == null ? [] : [r]); return a.map(clave).sort(); }
-      BIOFIX.sesion.then(function () {
-        return Promise.all(COMPARAR.map(function (c) {
-          var fn = c[0], args = c[1] || [], nombre = fn + '(' + args.map(function (a) { return JSON.stringify(a); }).join(', ') + ')';
-          return Promise.all([datos().then(function (d) { return SACAR[fn](d, args); }), BIOFIX.llamar(fn, args)]).then(function (p) {
-            var a = lista(p[0]), b = lista(p[1]);
-            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).map(function (x) { return 'SB: ' + x; })
-              .concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
-            console.log(nombre, { supabase: p[0], appsScript: p[1], diferencias: dif });
-            return nombre + ': ' + (dif.length ? 'DISTINTOS ✗' : 'IGUALES ✓') + ' (' + a.length + ' / ' + b.length + ')' +
-                   (dif.length ? '\n   ' + dif.slice(0, 4).map(function (x) { return x.slice(0, 300); }).join('\n   ') : '');
-          }, function (e) { return nombre + ': ERROR ' + e.message; });
-        }));
-      }).then(function (lineas) {
-        var box = document.createElement('pre');
-        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:11px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
-        box.textContent = 'COMPARACIÓN Supabase vs Apps Script\n' + lineas.join('\n');
-        document.body.appendChild(box);
-      }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
-    });
-  }
-})();
-</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
   *{ box-sizing:border-box; font-family:Arial, sans-serif; }
@@ -267,7 +31,7 @@
   th{ background:#f1f5f9; text-align:left; padding:5px 7px; border:1px solid #e2e8f0; }
   td{ padding:4px 7px; border:1px solid #e2e8f0; }
   .aviso50{ font-size:12px; font-weight:700; margin-top:4px; }
-   
+  /* etapas */
   .estado-actual{ font-size:16px; font-weight:800; padding:10px 14px; border-radius:10px; text-align:center; margin-bottom:14px; }
   .paso{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
   .paso.activo{ border-color:#7c3aed; background:#faf5ff; box-shadow:0 0 0 2px #ede9fe; }
@@ -291,7 +55,7 @@
   </div>
 
 
-  
+  <!-- ===================== PESTAÑA BLASTING ===================== -->
   <div id="paneBla">
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
       <h2>1. Seleccionar lote para blastinar </h2>
@@ -333,7 +97,7 @@
   </div>
 
 
-  
+  <!-- ===================== PESTAÑA INDICADORES / BANDEJAS ===================== -->
   <div id="paneInd" class="hide">
     <div id="indControl"></div>
     <div id="indZona"><p class="hint">Cargando…</p></div>
@@ -360,11 +124,11 @@
   }
 
 
-   
+  /* ---------- BLASTING ---------- */
   function actualizar() {
-    
+    // 1) La lista de borradores se carga SIEMPRE, independiente del combo
     refrescarBorradores();
-    
+    // 2) El combo de lotes disponibles, aparte
     google.script.run
       .withSuccessHandler(function(res){
         DATA = res || [];
@@ -379,8 +143,8 @@
   function poblarCombo() {
     var combo = document.getElementById('comboLotes');
     if (!DATA.length) { combo.innerHTML = '<option value="">No hay lotes esperando blasting</option>'; limpiar(); return; }
-    
-    
+    // Cada ítem ya viene sumado por Lote+Medida (sin importar quién hizo el Control
+    // de Calidad): un mismo Lote+Medida aparece UNA sola vez, con el total disponible.
     combo.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
   DATA.map(function(x, i){
     return '<option value="' + i + '">' + x.producto + ' — ' + x.medida + ' (' + x.lote + ') · ' +
@@ -411,7 +175,7 @@
     var lote     = document.getElementById('txtLote').value;
     var cantidad = document.getElementById('txtCantidad').value;
     var resp     = document.getElementById('responsable').value;
-    
+    // Si los campos no se completaron, los tomo del lote elegido en el combo
     if ((!producto || !lote)) {
       var cb = document.getElementById('comboLotes');
       var iSel = cb ? cb.value : '';
@@ -437,7 +201,7 @@
     if (btnB) btnB.disabled = true;
     msg('Guardando…', true);
     var listo = false;
-    
+    // Si el servidor no responde en 20 seg, libero los botones y aviso
     var guard = setTimeout(function(){
       if (!listo) { if (btnB) btnB.disabled = false; msg('El servidor no respondió. Probá de nuevo o recargá la página.', false); }
     }, 20000);
@@ -474,11 +238,11 @@
     cont.innerHTML = list.map(function(b){
       var f = b.fila;
      
-      
-      
+      // 1. Validamos si el lote está en proceso
+      // (Cambiá "En proceso" por el término exacto que guarde tu base de datos)
       var estaEnProceso = (b.estado === "En proceso");
      
-      
+      // 2. Definimos los atributos del botón dinámicamente
       var attrEliminar = estaEnProceso
         ? 'disabled title="No se puede eliminar un lote que ya está en proceso" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;cursor:not-allowed;margin:0;padding:7px 12px;font-size:12px;"'
         : 'style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminar(' + f + ')"';
@@ -499,7 +263,7 @@
           '<div style="grid-column:span 2;"><label>Observaciones</label><input id="bobs_' + f + '" value="' + (b.observaciones || '') + '"></div>' +
         '</div>' +
         '<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center; margin-top:10px;">' +
-          
+          // Usamos la variable con los atributos calculados
           '<button class="btn" ' + attrEliminar + '>🗑 Eliminar</button>' +
           '<button class="btn" style="background:#0284c7;color:#fff;margin:0;padding:7px 14px;font-size:12px;" onclick="guardarAvance(' + f + ')">💾 Guardar avance</button>' +
         '</div>' +
@@ -527,7 +291,7 @@
   }
 
 
-   
+  /* ================= BANDEJAS / INDICADORES (armado + blastinado, sin control por bandeja) ================= */
   var BND_LOTES = [];
   var BND_COMPLETOS = [];
   var PROXIMA_BANDEJA = '—';
@@ -536,16 +300,48 @@
   function tl(v){ return (v===''||v==null)?'—':v; }
 
 
-  
-  
-  
+  // Control y Bandeja son independientes: se cargan y muestran los dos a la vez, en
+  // zonas separadas de la pantalla. Solo se bloquean entre sí por el mismo lote puntual
+  // (no podés controlar un lote hasta blastinar el 100%), no entre lotes distintos.
+  /* ---- Varias bandejas: una en pausa NO bloquea, se puede iniciar otra ---- */
+  var BND_PAUSADAS = [];      // bandejas en pausa (se reanudan desde acá)
+  var BND_HAY_ACTIVA = false; // hay una bandeja en curso (sin pausa)
+  var CUR_FILA = 0;           // fila de la bandeja que se ve en pantalla
+  function pmsg_(t, ok){
+    var m = document.getElementById('pmsg') || document.getElementById('imsg');
+    if (!m) { if (!ok) alert(t); return; }
+    m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
+  }
+  function htmlPausadas_(){
+    if (!BND_PAUSADAS.length) return '';
+    return '<div class="card" style="border-color:#fcd34d;background:#fffbeb;">'+
+      '<h2 style="color:#92400e;">⏸ Bandejas en pausa ('+BND_PAUSADAS.length+')</h2>'+
+      '<p class="hint" style="margin-bottom:8px;">'+(BND_HAY_ACTIVA
+        ? 'Para reanudar una de estas, primero pausá o terminá la bandeja en curso.'
+        : 'Podés iniciar otra bandeja (abajo) o reanudar una de estas.')+'</p>'+
+      BND_PAUSADAS.map(function(p){
+        var e0 = String(p.estado||'').toLowerCase(), etapa = e0==='blastinando' ? 'Blastinando' : (e0==='armado listo' ? 'Armado listo (falta blastinar)' : 'Armando');
+        return '<div style="border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">'+
+          '<div style="font-size:13px;"><b>'+tl(p.lote)+'</b> · '+tl(p.producto)+' · '+tl(p.medida)+' · Bandeja '+tl(p.bandeja)+' · '+tl(p.cantidad)+' u.'+
+          '<br><span style="font-size:12px;color:#92400e;">'+etapa+' · en pausa desde '+tl(p.pausaDesde)+(p.motivos?' · '+p.motivos:'')+'</span></div>'+
+          '<button class="btn-mini" style="background:'+(BND_HAY_ACTIVA?'#cbd5e1':'#16a34a')+';color:#fff;" '+
+            (BND_HAY_ACTIVA ? 'disabled' : 'onclick="reanudar('+p.fila+')"')+'>▶ Reanudar</button>'+
+        '</div>';
+      }).join('')+
+      '<span id="pmsg" style="font-size:13px;"></span>'+
+    '</div>';
+  }
+
   function cargarBandejaActual(){
     document.getElementById('indZona').innerHTML = '<p class="hint">Cargando…</p>';
     document.getElementById('indControl').innerHTML = '';
     cargarControlLote();
     google.script.run
       .withSuccessHandler(function(d){
-        if (d) { renderEnCurso(d); cargarPanel(); return; }
+        BND_PAUSADAS = (d && d.pausadas) || [];
+        BND_HAY_ACTIVA = !!(d && !d.sinActiva);
+        if (BND_HAY_ACTIVA) { renderEnCurso(d); cargarPanel(); return; }
+        CUR_FILA = 0;
         google.script.run
           .withSuccessHandler(function(lotes){
             BND_LOTES = lotes || [];
@@ -568,7 +364,7 @@
   }
 
 
-   
+  /* ---- Iniciar bandeja / lote completo listo para Control ---- */
   function renderIniciar(){
     var htmlCompletos='';
     if (BND_COMPLETOS && BND_COMPLETOS.length){
@@ -588,13 +384,13 @@
       var avisoSinLotes = BND_COMPLETOS.length
         ? ''
         : '<div class="card" style="border-color:#fca5a5; background:#fef2f2;"><h2 style="color:#b91c1c;">No hay lotes en blasting</h2><p style="font-size:13px; color:#7f1d1d; margin:0;">No hay lotes esperando blastinar. En la pestaña <b>Blasting</b> tiene que haber un lote en <b>PARA BLASTING</b>.</p></div>';
-      document.getElementById('indZona').innerHTML = htmlCompletos + avisoSinLotes;
+      document.getElementById('indZona').innerHTML = htmlPausadas_() + htmlCompletos + avisoSinLotes;
       return;
     }
     var opts='<option value="">— Elegí el lote en blasting —</option>'+BND_LOTES.map(function(x,i){
       return '<option value="'+i+'">'+x.producto+' · '+x.medida+' ('+x.lote+' · '+(x.teton||'')+') — disponible '+x.cantidad+'</option>';
     }).join('');
-    document.getElementById('indZona').innerHTML = htmlCompletos +
+    document.getElementById('indZona').innerHTML = htmlPausadas_() + htmlCompletos +
       '<div class="card" style="border-color:#c4b5fd; background:#faf5ff;">'+
         '<h2 style="color:#6d28d9;">Iniciar bandeja (armado)</h2>'+
         '<div style="margin-bottom:12px;"><label>Lote en blasting</label><select id="iLote" onchange="onLote()">'+opts+'</select></div>'+
@@ -655,9 +451,11 @@
   }
 
 
-   
+  /* ---- Bandeja en curso: solo Armado y Blastinado ---- */
   function selResp(id, def){ var ops=['Javier','Miguel','Marcos']; var o=ops.map(function(x){return '<option'+(x===def?' selected':'')+'>'+x+'</option>';}).join(''); return '<select id="'+id+'">'+o+'</select>'; }
   function renderEnCurso(d){
+    CUR_FILA = (d && d.fila) || CUR_FILA;
+    if (d && d.pausadas) BND_PAUSADAS = d.pausadas;
     var enPausa = !!(d.pausaDesde && String(d.pausaDesde).trim());
     var est = String(d.estado||'').toLowerCase();
     var carteles = {
@@ -683,7 +481,7 @@
     var pA = pasoBox(d.hFinArm?'ok':(est==='armando'?'act':''), '1) Armado (+ orings)', d.tArm!==''&&d.hFinArm?chipOK(d.tArm):'', cuA);
  
     var cuB = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'+fila('Inicio', d.hIniBla)+fila('Fin', d.hFinBla)+fila('Pausa (min)', d.pausaBla||0)+'</div>';
-    if(est==='armado listo') cuB += btn('Empezar el blastinado ▶','#1d4ed8',"marcar('iniBlast')");
+    if(est==='armado listo'){ cuB += botonesPausa(); if(!enPausa) cuB += btn('Empezar el blastinado ▶','#1d4ed8',"marcar('iniBlast')"); }
     if(est==='blastinando'){ cuB += botonesPausa(); if(!enPausa){ cuB += '<div class="grid-3" style="margin-top:8px;"><div><label>Responsable blastinado</label>'+selResp('respBlast',d.operario)+'</div><div style="grid-column:2/4;"><label>Observación del blastinado (opcional)</label><input id="obsBlast" placeholder="Ej: ..."></div></div>'; cuB += btn('Terminé el blastinado ✓ (bandeja lista)','#1d4ed8',"marcar('finBlast')"); } }
     var pB = pasoBox(d.hFinBla?'ok':(est==='blastinando'||est==='armado listo'?'act':''), '2) Blastinado', d.tBla!==''&&d.hFinBla?chipOK(d.tBla):'', cuB);
  
@@ -696,7 +494,8 @@
         (d.motivos?'<div style="font-size:11px;color:#92400e;margin-top:8px;">Pausas: '+d.motivos+'</div>':'')+
         '<div style="margin-top:8px;"><span id="imsg" style="font-size:13px;"></span></div>'+
       '</div>';
-    
+    // Indicador de promedio (por tipo + medida), con lo cargado antes
+    document.getElementById('indZona').insertAdjacentHTML('beforeend', htmlPausadas_());
     google.script.run.withSuccessHandler(function(pr){
       var el=document.getElementById('panelPromedio'); if(!el) return;
       if(pr && pr.hay){
@@ -708,7 +507,7 @@
   }
 
 
-   
+  /* ---- Control del lote (una sola vez, con el 100% blastinado) ---- */
   function renderControlLote(ctrl){
     var enPausa = !!ctrl.enPausa;
     var estadoTxt = enPausa ? '⏸ CONTROL EN PAUSA' : '🔍 CONTROL EN CURSO';
@@ -751,25 +550,12 @@
     wrap.style.display = (res === 'Re-blastinar') ? 'block' : 'none';
   }
   function cmsg(t, ok){ var m=document.getElementById('cmsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
-  // Un solo toque por botón: mientras el servidor no responde, un segundo toque no hace nada
-  // (así no aparece "Ya está en pausa" / "No está en pausa" por tocar dos veces).
-  var BF_OCUPADO = {};
-  function ocupado_(k){ if (BF_OCUPADO[k]) return true; BF_OCUPADO[k] = setTimeout(function(){ delete BF_OCUPADO[k]; }, 60000); return false; }
-  function libre_(k){ clearTimeout(BF_OCUPADO[k]); delete BF_OCUPADO[k]; }
-  function errPausa_(e, fmsg){
-    fmsg(e.message, false);
-    if (/pausa/i.test(e.message)) cargarBandejaActual();   // la pantalla estaba desactualizada: se vuelve a leer
-  }
   function pausarControl(){
-    if (ocupado_('ctl')) return;
     var mot = document.getElementById('ctrlMotivo') ? document.getElementById('ctrlMotivo').value : '';
-    cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
+    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
   }
   function reanudarControl(){
-    if (ocupado_('ctl')) return;
-    cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndReanudarControl({ hora:horaAhora() });
+    google.script.run.withSuccessHandler(renderControlLote).withFailureHandler(function(e){ cmsg(e.message,false); }).bndReanudarControl({ hora:horaAhora() });
   }
   function finalizarControlLote(){
     var res=document.getElementById('clRes')?document.getElementById('clRes').value:'';
@@ -784,9 +570,8 @@
       responsable:document.getElementById('clResp')?document.getElementById('clResp').value:'',
       observaciones:document.getElementById('clObs')?document.getElementById('clObs').value:'',
       hora: horaAhora() };
-    if (ocupado_('ctl')) return;
     cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndFinalizarControlLote(p);
+    google.script.run.withSuccessHandler(function(r){ cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ cmsg(e.message,false); }).bndFinalizarControlLote(p);
   }
 
 
@@ -799,44 +584,31 @@
     var idr = {finArmado: 'respArmado', finBlast: 'respBlast'}[paso];
     if (idr && document.getElementById(idr)) resp = document.getElementById(idr).value || '';
 
-    
+    // Agregamos las etiquetas automáticas según la etapa que se esté finalizando
     var etiquetaFase = '';
     if (paso === 'finArmado') etiquetaFase = 'ARMADO FINALIZADO';
     if (paso === 'finBlast') etiquetaFase = 'BLASTINADO FINALIZADO';
     
-    
+    // Combinamos la etiqueta con la observación escrita por el operario si existe
     var observacionFinal = etiquetaFase + (obs ? ' - ' + obs : '');
 
-    if (ocupado_('band')) return;
-    imsg('Guardando…', true);
     google.script.run
         .withSuccessHandler(function(r) { 
-            libre_('band');
-            imsg((r && r.msg) || 'Guardado.', true); 
+            cmsg(r.msg, true); 
             cargarBandejaActual(); 
         })
         .withFailureHandler(function(e) { 
-            libre_('band');
-            errPausa_(e, imsg); 
+            cmsg(e.message, false); 
         })
-        .bndMarcar({ 
+        .bndMarcar({ fila: CUR_FILA, 
             paso: paso, 
             hora: horaAhora(), 
             obs: observacionFinal, 
             resp: resp 
         });
 }
-  function pausar(){
-    if (ocupado_('band')) return;
-    var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:'';
-    imsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('band'); imsg('Bandeja en pausa.', true); renderEnCurso(r); }).withFailureHandler(function(e){ libre_('band'); errPausa_(e, imsg); }).bndPausar({ motivo:mot, hora:horaAhora() });
-  }
-  function reanudar(){
-    if (ocupado_('band')) return;
-    imsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('band'); imsg('Bandeja reanudada.', true); renderEnCurso(r); }).withFailureHandler(function(e){ libre_('band'); errPausa_(e, imsg); }).bndReanudar({ hora:horaAhora() });
-  }
+  function pausar(){ var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:''; google.script.run.withSuccessHandler(function(){ cargarBandejaActual(); }).withFailureHandler(function(e){ imsg(e.message,false); }).bndPausar({ fila: CUR_FILA, motivo:mot, hora:horaAhora() }); }
+  function reanudar(fila){ pmsg_('Guardando…', true); google.script.run.withSuccessHandler(function(){ cargarBandejaActual(); }).withFailureHandler(function(e){ pmsg_(e.message,false); }).bndReanudar({ fila: fila || CUR_FILA, hora:horaAhora() }); }
 
 
   function cargarPanel(){
