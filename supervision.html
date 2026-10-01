@@ -75,6 +75,7 @@
     <div class="tab" id="tb_rend" onclick="ver('rend')">Rendimiento</div>
     <div class="tab" id="tb_prod" onclick="ver('prod')">Productividad</div>
     <div class="tab" id="tb_rp" onclick="ver('rp')">Rechazos</div>
+    <div class="tab" id="tb_ws" onclick="ver('ws')">Workshop</div>
     <div class="tab" id="tb_qp" onclick="ver('qp')">Qué producir</div>
     <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
   </div>
@@ -125,7 +126,20 @@
       <button class="btn" onclick="cargarLote()">Buscar</button>
       <button class="btn gris" onclick="window.print()">🖨 Imprimir / PDF</button>
     </div>
-    <div id="loteRes"><p class="mut">Ingresá un número de lote.</p></div>
+    <div class="fila">
+      <span class="mut">o buscá por</span>
+      <select id="bProd">
+        <option value="">Tipo de implante…</option>
+        <option>Monopieza</option><option>Monopieza Basal</option><option>Monopieza Basal Tratado</option>
+        <option>Hexágono Interno</option><option>Hexágono Externo</option>
+        <option>Compresivo Multi-Unit</option><option>Compresivo Multi-Unit Cuello Largo</option><option>Cono Morse</option>
+      </select>
+      <input id="bMed" placeholder="Medida (ej: 3.5x13 o 3.5)" onkeydown="if(event.key==='Enter') buscarLotes()">
+      <select id="bTet"><option value="">Con y sin tetón</option><option value="con teton">Con tetón</option><option value="sin teton">Sin tetón</option></select>
+      <button class="btn" onclick="buscarLotes()">Buscar lotes</button>
+    </div>
+    <div id="loteBusq"></div>
+    <div id="loteRes"><p class="mut">Ingresá un número de lote, o buscá por tipo de implante y/o medida.</p></div>
   </div>
 
   <!-- ================= GRÁFICOS ================= -->
@@ -224,6 +238,23 @@
     <div class="card"><h2>Descartes uno por uno</h2><div class="tabla-wrap" id="rpLista"></div></div>
   </div>
 
+  <!-- ================= WORKSHOP (todo lo descartado) ================= -->
+  <div id="p_ws" class="hide">
+    <div class="fila">
+      <select id="wsDias" onchange="cargarWs()">
+        <option value="30">Últimos 30 días</option><option value="90">Últimos 90 días</option><option value="365">Último año</option><option value="3650" selected>Todo</option>
+      </select>
+      <select id="wsProd" onchange="renderWs()"><option value="">Todos los productos</option></select>
+      <select id="wsTipo" onchange="renderWs()"><option value="">Todos los motivos</option></select>
+      <input id="wsBuscar" placeholder="Buscar lote / medida…" oninput="renderWs()">
+      <button class="btn gris" onclick="window.print()">🖨 Imprimir / PDF</button>
+    </div>
+    <p class="mut">Todo lo que se descartó (calidad, setup, excedente, rechazos) va a Workshop. Tocá una fila para ver la historia del lote.</p>
+    <div class="kpis" id="wsKpis"></div>
+    <div class="card"><h2>Por producto y medida</h2><div class="tabla-wrap" id="wsResumen"><p class="mut">Cargando…</p></div></div>
+    <div class="card"><h2>Uno por uno</h2><div class="tabla-wrap" id="wsLista"></div></div>
+  </div>
+
   <!-- ================= QUÉ PRODUCIR ================= -->
   <div id="p_qp" class="hide">
     <div class="fila">
@@ -266,7 +297,7 @@ function rpc(nombre, args){
 }
 function ver(t){
   ACT = t;
-  ['ale','aud','wip','lote','gra','lt','rend','prod','rp','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
+  ['ale','aud','wip','lote','gra','lt','rend','prod','rp','ws','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
   if (t === 'cotas' && !COTAS.length) cargarCotas();
   if (t === 'wip' && !WIP) cargarWip();
   if (t === 'aud' && !AUD_OK) cargarAud();
@@ -276,6 +307,7 @@ function ver(t){
   if (t === 'prod' && !PROD) cargarProd();
   if (t === 'qp' && !QP) cargarQp();
   if (t === 'rp' && !RP) cargarRp();
+  if (t === 'ws' && !WS) cargarWs();
 }
 
 /* ---------------- Auditoría ---------------- */
@@ -920,6 +952,75 @@ function renderProd(){
   renderMecOp();
 }
 
+
+/* ---------------- Buscar lotes por tipo de implante / medida ---------------- */
+function buscarLotes(){
+  var p = $('bProd').value, m = $('bMed').value.trim(), t = $('bTet').value;
+  if (!p && !m){ $('loteBusq').innerHTML = '<p class="mut">Elegí un tipo de implante o escribí una medida.</p>'; return; }
+  $('loteBusq').innerHTML = '<p class="mut">Buscando…</p>';
+  rpc('lotes_buscar', { p_producto: p || null, p_medida: m || null, p_teton: t || null }).then(function(L){
+    L = L || [];
+    if (!L.length){ $('loteBusq').innerHTML = '<div class="card"><p class="mut">No hay lotes con ese filtro.</p></div>'; return; }
+    var tot = L.reduce(function(a, x){ a.i += Number(x.ingresado)||0; a.s += Number(x.sala_blanca)||0; a.d += Number(x.descartado)||0; return a; }, {i:0,s:0,d:0});
+    $('loteBusq').innerHTML = '<div class="card"><h2>'+L.length+' lote(s)'+(p?' · '+esc(p):'')+(m?' · medida '+esc(m):'')+(t?' · '+esc(t):'')+'</h2>' +
+      '<div class="mut" style="margin-bottom:6px">Ingresado '+num(tot.i,0)+' · a Sala Blanca '+num(tot.s,0)+' · descartado (Workshop) '+num(tot.d,0)+'. Tocá un lote para ver su historia.</div>' +
+      '<div class="tabla-wrap"><table><thead><tr><th>Lote</th><th>Producto</th><th>Medida</th><th>Tetón</th><th>Ingresado</th><th>A Sala Blanca</th><th>Workshop</th><th>Dónde está hoy</th><th>Último movimiento</th></tr></thead><tbody>' +
+      L.map(function(x){
+        return '<tr class="click" onclick="irLote(\''+esc(x.lote)+'\')"><td><b>'+esc(x.lote)+'</b></td><td>'+esc(x.producto)+'</td><td>'+esc(x.medida)+'</td><td>'+esc(x.teton)+'</td>' +
+          '<td class="r">'+num(x.ingresado,0)+'</td><td class="r">'+num(x.sala_blanca,0)+'</td><td class="r">'+(Number(x.descartado)?num(x.descartado,0):'')+'</td>' +
+          '<td>'+(x.donde?esc(x.donde):'<span class="mut">—</span>')+'</td><td>'+fecha(x.ultimo)+'</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }).catch(function(e){ $('loteBusq').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+
+/* ---------------- Workshop: todo lo descartado ---------------- */
+var WS = null;
+function wsMotivo_(x){
+  var d = String(x.destino || '').toUpperCase();
+  if (d.indexOf('SETUP') >= 0) return 'Setup';
+  if (d.indexOf('EXCEDENTE') >= 0) return 'Excedente';
+  if (d.indexOf('RECHAZADO') >= 0) return 'Rechazo (grabado)';
+  return 'Calidad';
+}
+function cargarWs(){
+  $('wsResumen').innerHTML = '<p class="mut">Cargando…</p>'; $('wsLista').innerHTML = '';
+  rpc('workshop_descartes', { p_dias: Number($('wsDias').value) || 3650 }).then(function(d){
+    WS = (d || []).map(function(x){ x.motivo = wsMotivo_(x); return x; });
+    var prods = {}, mot = {};
+    WS.forEach(function(x){ prods[x.producto] = 1; mot[x.motivo] = 1; });
+    var sp = $('wsProd'), ap = sp.value, sm = $('wsTipo'), am = sm.value;
+    sp.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===ap?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
+    sm.innerHTML = '<option value="">Todos los motivos</option>' + Object.keys(mot).sort().map(function(p){ return '<option'+(p===am?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
+    renderWs();
+  }).catch(function(e){ $('wsResumen').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
+}
+function renderWs(){
+  if (!WS) return;
+  var p = $('wsProd').value, mo = $('wsTipo').value, q = $('wsBuscar').value.toLowerCase().trim();
+  var L = WS.filter(function(x){
+    return (!p || x.producto === p) && (!mo || x.motivo === mo) &&
+      (!q || (x.lote + ' ' + x.medida + ' ' + x.producto).toLowerCase().indexOf(q) >= 0);
+  });
+  var tot = 0, porMot = {}, lotes = {};
+  L.forEach(function(x){ var c = Number(x.cantidad) || 0; tot += c; porMot[x.motivo] = (porMot[x.motivo] || 0) + c; lotes[x.lote] = 1; });
+  $('wsKpis').innerHTML = [['Piezas en Workshop', tot], ['Lotes', Object.keys(lotes).length]].concat(Object.keys(porMot).sort().map(function(k){ return [k, porMot[k]]; }))
+    .map(function(k){ return '<div class="kpi"><div class="l">'+esc(k[0])+'</div><div class="v">'+num(k[1],0)+'</div></div>'; }).join('');
+  var g = {}, orden = [];
+  L.forEach(function(x){
+    var k = x.producto + '|' + x.medida + '|' + (x.teton || '');
+    if (!g[k]) { g[k] = { producto: x.producto, medida: x.medida, teton: x.teton, c: 0, lotes: {} }; orden.push(k); }
+    g[k].c += Number(x.cantidad) || 0; g[k].lotes[x.lote] = 1;
+  });
+  orden.sort(function(a, b){ return (g[a].producto + g[a].medida).localeCompare(g[b].producto + g[b].medida, 'es', { numeric: true }); });
+  $('wsResumen').innerHTML = orden.length ? '<table><thead><tr><th>Producto</th><th>Medida</th><th>Tetón</th><th>Piezas</th><th>Lotes</th></tr></thead><tbody>' +
+    orden.map(function(k){ var r = g[k]; return '<tr><td>'+esc(r.producto)+'</td><td>'+esc(r.medida)+'</td><td>'+esc(r.teton)+'</td><td class="r"><b>'+num(r.c,0)+'</b></td><td>'+esc(Object.keys(r.lotes).join(', '))+'</td></tr>'; }).join('') +
+    '</tbody></table>' : '<p class="mut">Nada descartado con ese filtro.</p>';
+  $('wsLista').innerHTML = L.length ? '<table><thead><tr><th>Fecha</th><th>Lote</th><th>Producto</th><th>Medida</th><th>Tetón</th><th>De dónde</th><th>Motivo</th><th>Cant.</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>' +
+    L.map(function(x){ return '<tr class="click" onclick="irLote(\''+esc(x.lote)+'\')"><td>'+fecha(x.fecha)+'</td><td><b>'+esc(x.lote)+'</b></td><td>'+esc(x.producto)+'</td><td>'+esc(x.medida)+'</td><td>'+esc(x.teton)+'</td>' +
+      '<td>'+esc(x.origen)+'</td><td>'+esc(x.motivo)+'</td><td class="r"><b>'+num(x.cantidad,0)+'</b></td><td>'+esc(x.responsable)+'</td><td>'+esc(x.observacion)+'</td></tr>'; }).join('') +
+    '</tbody></table>' : '';
+}
+
 /* ---------------- Historia de lote ---------------- */
 function recorrido(movs){
   // Cada etapa (destino) con su primera y última entrada, en el orden en que el lote pasó
@@ -954,7 +1055,7 @@ function cargarLote(){
     var prods = (h.productos||[]).map(function(p){ return esc(p.producto)+' · '+esc(p.medida)+' · '+esc(p.teton); }).join('<br>');
     var html = '<div class="card"><h2>'+esc(h.lote)+'</h2><div class="mut">'+prods+'</div>' +
       '<div class="mut" style="margin-top:6px">Primer movimiento '+fecha(r.primero)+' · último '+fecha(r.ultimo)+' · '+r.movimientos+' movimientos</div></div>';
-    html += '<div class="kpis">' + [['Ingresado', r.ingresado], ['Descarte calidad', r.descarte_calidad], ['Setup / excedente', r.descarte_setup_excedente],
+    html += '<div class="kpis">' + [['Ingresado', r.ingresado], ['Workshop (calidad)', r.descarte_calidad], ['Workshop (setup / excedente)', r.descarte_setup_excedente],
       ['Piezas de prueba', r.prueba], ['A Sala Blanca', r.sala_blanca], ['Salida', r.salida]].map(function(k){
       return '<div class="kpi"><div class="l">'+k[0]+'</div><div class="v">'+num(k[1],0)+'</div></div>'; }).join('') + '</div>';
     html += '<div class="card"><h2>Dónde está hoy</h2>' + ((h.stock_actual||[]).length
