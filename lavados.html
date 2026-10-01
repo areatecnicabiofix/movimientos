@@ -204,8 +204,29 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
 
   
   <div id="tabFinal" class="hide">
+    <div class="card" style="border-color:#86efac; background:#f0fdf4;">
+      <h2 style="color:#15803d;">Ingreso de componentes</h2>
+      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes y pilares no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
+      <div class="grid-3">
+        <div><label>Componente</label><select id="c_prod"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Cantidad</label><input id="c_cant" type="number" min="1"></div>
+        <div><label>Lote</label><input id="c_lote" placeholder="Ej: 1043"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div>
+          <label>Responsable</label>
+          <select id="c_resp"><option value="">— Seleccionar —</option><option>Lourdes Deasis</option><option>Gabriela Goritz</option></select>
+        </div>
+        <div></div>
+        <div style="display:flex; align-items:flex-end; justify-content:flex-end;">
+          <button class="btn" id="c_btn" style="background:#16a34a; margin:0;" onclick="c_ingresar()">Ingresar componente</button>
+        </div>
+      </div>
+      <div id="c_msg" style="font-size:13px; margin-top:6px;"></div>
+    </div>
+
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
-      <h2>1. Seleccionar lote (desde Blasting)</h2>
+      <h2>1. Seleccionar lote (desde Blasting o componente ingresado)</h2>
       <div class="grid-3">
         <div><label>Lotes disponibles</label><select id="f_combo" onchange="f_sel()"><option value="">Cargando lotes...</option></select></div>
         <div><label>Cantidad disponible</label><div id="f_disp" class="badge-stock">0 u.</div></div>
@@ -241,7 +262,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       </div>
       <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
         <button class="btn" id="f_btnAgregarGrupo" style="background:#64748b;" onclick="f_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
-        <button class="btn" id="f_btnTapon" style="background:#16a34a; display:none;" onclick="f_registrarTapon()">Registrar como Final (tapón — sin pasos ni monitoreo)</button>
+        <button class="btn" id="f_btnTapon" style="background:#16a34a; display:none;" onclick="f_registrarTapon()">Registrar como Final (sin pasos ni monitoreo)</button>
       </div>
     </div>
 
@@ -843,7 +864,35 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
    
   var F_TAPON_PRODUCTOS = ['Tapon Porta Implante MP','Tapon Porta Implante HI','Tapon Porta Implante HE','Tapon Porta Implante Generico'];
   function f_norm_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
-  function f_esTapon_(producto) { var n = f_norm_(producto); return F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
+  // Componentes de Lavado Final: igual que los tapones, sin pasos químicos ni conductímetro
+  var F_COMPONENTES = ['Tapa de cierre hexágono interno','Tornillo cuadrado M1.72 hexágono interno','Tapa de cierre hexágono externo',
+    'Porta implantes hexágono externo','Tornillo cuadrado hexágono externo','Pilar multifuncion hexágono interno 4,8'];
+  function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.some(function (p) { return f_norm_(p) === n; }); }
+  function f_esTapon_(producto) { var n = f_norm_(producto); return f_esComponente_(producto) || F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
+
+  function c_pintarCombo_() {
+    var s = document.getElementById('c_prod');
+    if (!s || s.options.length > 1) return;
+    F_COMPONENTES.forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; s.appendChild(o); });
+  }
+  function c_ingresar() {
+    var d = { producto: val_('c_prod'), cantidad: val_('c_cant'), lote: val_('c_lote').trim(), responsable: val_('c_resp') };
+    if (!d.producto) { msg('c_msg', 'Elegí el componente.', false); return; }
+    if (!(Number(d.cantidad) > 0)) { msg('c_msg', 'Completá la cantidad.', false); return; }
+    if (!d.lote) { msg('c_msg', 'Completá el lote.', false); return; }
+    if (!d.responsable) { msg('c_msg', 'Elegí el responsable.', false); return; }
+    var btn = document.getElementById('c_btn');
+    btn.disabled = true; msg('c_msg', 'Registrando…', true);
+    google.script.run
+      .withSuccessHandler(function (r) {
+        btn.disabled = false;
+        msg('c_msg', (r && r.msg) || 'Ingreso registrado.', true);
+        setVal_('c_cant', ''); setVal_('c_lote', '');
+        f_cargar(true);
+      })
+      .withFailureHandler(function (e) { btn.disabled = false; msg('c_msg', textoError_(e), false); })
+      .lfIngresoComponente(d);
+  }
   function f_actualizarModoTapon_() {
     var esTapon = f_esTapon_(val_('f_prod'));
     document.getElementById('f_cardPasos').style.display = esTapon ? 'none' : '';
@@ -952,7 +1001,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function f_generarPdf_(id, textoBase) {
     google.script.run
       .withSuccessHandler(function (r) {
-        if (r && r.pdfUrl) f_trabajoSet_(id, textoBase + ' <a href="' + r.pdfUrl + '" target="_blank">Ver PDF del día</a>', 'ok');
+        if (r && (r.pdfImplantesUrl || r.pdfComponentesUrl)) f_trabajoSet_(id, textoBase +
+            (r.pdfImplantesUrl ? ' <a href="' + r.pdfImplantesUrl + '" target="_blank">Ver PDF del día</a>' : '') +
+            (r.pdfComponentesUrl ? ' <a href="' + r.pdfComponentesUrl + '" target="_blank">Ver PDF de componentes</a>' : ''), 'ok');
+        else if (r && r.pdfUrl) f_trabajoSet_(id, textoBase + ' <a href="' + r.pdfUrl + '" target="_blank">Ver PDF del día</a>', 'ok');
         else if (r && r.enCola) f_trabajoSet_(id, textoBase + ' El PDF del día se actualiza al terminar el que se estaba generando.', 'ok');
         else f_trabajoSet_(id, textoBase, 'ok');
       })
@@ -1070,6 +1122,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       setVal_('g_fecha', hoy());
       setVal_('f_fecha', hoy());
       f_renderPasos();
+      c_pintarCombo_();
       f_actualizarModoTapon_();
       ggRestaurarEstado();
       lfRestaurarEstado();
