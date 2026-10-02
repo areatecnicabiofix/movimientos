@@ -397,7 +397,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         TOL_FILAS = r || [];
         if (nuevo !== viejo) refrescarEnControl();   // repinta con las tolerancias
       })
-      .withFailureHandler(function (e) { console.warn('No se pudieron leer las tolerancias: ' + e.message); })
+      .withFailureHandler(function (e) { console.warn('No se pudieron leer las tolerancias: ' + e.message); msg('No se pudieron leer las tolerancias: ' + e.message, false); })
       .ctlObtenerTolerancias();
   }
   function fmt3_(n) { return (Number(n) || 0).toFixed(3).replace('.', ','); }
@@ -818,7 +818,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (manual) MANUAL[f+'|'+l] = true;
     var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
     var m = arr[idx] || { v: '', r: '' };
-    inp.value = (m.v === '' || m.v === undefined || m.v === null) ? '' : m.v;
+    var vv = (m.v === '' || m.v === undefined || m.v === null) ? '' : m.v;
+    if (inp.tagName === 'SELECT') vv = String(vv).trim().toUpperCase();   // "ok" / "Ok" -> "OK"
+    inp.value = vv;
     actualizarPromedio_(f, l);
   }
 
