@@ -8,7 +8,9 @@
 <script>window.BIOFIX_PANTALLA = 'control';</script>
 <script>/* Tiempo real: cuando cambia algo de Control en Supabase, la pantalla se recarga sola (ver gas.js) */
 window.BIOFIX_REFRESCAR = function () { refrescarTodo(true); };
-window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad'];</script>
+window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad'];
+/* Tolerancias por cota (hoja "Tolerancias QC"): casi no cambian, se guardan en la tablet */
+window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
@@ -70,10 +72,23 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
       var d = m ? parseFloat(m[1].replace(',', '.')) : null;
       return (d != null && d >= 5.5) ? 'K' : 'J';
     }
-    if (p.indexOf('monopieza') >= 0) return 'M';
+    if (p.indexOf('monopieza') >= 0) {
+      // Monopieza común 3.0 / 3.5 / 4.0 / 4.5: con tetón hasta L, sin tetón hasta J
+      if (esMonopiezaComun(producto)) {
+        var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
+        var dm = mm ? parseFloat(mm[1].replace(',', '.')) : null;
+        if (dm != null && [3.0, 3.5, 4.0, 4.5].some(function (x) { return Math.abs(x - dm) < 0.001; })) return conTeton ? 'L' : 'J';
+      }
+      return 'M';
+    }
     if (p.indexOf('tapon porta implante') >= 0) return 'F';
     return 'O';
   }
+  function esMonopiezaComun(producto) {
+    var n = norm(producto);
+    return n.indexOf('monopieza') >= 0 && n.indexOf('basal') < 0 && !/monopieza b(\.|\s|$)/.test(n);
+  }
+  window.BF_esMonopiezaComun = esMonopiezaComun;
   function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
   function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
 
@@ -197,6 +212,21 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   .muestra-celda{ display:flex; gap:6px; align-items:center; }
   .muestra-celda select{ width:auto; min-width:110px; }
   .muestra-cnt{ font-size:11px; font-weight:700; white-space:nowrap; }
+  .coas-table th{ white-space:nowrap; }
+  .coas-table select.sel-muestra{ width:auto; min-width:96px; padding:5px 6px; }
+  .coas-table .val{ width:110px; padding:5px 6px; font-size:13px; border:1px solid var(--bx); border-radius:4px; text-align:right; }
+  .coas-table select.val{ text-align:left; }
+  .coas-table .val.val-ok{ border-color:#86efac; background:#f0fdf4; }
+  .coas-table .val.val-fuera{ border-color:#f87171; background:#fef2f2; color:#b91c1c; font-weight:700; }
+  .tol{ font-size:12px; line-height:1.35; white-space:nowrap; }
+  .tol b{ color:#0f172a; }
+  .tol .rango{ color:var(--mut); font-size:11px; }
+  .sin-spec{ color:#94a3b8; font-size:11px; }
+  .prom{ font-size:13px; font-weight:700; white-space:nowrap; }
+  .prom.ok{ color:#15803d; }
+  .prom.fuera{ color:#b91c1c; }
+  .prom.vacio{ color:#94a3b8; font-weight:400; }
+  .tabla-scroll{ overflow-x:auto; }
   .muestra-cnt.completo{ color:#15803d; }
   .muestra-cnt.incompleto{ color:#b45309; }
   .lote-card{ border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
@@ -226,6 +256,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   }
   @media (max-width: 720px) {
     .grid-3 { grid-template-columns: 1fr; }
+    .coas-table .val{ width:90px; }
   }
 </style>
 </head>
@@ -270,7 +301,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   
   <div class="card" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
     <h2>Lotes en Control (borradores) <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
-    <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
+    <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
     <div id="listaEnControl"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
   </div>
 </div>
@@ -320,6 +351,123 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   function tamanoMuestra(cantidad) {
     var c = Number(cantidad) || 0;
     return Math.max(1, Math.ceil(c * 0.15));
+  }
+
+  /* ---------- Tolerancias por cota (hoja "Tolerancias QC", vía ctlObtenerTolerancias) ---------- */
+  var TOL_FILAS = null;   // filas leídas de la hoja
+  var SPECS = {};         // SPECS[id][letra] = {tipo, nominal, tolMas, tolMenos, min, max, texto}
+  var COTAS_OK_MONOPIEZA = ['G', 'H', 'I'];
+  function normT_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+  function medidaClave_(v) {
+    var m = String(v == null ? '' : v).replace(/,/g, '.').match(/(\d+(?:\.\d+)?)(?:\s*[xX]\s*(\d+(?:\.\d+)?))?/);
+    return m ? { d: parseFloat(m[1]), l: m[2] ? parseFloat(m[2]) : null } : null;
+  }
+  function tetonClave_(t) { var n = normT_(t); return n.indexOf('con') >= 0 ? 'con' : (n.indexOf('sin') >= 0 ? 'sin' : ''); }
+  function specsDe_(producto, teton, medida, letras) {
+    var p = normT_(producto), t = tetonClave_(teton), mc = medidaClave_(medida);
+    var base = {}, exacta = {};
+    if (mc) (TOL_FILAS || []).forEach(function (f) {
+      if (!f || !f.med || f.prod !== p) return;
+      if (f.teton && f.teton !== t) return;
+      if (Math.abs(f.med.d - mc.d) > 0.001) return;
+      if (f.med.l == null) base[f.cota] = f;
+      else if (mc.l != null && Math.abs(f.med.l - mc.l) < 0.001) exacta[f.cota] = f;
+    });
+    var esMono = window.BF_esMonopiezaComun ? window.BF_esMonopiezaComun(producto) : false;
+    var out = {};
+    letras.forEach(function (l) {
+      var b = base[l] || {}, e = exacta[l] || {};
+      function pick(k) { return (e[k] !== null && e[k] !== undefined && e[k] !== '') ? e[k] : ((b[k] !== undefined && b[k] !== '') ? b[k] : null); }
+      var s = { tipo: pick('tipo') || ((esMono && COTAS_OK_MONOPIEZA.indexOf(l) >= 0) ? 'ok' : ''),
+                nominal: pick('nominal'), tolMas: pick('tolMas'), tolMenos: pick('tolMenos'), texto: pick('texto') || '' };
+      if (!s.tipo && s.nominal == null && s.tolMas == null && s.tolMenos == null) { out[l] = null; return; }
+      if (!s.tipo) s.tipo = 'medida';
+      if (s.tipo === 'medida' && s.nominal != null && (s.tolMas != null || s.tolMenos != null)) {
+        s.min = Math.round((s.nominal - (s.tolMenos || 0)) * 10000) / 10000;
+        s.max = Math.round((s.nominal + (s.tolMas || 0)) * 10000) / 10000;
+      }
+      out[l] = s;
+    });
+    return out;
+  }
+  function cargarTolerancias_() {
+    google.script.run
+      .withSuccessHandler(function (r) {
+        var nuevo = JSON.stringify(r || []), viejo = JSON.stringify(TOL_FILAS || null);
+        TOL_FILAS = r || [];
+        if (nuevo !== viejo) refrescarEnControl();   // repinta con las tolerancias
+      })
+      .withFailureHandler(function (e) { console.warn('No se pudieron leer las tolerancias: ' + e.message); })
+      .ctlObtenerTolerancias();
+  }
+  function fmt3_(n) { return (Number(n) || 0).toFixed(3).replace('.', ','); }
+  function num_(v) {
+    var s = String(v == null ? '' : v).trim().replace(',', '.');
+    return /^-?\d*\.?\d+$/.test(s) ? parseFloat(s) : NaN;
+  }
+  function specDe_(f, l) { return (SPECS[f] && SPECS[f][l]) || null; }
+  function esOk_(f, l) { var s = specDe_(f, l); return !!(s && s.tipo === 'ok'); }
+  function estadoValor_(s, v) {           // 'ok' | 'fuera' | ''
+    if (v === '' || v === null || v === undefined || !s) return '';
+    if (s.tipo === 'ok') { var t = String(v).trim().toUpperCase(); return t === 'OK' ? 'ok' : (t === 'NO OK' ? 'fuera' : ''); }
+    if (s.min == null || s.max == null) return '';
+    var n = num_(v);
+    if (isNaN(n)) return 'fuera';
+    return (n >= s.min - 1e-9 && n <= s.max + 1e-9) ? 'ok' : 'fuera';
+  }
+  function specHtml_(s) {
+    if (!s) return '<span class="sin-spec">Sin tolerancia cargada</span>';
+    if (s.tipo === 'ok') return '<div class="tol"><b>OK / NO OK</b>' + (s.texto ? '<div class="rango">' + s.texto + '</div>' : '') + '</div>';
+    var tol = '';
+    if (s.tolMas != null || s.tolMenos != null) {
+      var mas = s.tolMas || 0, menos = s.tolMenos || 0;
+      tol = (Math.abs(mas - menos) < 1e-9) ? ('± ' + fmt3_(mas)) : ('+' + fmt3_(mas) + ' / −' + fmt3_(menos));
+    }
+    var nom = (s.nominal != null) ? '<b>' + fmt3_(s.nominal) + '</b> ' : '';
+    var rango = (s.min != null && s.max != null) ? '<div class="rango">' + fmt3_(s.min) + ' – ' + fmt3_(s.max) + '</div>'
+      : (s.nominal == null ? '<div class="rango">falta nominal</div>' : '');
+    return '<div class="tol">' + nom + tol + rango + '</div>';
+  }
+  function actualizarPromedio_(f, l) {
+    var el = document.getElementById('qprom_'+l+'_'+f);
+    var s = specDe_(f, l);
+    var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+    if (el) {
+      if (s && s.tipo === 'ok') {
+        var ok = 0, nok = 0;
+        arr.forEach(function (m) { var t = String((m && m.v) || '').trim().toUpperCase(); if (t === 'OK') ok++; else if (t === 'NO OK') nok++; });
+        if (!ok && !nok) { el.className = 'prom vacio'; el.textContent = '—'; }
+        else { el.className = 'prom ' + (nok ? 'fuera' : 'ok'); el.textContent = 'OK ' + ok + (nok ? ' · NO OK ' + nok : ''); }
+      } else {
+        var suma = 0, n = 0;
+        arr.forEach(function (m) { var x = num_(m && m.v); if (!isNaN(x)) { suma += x; n++; } });
+        if (!n) { el.className = 'prom vacio'; el.textContent = '—'; }
+        else { var prom = suma / n; el.className = 'prom ' + (estadoValor_(s, prom) || ''); el.textContent = fmt3_(prom); el.title = n + ' valor(es)'; }
+      }
+    }
+    var inp = document.getElementById('qval_'+l+'_'+f);
+    if (inp) {
+      var e = estadoValor_(s, inp.value);
+      inp.classList.remove('val-ok', 'val-fuera');
+      if (e) inp.classList.add('val-' + e);
+    }
+  }
+  function contarFuera_(f) {
+    var n = 0, det = [];
+    Object.keys(MUESTRAS[f] || {}).forEach(function (l) {
+      var s = specDe_(f, l);
+      (MUESTRAS[f][l] || []).forEach(function (m, i) {
+        if (estadoValor_(s, m && m.v) === 'fuera') { n++; if (det.length < 8) det.push(l + ' N°' + (i + 1)); }
+      });
+    });
+    return { n: n, det: det };
+  }
+  function etiquetaMuestra_(n, m) { return 'N° ' + n + (slotVacio_(m) ? '' : ' ✓'); }
+  function marcarOpcion_(f, l, idx) {
+    var sel = document.getElementById('qidx_'+l+'_'+f);
+    if (!sel || !sel.options[idx]) return;
+    var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
+    sel.options[idx].text = etiquetaMuestra_(idx + 1, arr[idx]);
   }
 
    
@@ -477,6 +625,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
         });
       }
       if (!cantidadVacia) prepararMuestras(f, letrasDeEsteLote, b.coas, tam);
+      SPECS[f] = specsDe_(b.producto, b.teton, b.medida, letrasDeEsteLote);
 
       var bloqueResponsable;
       if (RESP_LOTE[f]) {
@@ -497,7 +646,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
 
       var filasCoa;
       if (cantidadVacia) {
-        filasCoa = '<tr><td colspan="2" class="aviso-cantidad">Este lote no tiene Cantidad Original registrada (quedó de antes del cambio). Eliminá el borrador y volvé a abrirlo desde el paso 1.</td></tr>';
+        filasCoa = '<tr><td colspan="6" class="aviso-cantidad">Este lote no tiene Cantidad Original registrada (quedó de antes del cambio). Eliminá el borrador y volvé a abrirlo desde el paso 1.</td></tr>';
       } else {
         filasCoa = letrasDeEsteLote.map(function(l){
           var completos = contarCompletas(f, l);
@@ -507,27 +656,36 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
           var idxSelGuardado = (SEL_IDX[f] && SEL_IDX[f][l] !== undefined) ? SEL_IDX[f][l] : (primerVacioL >= 0 ? primerVacioL : 0);
           var opcionesMuestra = '';
           for (var n = 1; n <= tam; n++) {
-            opcionesMuestra += '<option value="'+(n-1)+'"'+((n-1===idxSelGuardado)?' selected':'')+'>Muestra N° '+n+'</option>';
+            opcionesMuestra += '<option value="'+(n-1)+'"'+((n-1===idxSelGuardado)?' selected':'')+'>'+etiquetaMuestra_(n, arrLetra[n-1])+'</option>';
           }
           var args = '\''+f+'\',\''+l+'\'';
+          var dis = RESP_LOTE[f] ? '' : ' disabled';
+          var campoValor;
+          if (esOk_(f, l)) {
+            campoValor = '<select class="val" id="qval_'+l+'_'+f+'" data-fila="'+f+'"'+
+              ' onfocus="focoMuestra('+args+')" onblur="blurMuestra('+args+')" onchange="cambioOk('+args+')"'+dis+'>'+
+              '<option value=""></option><option value="OK">OK</option><option value="NO OK">NO OK</option></select>';
+          } else {
+            campoValor = '<input type="text" class="val" id="qval_'+l+'_'+f+'" data-fila="'+f+'" placeholder="Valor" inputmode="decimal"'+
+              ' onfocus="focoMuestra('+args+')"'+
+              ' onblur="blurMuestra('+args+')"'+
+              ' onkeydown="teclaMuestra(event,'+args+')"'+
+              ' oninput="guardarMuestraLocal('+args+')"'+dis+'>';
+          }
           return '<tr>'+
             '<td style="text-align:center;font-weight:700;color:#0369a1;">'+l+'</td>'+
-            '<td><div class="muestra-celda">'+
-              '<select id="qidx_'+l+'_'+f+'" onchange="cargarMuestra('+args+',true)">'+opcionesMuestra+'</select>'+
-              '<input type="text" id="qval_'+l+'_'+f+'" data-fila="'+f+'" placeholder="Valor (número o letra)"'+
-                ' onfocus="focoMuestra('+args+')"'+
-                ' onblur="blurMuestra('+args+')"'+
-                ' onkeydown="teclaMuestra(event,'+args+')"'+
-                ' oninput="guardarMuestraLocal('+args+')"'+(RESP_LOTE[f]?'':' disabled')+'>'+
-              '<span id="qcnt_'+l+'_'+f+'" class="muestra-cnt '+claseCnt+'">'+completos+'/'+tam+'</span>'+
-            '</div></td>'+
+            '<td><select class="sel-muestra" id="qidx_'+l+'_'+f+'" onchange="cargarMuestra('+args+',true)">'+opcionesMuestra+'</select></td>'+
+            '<td>'+specHtml_(specDe_(f, l))+'</td>'+
+            '<td>'+campoValor+'</td>'+
+            '<td><span id="qcnt_'+l+'_'+f+'" class="muestra-cnt '+claseCnt+'">'+completos+'/'+tam+'</span></td>'+
+            '<td><span id="qprom_'+l+'_'+f+'" class="prom vacio">—</span></td>'+
           '</tr>';
         }).join('');
       }
 
       var botonPausa = b.enPausa
         ? '<button class="btn" style="background:#16a34a;margin:0;padding:7px 14px;font-size:12px;" onclick="reanudar(\''+f+'\')">▶ Reanudar</button>'
-        : '<select id="motivo_'+f+'" style="padding:7px;font-size:12px;border:1px solid var(--bx);border-radius:6px;">'+
+        : '<select id="motivo_'+f+'" style="padding:7px;font-size:12px;border:1px solid var(--bx);border-radius:6px;width:auto;">'+
             '<option>Almuerzo</option><option>Baño</option><option>Otra tarea</option><option>Fin de Jornada</option>'+
           '</select>'+
           '<button class="btn" style="background:#b45309;margin:0;padding:7px 14px;font-size:12px;" onclick="pausar(\''+f+'\')">⏸ Pausa</button>';
@@ -553,10 +711,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
           '<div><label>Rechazadas</label><input type="number" min="0" id="trech_'+f+'" value="'+valRech_(f, b)+'" oninput="recalcCantidadFija(\''+f+'\')"><input type="hidden" id="torig_'+f+'" value="'+(b.cantidadOriginal||0)+'"></div>'+
         '</div>'+
         (cantidadVacia ? '' : '<div class="hint" style="margin-bottom:6px;">Muestra a controlar: <b>'+tam+'</b> por cota (15% de '+b.cantidadOriginal+', redondeado para arriba).</div>')+
-        '<table class="coas-table">'+
-          '<thead><tr><th style="width:40px;">Cota</th><th>Muestra (valor)</th></tr></thead>'+
+        '<div class="tabla-scroll"><table class="coas-table">'+
+          '<thead><tr><th style="width:40px;">Cota</th><th>Muestra</th><th>Nominal / Tolerancia</th><th>Valor</th><th>Cargadas</th><th>Promedio</th></tr></thead>'+
           '<tbody>'+filasCoa+'</tbody>'+
-        '</table>'+
+        '</table></div>'+
         '<div style="margin-top:10px;"><label>Observaciones</label><input id="tobs_'+f+'" value="'+escAttr_(valObs_(f, b))+'" oninput="marcarObs(\''+f+'\')"></div>'+
         '<div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">'+
           '<div style="display:flex; gap:8px; align-items:center;">'+
@@ -617,13 +775,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
       cnt.textContent = completos + '/' + tam;
       cnt.className = 'muestra-cnt ' + (completos >= tam ? 'completo' : 'incompleto');
     }
+    actualizarPromedio_(f, l);
   }
 
   function elegirResponsableLote(f) {
     var sel = document.getElementById('respLote_'+f);
     if (!sel) return;
     RESP_LOTE[f] = sel.value || '';
-    document.querySelectorAll('input[data-fila="'+f+'"]').forEach(function(inp){
+    document.querySelectorAll('[data-fila="'+f+'"]').forEach(function(inp){
       inp.disabled = !RESP_LOTE[f];
     });
     if (!RESP_LOTE[f]) return;
@@ -660,6 +819,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
     var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
     var m = arr[idx] || { v: '', r: '' };
     inp.value = (m.v === '' || m.v === undefined || m.v === null) ? '' : m.v;
+    actualizarPromedio_(f, l);
   }
 
   function irAMuestra_(f, l, idx) {
@@ -685,9 +845,17 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   function blurMuestra(f, l) { MANUAL[f+'|'+l] = false; }
 
   
+  function cambioOk(f, l) {
+    guardarMuestraLocal(f, l);
+    var inp = document.getElementById('qval_'+l+'_'+f);
+    if (inp && inp.value) irASiguienteVacia_(f, l);
+  }
   function teclaMuestra(e, f, l) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    irASiguienteVacia_(f, l);
+  }
+  function irASiguienteVacia_(f, l) {
     MANUAL[f+'|'+l] = false;
     var sel = document.getElementById('qidx_'+l+'_'+f);
     var arr = (MUESTRAS[f] && MUESTRAS[f][l]) || [];
@@ -714,6 +882,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
       r: RESP_LOTE[f]
     };
     marcarCelda_(f, l, idx);
+    marcarOpcion_(f, l, idx);
     actualizarContadorCota_(f, l);
     marcarSucio(f);
   }
@@ -839,6 +1008,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
   
   function cerrarControl(f, btn) {
     if (CERRANDO[f]) return;
+    var fuera = contarFuera_(f);
+    if (fuera.n > 0 && !confirm('Hay ' + fuera.n + ' valor(es) fuera de tolerancia o NO OK (' + fuera.det.join(', ') + (fuera.n > fuera.det.length ? '…' : '') + ').\n¿Marcar el lote como Controlada igual?')) return;
     CERRANDO[f] = true;
     if (btn) { btn.disabled = true; btn.textContent = 'Cerrando…'; }
     msg('Marcando como Controlada… no cierres la pantalla.', true);
@@ -893,6 +1064,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Control de Calidad
 
   window.onload = function() {
     poblarRespInicial();
+    cargarTolerancias_();
+    setInterval(cargarTolerancias_, 10 * 60000);
     actualizarInventarios();
     validarBtnAbrir();
     setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
