@@ -555,8 +555,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   var YO_KEY = 'bf_control_yo', PIN_KEY = 'bf_control_pin', YO_TODOS = '__todos';
   var YO = '', PIN = '';
   try { YO = localStorage.getItem(YO_KEY) || ''; PIN = localStorage.getItem(PIN_KEY) || ''; } catch (e) { YO = ''; PIN = ''; }
-  if (!PIN) YO = '';                       // sin PIN guardado no hay persona elegida
-  var ES_ADMIN = false;
+  if (!PIN && YO !== YO_TODOS) YO = '';    // sin PIN guardado no hay persona elegida (supervisión no usa PIN)
+  var ES_ADMIN = false, SESION_LISTA = false;
   var LAST_LISTA = null;
   function conPin_(o) { o.quien = (YO === YO_TODOS) ? 'Supervisión' : YO; o.pin = PIN; return o; }
   function guardarYo_() { try { localStorage.setItem(YO_KEY, YO); localStorage.setItem(PIN_KEY, PIN); } catch (e) {} }
@@ -568,9 +568,10 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     var sel = document.getElementById('yoSel');
     if (!sel) return;
     var ops = '<option value="">— Elegí tu nombre —</option>' + RESP_QC.map(function (r) { return '<option value="'+r+'">'+r+'</option>'; }).join('');
-    if (ES_ADMIN) ops += '<option value="'+YO_TODOS+'">Ver todos (supervisión)</option>';
+    if (ES_ADMIN) ops += '<option value="'+YO_TODOS+'">Supervisión (ver todos)</option>';   // solo usuario tecnica
     sel.innerHTML = ops;
-    if (YO === YO_TODOS && !ES_ADMIN) { YO = ''; PIN = ''; guardarYo_(); }
+    if (YO === YO_TODOS && !ES_ADMIN && SESION_LISTA) { YO = ''; PIN = ''; guardarYo_(); }
+    if (ES_ADMIN && !YO) { YO = YO_TODOS; PIN = ''; guardarYo_(); }   // técnica entra directo, sin PIN
     sel.value = YO;
   }
 
@@ -618,6 +619,12 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     var hay = Object.keys(LOTES_SUCIOS).some(function (f) { return LOTES_SUCIOS[f]; });
     if (hay && !confirm('Hay cambios cargados sin guardar. Si cambiás de persona dejan de verse (no se borran). ¿Cambiar igual?')) { sel.value = YO; return; }
     if (!nuevo) { olvidarPin_(); return; }
+    if (nuevo === YO_TODOS && ES_ADMIN) {          // supervisión: directo, sin PIN
+      YO = YO_TODOS; PIN = ''; guardarYo_();
+      poblarRespInicial(); validarBtnAbrir();
+      if (LAST_LISTA) renderEnControl(LAST_LISTA);
+      return;
+    }
     sel.value = YO;   // hasta que el PIN sea correcto, sigue la persona anterior
     pedirPin_(nuevo === YO_TODOS ? 'Supervisión' : nuevo, function (pin) {
       if (!pin) return;
@@ -1203,7 +1210,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (window.BIOFIX && BIOFIX.sesion) {
       BIOFIX.sesion.then(function (ses) {
         ES_ADMIN = (BIOFIX.sectorDe(ses) === 'tecnica');
+        SESION_LISTA = true;
         poblarYo();
+        poblarRespInicial(); validarBtnAbrir();
         if (LAST_LISTA) renderEnControl(LAST_LISTA);
       });
     }
