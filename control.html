@@ -272,7 +272,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1 style="margin:0;">Control de Calidad — Bio-Fix</h1>
   </div>
-  <div class="yo-bar">
+  <div class="yo-bar" id="yoBar">
     <label for="yoSel">👤 ¿Quién está usando esta tablet?</label>
     <select id="yoSel" onchange="cambiarYo()"></select>
     <p class="hint">Abajo, en <b>Lotes en Control</b>, solo vas a ver y cargar <b>tus</b> lotes. La tablet se acuerda de quién sos.</p>
@@ -565,6 +565,12 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (LAST_LISTA) renderEnControl(LAST_LISTA);
   }
   function poblarYo() {
+    var bar = document.getElementById('yoBar');
+    if (ES_ADMIN) {                                 // técnica: sin selector ni PIN, siempre supervisión
+      YO = YO_TODOS; PIN = ''; guardarYo_();
+      if (bar && document.getElementById('yoSel')) bar.innerHTML = '<label>👤 Supervisión</label><p class="hint">Estás como <b>técnica</b>: ves y podés cargar todos los lotes.</p>';
+      return;
+    }
     var sel = document.getElementById('yoSel');
     if (!sel) return;
     var ops = '<option value="">— Elegí tu nombre —</option>' + RESP_QC.map(function (r) { return '<option value="'+r+'">'+r+'</option>'; }).join('');
