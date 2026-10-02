@@ -227,6 +227,13 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   .prom.fuera{ color:#b91c1c; }
   .prom.vacio{ color:#94a3b8; font-weight:400; }
   .tabla-scroll{ overflow-x:auto; }
+  .yo-bar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fff7ed; border:2px solid #fb923c; border-radius:10px; padding:10px 14px; margin:12px 0 16px 0; }
+  .yo-bar label{ margin:0; font-size:14px; color:#9a3412; }
+  .yo-bar select{ width:auto; min-width:200px; font-size:15px; font-weight:700; padding:7px 10px; border:1px solid #fb923c; }
+  .yo-bar .hint{ margin:0; }
+  .otros-lotes{ background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; padding:10px 12px; font-size:12px; color:var(--mut); margin-top:6px; }
+  .otros-lotes b{ color:#334155; }
+  .otros-lotes .chip{ display:inline-block; background:#fff; border:1px solid #e2e8f0; border-radius:999px; padding:3px 10px; margin:3px 4px 0 0; color:#334155; }
   .muestra-cnt.completo{ color:#15803d; }
   .muestra-cnt.incompleto{ color:#b45309; }
   .lote-card{ border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
@@ -265,6 +272,11 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1 style="margin:0;">Control de Calidad — Bio-Fix</h1>
   </div>
+  <div class="yo-bar">
+    <label for="yoSel">👤 ¿Quién está usando esta tablet?</label>
+    <select id="yoSel" onchange="cambiarYo()"></select>
+    <p class="hint">Abajo, en <b>Lotes en Control</b>, solo vas a ver y cargar <b>tus</b> lotes. La tablet se acuerda de quién sos.</p>
+  </div>
 
   
   <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
@@ -300,7 +312,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 
   
   <div class="card" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
-    <h2>Lotes en Control (borradores) <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
+    <h2><span id="tituloEnControl">Lotes en Control (borradores)</span> <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
     <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
     <div id="listaEnControl"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
   </div>
@@ -531,8 +543,104 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   function poblarRespInicial() {
     var sel = document.getElementById('respInicial');
     sel.innerHTML = '<option value="">— Elegir responsable —</option>' + RESP_QC.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+    var persona = (YO && YO !== YO_TODOS) ? YO : '';
+    sel.value = persona;
+    sel.disabled = !!persona;                    // una persona abre lotes solo a su nombre
+  }
+
+  /* ---------- Cada persona ve y carga SOLO sus lotes ----------
+   * Todos ven el paso 1 (abrir un lote). En "Lotes en Control" cada tablet muestra solo los
+   * lotes cuyo responsable es la persona elegida arriba; los de los demás aparecen como
+   * una lista chica, sin casilleros para cargar. "tecnica" puede elegir "Ver todos". */
+  var YO_KEY = 'bf_control_yo', PIN_KEY = 'bf_control_pin', YO_TODOS = '__todos';
+  var YO = '', PIN = '';
+  try { YO = localStorage.getItem(YO_KEY) || ''; PIN = localStorage.getItem(PIN_KEY) || ''; } catch (e) { YO = ''; PIN = ''; }
+  if (!PIN) YO = '';                       // sin PIN guardado no hay persona elegida
+  var ES_ADMIN = false;
+  var LAST_LISTA = null;
+  function conPin_(o) { o.quien = (YO === YO_TODOS) ? 'Supervisión' : YO; o.pin = PIN; return o; }
+  function guardarYo_() { try { localStorage.setItem(YO_KEY, YO); localStorage.setItem(PIN_KEY, PIN); } catch (e) {} }
+  function olvidarPin_() {
+    YO = ''; PIN = ''; guardarYo_(); poblarYo(); poblarRespInicial(); validarBtnAbrir();
+    if (LAST_LISTA) renderEnControl(LAST_LISTA);
+  }
+  function poblarYo() {
+    var sel = document.getElementById('yoSel');
+    if (!sel) return;
+    var ops = '<option value="">— Elegí tu nombre —</option>' + RESP_QC.map(function (r) { return '<option value="'+r+'">'+r+'</option>'; }).join('');
+    if (ES_ADMIN) ops += '<option value="'+YO_TODOS+'">Ver todos (supervisión)</option>';
+    sel.innerHTML = ops;
+    if (YO === YO_TODOS && !ES_ADMIN) { YO = ''; PIN = ''; guardarYo_(); }
+    sel.value = YO;
+  }
+
+  /* Ventanita para pedir el PIN (teclado numérico en la tablet) */
+  function pedirPin_(nombre, cb) {
+    var viejo = document.getElementById('pinModal'); if (viejo) viejo.remove();
+    var d = document.createElement('div');
+    d.id = 'pinModal';
+    d.setAttribute('style', 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10000;display:flex;align-items:center;justify-content:center;');
+    d.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;width:300px;max-width:92vw;box-shadow:0 8px 30px rgba(0,0,0,.25);">' +
+      '<div style="font-size:16px;font-weight:700;color:#0369a1;margin-bottom:10px;">PIN de ' + nombre + '</div>' +
+      '<input id="pinInp" type="password" inputmode="numeric" maxlength="8" autocomplete="off" style="font-size:22px;letter-spacing:6px;text-align:center;padding:10px;">' +
+      '<div id="pinErr" style="color:#b91c1c;font-size:13px;min-height:18px;margin-top:6px;"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button id="pinNo" class="btn" style="background:#fff;color:#475569;border:1px solid #cbd5e1;margin:0;flex:1;">Cancelar</button>' +
+        '<button id="pinSi" class="btn" style="background:#16a34a;margin:0;flex:1;">Entrar</button>' +
+      '</div></div>';
+    document.body.appendChild(d);
+    var inp = document.getElementById('pinInp');
+    setTimeout(function () { inp.focus(); }, 50);
+    function cerrar() { d.remove(); }
+    function probar() {
+      var pin = inp.value.trim();
+      if (!pin) return;
+      var b = document.getElementById('pinSi'); b.disabled = true; b.textContent = 'Verificando…';
+      document.getElementById('pinErr').textContent = '';
+      google.script.run
+        .withSuccessHandler(function () { cerrar(); cb(pin); })
+        .withFailureHandler(function (e) {
+          b.disabled = false; b.textContent = 'Entrar';
+          document.getElementById('pinErr').textContent = /incorrecto/i.test(e.message) ? 'PIN incorrecto.' : e.message;
+          inp.value = ''; inp.focus();
+        })
+        .ctlObtenerAccesoPin({ quien: nombre, pin: pin });
+    }
+    document.getElementById('pinSi').onclick = probar;
+    document.getElementById('pinNo').onclick = function () { cerrar(); cb(null); };
+    inp.onkeydown = function (e) { if (e.key === 'Enter') probar(); };
+  }
+
+  function cambiarYo() {
+    var sel = document.getElementById('yoSel');
+    var nuevo = sel ? sel.value : '';
+    if (nuevo === YO) return;
+    var hay = Object.keys(LOTES_SUCIOS).some(function (f) { return LOTES_SUCIOS[f]; });
+    if (hay && !confirm('Hay cambios cargados sin guardar. Si cambiás de persona dejan de verse (no se borran). ¿Cambiar igual?')) { sel.value = YO; return; }
+    if (!nuevo) { olvidarPin_(); return; }
+    sel.value = YO;   // hasta que el PIN sea correcto, sigue la persona anterior
+    pedirPin_(nuevo === YO_TODOS ? 'Supervisión' : nuevo, function (pin) {
+      if (!pin) return;
+      YO = nuevo; PIN = pin; guardarYo_();
+      sel.value = YO;
+      poblarRespInicial(); validarBtnAbrir();
+      if (LAST_LISTA) renderEnControl(LAST_LISTA);
+    });
+  }
+  function duenoLote_(b) { return String(b.responsable || '').split(',')[0].trim(); }
+  function esMio_(b) {
+    if (YO === YO_TODOS) return true;
+    var d = duenoLote_(b);
+    return !d || normT_(d) === normT_(YO);   // los que no tienen responsable los ve cualquiera
   }
   function validarBtnAbrir() {
+    if (!YO) {
+      var b0 = document.getElementById('btnAbrir'), h0 = document.getElementById('hintResp');
+      if (b0) b0.disabled = true;
+      if (h0) { h0.style.display = ''; h0.textContent = 'Primero elegí arriba quién está usando la tablet (con tu PIN).'; }
+      return;
+    }
+    var h1 = document.getElementById('hintResp'); if (h1) h1.textContent = 'Elegí el lote y el responsable para poder empezar el control.';
     var idx = document.getElementById('comboLotes').value;
     var resp = document.getElementById('respInicial').value;
     var b = document.getElementById('btnAbrir');
@@ -554,7 +662,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     google.script.run
       .withSuccessHandler(function(r){
         msg(r.msg, true);
-        document.getElementById('respInicial').value = '';
+        poblarRespInicial();
         document.getElementById('comboLotes').value = '';
         actualizarInventarios();
       })
@@ -563,7 +671,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         if (yaHecho_(e)) { msg('Ese lote ya estaba abierto (seguramente por el toque anterior). Se actualizó la lista: buscalo abajo en "Lotes en Control".', true); actualizarInventarios(); return; }
         msg(e.message, false);
       })
-      .ctlCrearBorradorSeguro({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp });
+      .ctlPinCrearBorrador(conPin_({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp }));
   }
 
    
@@ -599,14 +707,31 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     }).length;
   }
 
-  function renderEnControl(lista) {
+  function renderEnControl(listaTodos) {
     var cont = document.getElementById('listaEnControl');
-    
+    listaTodos = listaTodos || [];
+    LAST_LISTA = listaTodos;
     var ae = document.activeElement;
     var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|respLote_)/.test(ae.id);
+
+    var tit = document.getElementById('tituloEnControl');
+    if (!YO) {
+      if (tit) tit.textContent = 'Lotes en Control';
+      document.getElementById('cntEnControl').textContent = listaTodos.length;
+      cont.innerHTML = '<div class="aviso-cantidad">👆 Elegí arriba <b>quién está usando esta tablet</b> para ver y cargar tus lotes.</div>' + otrosHtml_(listaTodos);
+      cont.dataset.pintado = '';
+      return;
+    }
+    var lista = listaTodos.filter(esMio_);
+    var otros = listaTodos.filter(function (b) { return !esMio_(b); });
+    if (tit) tit.textContent = (YO === YO_TODOS) ? 'Lotes en Control (todos)' : 'Mis lotes en Control — ' + YO;
     document.getElementById('cntEnControl').textContent = lista.length;
     if (editando && cont.dataset.pintado === '1') { return; }
-    if (!lista.length) { cont.innerHTML = '<p style="color:var(--mut); font-size:13px;">No hay lotes en control.</p>'; return; }
+    if (!lista.length) {
+      cont.innerHTML = '<p style="color:var(--mut); font-size:13px;">No tenés lotes en control. Abrí uno en el paso 1 eligiéndote como responsable.</p>' + otrosHtml_(otros);
+      cont.dataset.pintado = '';
+      return;
+    }
     cont.innerHTML = lista.map(function(b) {
       var f = b.id;
       if (RESP_LOTE[f] === undefined) {
@@ -728,7 +853,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '</div>'+
         '</div>'+
       '</div>';
-    }).join('');
+    }).join('') + otrosHtml_(otros);
     cont.dataset.pintado = '1';
     lista.forEach(function(b){
       var f = b.id;
@@ -736,6 +861,14 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       var letrasDeEsteLote = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
       letrasDeEsteLote.forEach(function(l){ cargarMuestra(f, l, false); });
     });
+  }
+
+  function otrosHtml_(otros) {
+    if (!otros || !otros.length) return '';
+    return '<div class="otros-lotes"><b>En control por otras personas</b> (no se pueden cargar desde acá):<br>' +
+      otros.map(function (b) {
+        return '<span class="chip">' + b.producto + ' · ' + b.medida + ' (' + b.lote + ') — <b>' + (duenoLote_(b) || 'sin responsable') + '</b>' + (b.enPausa ? ' · en pausa' : '') + '</span>';
+      }).join('') + '</div>';
   }
 
   function recalcCantidadFija(f) {
@@ -912,7 +1045,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
         if (pend) encolarGuardado(f);
       })
-      .ctlActualizarCambios(d);
+      .ctlPinActualizarCambios(d);
   }
 
   // Arma lo que se manda al servidor: SOLO las muestras que cambió esta tablet
@@ -926,7 +1059,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         cambios.push({ l: l, i: Number(i), v: (m.v == null ? '' : String(m.v)), r: String(m.r || '') });
       });
     });
-    var d = { id: f, cambios: cambios };
+    var d = conPin_({ id: f, cambios: cambios });
     var ex = DIRTY_EXTRA[f] || {};
     if (ex.rech) {
       var er = document.getElementById('trech_'+f);
@@ -989,7 +1122,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         else msg(e.message, false);
         refrescarEnControl();
       })
-      .ctlPausar({ id: f, hora: hora, motivo: motivo });
+      .ctlPinPausar(conPin_({ id: f, hora: hora, motivo: motivo }));
   }
   function reanudar(f) {
     if (PAUSA_EN_CURSO[f]) return;
@@ -1003,7 +1136,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         else msg(e.message, false);
         refrescarEnControl();
       })
-      .ctlReanudar({ id: f, hora: horaAhoraCdc() });
+      .ctlPinReanudar(conPin_({ id: f, hora: horaAhoraCdc() }));
   }
 
   
@@ -1037,7 +1170,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
           refrescarEnControl();
         })
-        .ctlCerrarCambios(d);
+        .ctlPinCerrarCambios(d);
     });
   }
   function eliminarBorrador(f) {
@@ -1046,7 +1179,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     google.script.run
       .withSuccessHandler(function(r){ msg(r.msg, true); olvidarLote_(f); delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; actualizarInventarios(); })
       .withFailureHandler(function(e){ msg(e.message, false); })
-      .ctlEliminarBorrador({ id: f });
+      .ctlPinEliminarBorrador(conPin_({ id: f }));
   }
 
   // Respuestas que significan "eso ya estaba hecho": pasa cuando el guardado anterior SÍ se hizo
@@ -1055,6 +1188,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return /ya fue cerrado|ya no existe|ya no est[aá] esperando control/i.test((e && e.message) || String(e || ''));
   }
   function msg(t, ok) {
+    if (!ok && /PIN/.test(String(t))) setTimeout(olvidarPin_, 0);
     var m = document.getElementById('msg');
     m.textContent = t;
     m.className = 'show ' + (ok ? 'ok' : 'err');
@@ -1065,6 +1199,14 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
 
   window.onload = function() {
+    poblarYo();
+    if (window.BIOFIX && BIOFIX.sesion) {
+      BIOFIX.sesion.then(function (ses) {
+        ES_ADMIN = (BIOFIX.sectorDe(ses) === 'tecnica');
+        poblarYo();
+        if (LAST_LISTA) renderEnControl(LAST_LISTA);
+      });
+    }
     poblarRespInicial();
     cargarTolerancias_();
     setInterval(cargarTolerancias_, 10 * 60000);
