@@ -2,7 +2,7 @@
 window.BIOFIX_CFG = {
   supabaseUrl: 'https://zsxuyalnxwedqsfqvgsl.supabase.co',
   supabaseKey: 'sb_publishable_c56JEbSgS2REWtI-abCDpw_M4nrUMJ_',  // clave pública (segura en el navegador)
-  apiUrl: 'https://script.google.com/macros/s/AKfycbwJ-np3T72wMmRATbya68YHWg5svyCz-M1rG6IqIiSFtZSx3iySuY1ocj1JGqzhbrTzWg/exec',
+  apiUrl: 'https://script.google.com/macros/s/AKfycby627HMA4yZi1Er9a6n3mhIt45mS_0OaRhjhLpbzfUoIXCcAz6QGTJ1Hr5yfzngpB_jxw/exec',
   dominioUsuarios: 'biofix.com',  // "mecanizado" -> mecanizado@biofix.com
   admins: ['tecnica'],            // usuarios que pueden entrar a TODAS las pantallas
   titulo: 'Bio-Fix — Producción'
