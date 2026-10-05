@@ -62,6 +62,9 @@
   @media print{ .tabs, .fila, #bfChip, .noprint{ display:none !important; } body{ padding:0; background:#fff; } .card{ break-inside:avoid; } }
 </style>
 </head>
+
+
+
 <body>
 <div class="container">
   <h1>Supervisión</h1>
@@ -1166,6 +1169,179 @@ function grafico(i){
 }
 
 cargarAle();
+</script>
+  <!-- =====================================================================
+     IMPRIMIR "EN PROCESO (WIP)" — Supervisión
+     Pegar TODO este bloque justo antes de </body> en Supervision.html.
+     No hace falta tocar nada más: agrega solo el filtro "Medida" y el
+     botón "🖨️ Imprimir" al lado de los filtros de la pestaña En proceso.
+     ===================================================================== -->
+<style>
+  #wPrint{ display:none; }
+  @media print{
+    @page{ size:A4; margin:12mm 10mm; }
+    body.imprimiendo{ background:#fff !important; padding:0 !important; margin:0 !important; }
+    body.imprimiendo > *:not(#wPrint){ display:none !important; }
+    body.imprimiendo #wPrint{ display:block !important; }
+    #wPrint{ font-family:Arial, sans-serif; color:#000; font-size:11px; }
+    #wPrint .pr-cab{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:8px; }
+    #wPrint .pr-tit{ font-size:16px; font-weight:700; }
+    #wPrint .pr-fecha{ font-size:11px; text-align:right; }
+    #wPrint .pr-filtros{ font-size:11px; margin-bottom:8px; line-height:1.5; }
+    #wPrint table{ width:100%; border-collapse:collapse; }
+    #wPrint thead{ display:table-header-group; }
+    #wPrint tr{ page-break-inside:avoid; }
+    #wPrint table{ font-size:10.5px; }
+    #wPrint th{ position:static; background:none; border:none; border-bottom:1.5px solid #000; text-align:left; padding:4px 5px; font-size:10.5px; }
+    #wPrint td{ border:none; border-bottom:0.5px solid #999; padding:3px 5px; font-size:10.5px; vertical-align:top; }
+    #wPrint td.r, #wPrint th.r{ text-align:right; }
+    #wPrint tr.pr-etapa td{ background:#eee !important; font-weight:700; border-bottom:1px solid #000; padding-top:6px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    #wPrint tr.pr-sub td{ font-weight:700; border-bottom:1px solid #000; }
+    #wPrint .pr-total{ margin-top:10px; font-size:13px; font-weight:700; text-align:right; }
+  }
+</style>
+<div id="wPrint"></div>
+<script>
+(function () {
+  // "3.75 X 11,5mm" -> [3.75, 11.5] para ordenar por diámetro y después por largo
+  function nums(m) {
+    var x = String(m || '').replace(/,/g, '.').match(/(\d+(?:\.\d+)?)(?:\s*[xX]\s*(\d+(?:\.\d+)?))?/);
+    return x ? [parseFloat(x[1]), x[2] ? parseFloat(x[2]) : 0] : [9999, 0];
+  }
+  function cmpMedida(a, b) {
+    var na = nums(a), nb = nums(b);
+    return (na[0] - nb[0]) || (na[1] - nb[1]) || String(a).localeCompare(String(b), 'es');
+  }
+  function e(s) { return (typeof esc === 'function') ? esc(s) : String(s == null ? '' : s); }
+  function n0(v) { return (typeof num === 'function') ? num(v, 0) : String(Number(v) || 0); }
+  function f(v) { return (typeof fecha === 'function') ? fecha(v) : (v || ''); }
+
+  // ---------- Agrega el filtro "Medida" y el botón "Imprimir" ----------
+  function armarControles() {
+    var prod = document.getElementById('wProd');
+    if (!prod || document.getElementById('wMed')) return;
+    var med = document.createElement('select');
+    med.id = 'wMed';
+    med.innerHTML = '<option value="">Todas las medidas</option>';
+    med.onchange = function () { renderWip(); };
+    prod.parentNode.insertBefore(med, prod.nextSibling);
+
+    var fila = prod.parentNode;
+    var btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.type = 'button';
+    btn.textContent = '🖨️ Imprimir';
+    btn.onclick = imprimirWip;
+    fila.appendChild(btn);
+  }
+
+  // Opciones de medida según el producto elegido (mantiene la elegida si sigue existiendo)
+  function llenarMedidas() {
+    var sel = document.getElementById('wMed');
+    if (!sel) return;
+    var p = document.getElementById('wProd').value;
+    var ini = document.getElementById('wIni').checked;
+    var act = sel.value, set = {};
+    (WIP || []).forEach(function (w) {
+      if (p && w.producto !== p) return;
+      if (!ini && w.inicial) return;
+      if (w.medida) set[w.medida] = 1;
+    });
+    var meds = Object.keys(set).sort(cmpMedida);
+    if (act && !set[act]) act = '';
+    sel.innerHTML = '<option value="">Todas las medidas</option>' + meds.map(function (m) {
+      return '<option' + (m === act ? ' selected' : '') + '>' + e(m) + '</option>';
+    }).join('');
+    sel.value = act;
+  }
+
+  // ---------- filtroWip con el filtro de Medida agregado ----------
+  window.filtroWip = function (conEtapa) {
+    var p = document.getElementById('wProd').value;
+    var mSel = document.getElementById('wMed') ? document.getElementById('wMed').value : '';
+    var q = document.getElementById('wBuscar').value.toLowerCase().trim();
+    var dmin = Number(document.getElementById('wDias').value) || 0;
+    var ini = document.getElementById('wIni').checked;
+    return (WIP || []).filter(function (w) {
+      return (!p || w.producto === p) && (!mSel || w.medida === mSel) &&
+        (ini || !w.inicial) && (Number(w.dias) || 0) >= dmin &&
+        (!q || (w.lote + ' ' + w.medida + ' ' + w.producto).toLowerCase().indexOf(q) >= 0) &&
+        (!conEtapa || !WETAPA || w.etapa === WETAPA);
+    });
+  };
+
+  // renderWip: antes de dibujar, actualiza la lista de medidas
+  var renderOriginal = window.renderWip;
+  window.renderWip = function () { llenarMedidas(); return renderOriginal.apply(this, arguments); };
+
+  // ---------- Imprimir lo que se ve (mismo filtro que la pantalla) ----------
+  function imprimirWip() {
+    if (!WIP) { alert('Todavía no cargó el listado. Esperá un momento.'); return; }
+    var lista = window.filtroWip(true).slice();
+    if (!lista.length) { alert('No hay nada para imprimir con ese filtro.'); return; }
+
+    // Agrupado por etapa (en el orden del proceso), y dentro: medida y lote
+    lista.sort(function (a, b) {
+      return ((Number(a.orden) || 0) - (Number(b.orden) || 0)) ||
+        String(a.etapa).localeCompare(String(b.etapa), 'es') ||
+        String(a.producto).localeCompare(String(b.producto), 'es') ||
+        cmpMedida(a.medida, b.medida) ||
+        String(a.lote).localeCompare(String(b.lote), 'es');
+    });
+
+    var ahora = new Date();
+    var fh = ('0' + ahora.getDate()).slice(-2) + '/' + ('0' + (ahora.getMonth() + 1)).slice(-2) + '/' + ahora.getFullYear() +
+      ' ' + ('0' + ahora.getHours()).slice(-2) + ':' + ('0' + ahora.getMinutes()).slice(-2);
+
+    var p = document.getElementById('wProd').value;
+    var m = document.getElementById('wMed').value;
+    var q = document.getElementById('wBuscar').value.trim();
+    var dSel = document.getElementById('wDias');
+    var filtros = [
+      '<b>Producto:</b> ' + (p ? e(p) : 'Todos'),
+      '<b>Medida:</b> ' + (m ? e(m) : 'Todas'),
+      '<b>Etapa:</b> ' + (WETAPA ? e(WETAPA) : 'Todas')
+    ];
+    if (q) filtros.push('<b>Búsqueda:</b> "' + e(q) + '"');
+    if (Number(dSel.value) > 0) filtros.push('<b>Antigüedad:</b> ' + e(dSel.options[dSel.selectedIndex].text));
+    if (document.getElementById('wIni').checked) filtros.push('Incluye carga inicial');
+
+    var filas = '', etapaAct = null, sub = 0, subLotes = 0, total = 0;
+    function cerrarEtapa() {
+      if (etapaAct === null) return;
+      filas += '<tr class="pr-sub"><td colspan="5">Subtotal ' + e(etapaAct) + ' · ' + subLotes + ' lote(s)</td><td class="r">' + n0(sub) + '</td><td colspan="2"></td></tr>';
+    }
+    lista.forEach(function (w) {
+      if (w.etapa !== etapaAct) {
+        cerrarEtapa();
+        etapaAct = w.etapa; sub = 0; subLotes = 0;
+        filas += '<tr class="pr-etapa"><td colspan="8">' + e(w.etapa) + '</td></tr>';
+      }
+      var c = Number(w.cantidad) || 0;
+      sub += c; subLotes++; total += c;
+      filas += '<tr><td>' + e(w.lote) + (w.inicial ? ' (carga inicial)' : '') + '</td><td>' + e(w.producto) + '</td><td><b>' + e(w.medida) + '</b></td>' +
+        '<td>' + e(w.teton) + '</td><td>' + (w.detalle ? e(w.detalle) : '') + '</td><td class="r">' + n0(c) + '</td>' +
+        '<td class="r">' + (w.dias == null ? '?' : w.dias) + ' d</td><td>' + f(w.desde) + '</td></tr>';
+    });
+    cerrarEtapa();
+
+    document.getElementById('wPrint').innerHTML =
+      '<div class="pr-cab"><div class="pr-tit">Bio-Fix · En proceso (WIP)</div><div class="pr-fecha">Impreso: ' + fh + '</div></div>' +
+      '<div class="pr-filtros">' + filtros.join(' &nbsp;·&nbsp; ') + '</div>' +
+      '<table><thead><tr><th>Lote</th><th>Producto</th><th>Medida</th><th>Tetón</th><th>Detalle</th><th class="r">Cant.</th><th class="r">Días</th><th>Entró</th></tr></thead>' +
+      '<tbody>' + filas + '</tbody></table>' +
+      '<div class="pr-total">Total: ' + lista.length + ' fila(s) · ' + n0(total) + ' piezas</div>';
+
+    document.body.classList.add('imprimiendo');
+    var limpiar = function () { document.body.classList.remove('imprimiendo'); window.removeEventListener('afterprint', limpiar); };
+    window.addEventListener('afterprint', limpiar);
+    setTimeout(function () { window.print(); setTimeout(limpiar, 1000); }, 50);
+  }
+  window.imprimirWip = imprimirWip;
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armarControles);
+  else armarControles();
+})();
 </script>
 </body>
 </html>
