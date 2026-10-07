@@ -42,6 +42,10 @@
       .etq-fila > div { flex: 1; }
       .etq-fila > div.etq-ref { flex: 0 0 260px; }
       .etq-titulo { margin-top: 22px; font-size: 16px; font-weight: bold; color: #1a73e8; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+      .sis-titulo { margin-top: 26px; font-size: 17px; font-weight: bold; color: #fff; background: #a855f7; border-radius: 6px; padding: 8px 12px; }
+      .sis-titulo.cmu3 { background: #7c3aed; }
+      .aviso-cmu { background: #f3e8ff; border: 1px solid #c4b5fd; color: #5b21b6; border-radius: 8px; padding: 10px 14px; font-size: 15px; margin-top: 10px; display: none; }
+      .oculto { display: none !important; }
       @media (max-width: 700px) { .etq-fila { flex-direction: column; align-items: stretch; } .etq-fila > div.etq-ref { flex: 1; } }
     </style>
   </head>
@@ -97,18 +101,27 @@
         <fieldset>
           <legend>Lote (con Anexo ya generado)</legend>
           <label>Lote:</label>
-          <select id="loteRegistro" onchange="mostrarInfoLoteHistorico(); cargarMedidasDelLote(); cargarContramuestrasRegistro(); cargarNoConformes();">
+          <select id="loteRegistro" onchange="alCambiarLoteRegistro()">
             <option value="">Cargando lotes...</option>
           </select>
           <div id="infoLoteRegistro" style="margin-top:6px; font-size:15px; color:#555;"></div>
+          <div id="avisoCMU" class="aviso-cmu">CMU y CMU3 van juntos en un solo Registro Histórico: se suman las cantidades y en cada control de etiquetas la de la <b>izquierda es CMU</b> y la de la <b>derecha es CMU3</b>.</div>
         </fieldset>
 
         <fieldset>
           <legend>Contramuestras</legend>
-          <label>Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
-          <select id="contramuestrasRegistro">
-            <option value="">Seleccione primero un lote...</option>
-          </select>
+          <div id="contUnico">
+            <label>Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <select id="contramuestrasRegistro">
+              <option value="">Seleccione primero un lote...</option>
+            </select>
+          </div>
+          <div id="contCMU" class="oculto">
+            <label>Contramuestras CMU (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <select id="contramuestrasCMU"><option value="">Cargando...</option></select>
+            <label>Contramuestras CMU3 (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <select id="contramuestrasCMU3"><option value="">Cargando...</option></select>
+          </div>
         </fieldset>
 
         <fieldset>
@@ -157,6 +170,8 @@
           <legend>Datos para las etiquetas (Blíster / Packaging / Paciente)</legend>
           <p style="font-size:14px; color:#666; margin-top:0;">Elegí la medida (Ø) de cada etiqueta. Packaging y Paciente quedan "Igual que Blíster" si no elegís otra.</p>
 
+          <div id="sisTituloA" class="sis-titulo oculto">CMU — etiqueta de la IZQUIERDA</div>
+
           <div class="etq-titulo">Etiqueta Blíster</div>
           <div class="etq-fila">
             <div>
@@ -196,6 +211,47 @@
             <div class="etq-ref">
               <label for="refPaciente">REF:</label>
               <input type="text" id="refPaciente" readonly style="background:#f1f5f9;">
+            </div>
+          </div>
+
+          <!-- Solo para CMU + CMU3: etiquetas de la derecha (CMU3) -->
+          <div id="bloqueCMU3" class="oculto">
+            <div class="sis-titulo cmu3">CMU3 — etiqueta de la DERECHA</div>
+
+            <div class="etq-titulo">Etiqueta Blíster</div>
+            <div class="etq-fila">
+              <div>
+                <label for="medidaProducto3">Medida (Ø):</label>
+                <select id="medidaProducto3" onchange="actualizarRefSegunMedida()"><option value="">-- Elegí un lote primero --</option></select>
+              </div>
+              <div class="etq-ref">
+                <label for="refBlister3">REF:</label>
+                <input type="text" id="refBlister3" readonly style="background:#f1f5f9;">
+              </div>
+            </div>
+
+            <div class="etq-titulo">Etiqueta Packaging</div>
+            <div class="etq-fila">
+              <div>
+                <label for="medidaPackaging3">Medida (Ø):</label>
+                <select id="medidaPackaging3" onchange="actualizarRefSegunMedida()"><option value="">-- Elegí un lote primero --</option></select>
+              </div>
+              <div class="etq-ref">
+                <label for="refPackaging3">REF:</label>
+                <input type="text" id="refPackaging3" readonly style="background:#f1f5f9;">
+              </div>
+            </div>
+
+            <div class="etq-titulo">Etiqueta Paciente</div>
+            <div class="etq-fila">
+              <div>
+                <label for="medidaPaciente3">Medida (Ø):</label>
+                <select id="medidaPaciente3" onchange="actualizarRefSegunMedida()"><option value="">-- Elegí un lote primero --</option></select>
+              </div>
+              <div class="etq-ref">
+                <label for="refPaciente3">REF:</label>
+                <input type="text" id="refPaciente3" readonly style="background:#f1f5f9;">
+              </div>
             </div>
           </div>
 
@@ -245,23 +301,45 @@
 
       /* ================= REGISTRO HISTÓRICO ================= */
       var lotesConAnexo = [];
-      var REFS_POR_MEDIDA = {};
+      var REFS_POR_MEDIDA = {};    // lote común o CMU (izquierda)
+      var REFS_POR_MEDIDA_3 = {};  // CMU3 (derecha), solo en lotes combinados
+
+      function loteSeleccionado_() {
+        var clave = document.getElementById('loteRegistro').value;
+        return lotesConAnexo.find(function (l) { return String(l.clave) === String(clave); }) || null;
+      }
+      function esCombinado_() { var it = loteSeleccionado_(); return !!(it && it.combinado); }
+
+      function alCambiarLoteRegistro() {
+        var comb = esCombinado_();
+        document.getElementById('avisoCMU').style.display = comb ? 'block' : 'none';
+        document.getElementById('contUnico').classList.toggle('oculto', comb);
+        document.getElementById('contCMU').classList.toggle('oculto', !comb);
+        document.getElementById('bloqueCMU3').classList.toggle('oculto', !comb);
+        document.getElementById('sisTituloA').classList.toggle('oculto', !comb);
+        mostrarInfoLoteHistorico();
+        cargarMedidasDelLote();
+        cargarContramuestrasRegistro();
+        cargarNoConformes();
+      }
 
       function cargarLotesConAnexo() {
         google.script.run
           .withSuccessHandler(function (lista) {
-            lotesConAnexo = lista;
+            lotesConAnexo = lista || [];
             var select = document.getElementById('loteRegistro');
             select.innerHTML = '';
-            if (!lista || lista.length === 0) {
+            if (!lotesConAnexo.length) {
               select.innerHTML = '<option value="">No hay lotes disponibles</option>';
               return;
             }
             select.innerHTML = '<option value="">Seleccione un lote...</option>';
-            lista.forEach(function (item) {
+            lotesConAnexo.forEach(function (item) {
               var option = document.createElement('option');
               option.value = item.clave;
-              option.text = 'Lote ' + item.sistema + '-' + item.lote + ' (OF ' + item.of + ', ' + item.fecha + ')';
+              option.text = item.combinado
+                ? ('Lote CMU-' + item.lote + ' + CMU3-' + item.loteCMU3 + ' (OF ' + item.of + ', ' + item.fecha + ')')
+                : ('Lote ' + item.sistema + '-' + item.lote + ' (OF ' + item.of + ', ' + item.fecha + ')');
               select.appendChild(option);
             });
           })
@@ -285,28 +363,34 @@
       }
 
       function mostrarInfoLoteHistorico() {
-        var clave = document.getElementById('loteRegistro').value;
         var info = document.getElementById('infoLoteRegistro');
-        if (!clave) { info.innerText = ''; return; }
-        var item = lotesConAnexo.find(function (l) { return String(l.clave) === String(clave); });
-        info.innerText = item ? ('OF: ' + item.of + ' | Fecha del Anexo: ' + item.fecha) : '';
+        var item = loteSeleccionado_();
+        if (!item) { info.innerText = ''; return; }
+        info.innerText = 'OF: ' + item.of + ' | Fecha del Anexo: ' + item.fecha;
       }
 
-      // Completa "Cantidad de no conformes" con los rotos cargados en el Anexo.
+      // Completa "Cantidad de no conformes" con los rotos cargados en el Anexo (en CMU+CMU3 suma los dos).
       function cargarNoConformes() {
-        var clave = document.getElementById('loteRegistro').value;
+        var item = loteSeleccionado_();
         var campo = document.getElementById('cantidadNoConformes');
         var hint = document.getElementById('hintNoConformes');
         hint.innerText = '';
-        if (!clave) { campo.value = '0'; return; }
-        google.script.run
-          .withSuccessHandler(function (n) {
-            if (document.getElementById('loteRegistro').value !== clave) return; // se cambió de lote mientras tanto
-            campo.value = String(Number(n) || 0);
-            hint.innerText = (Number(n) > 0) ? ('Tomado del Anexo: ' + n + ' no conforme(s) descontado(s) del total liberado.') : '';
-          })
-          .withFailureHandler(function () { campo.value = '0'; })
-          .obtenerNoConformesAnexo(clave);
+        if (!item) { campo.value = '0'; return; }
+        var clave = item.clave;
+        var claves = item.combinado ? ['CMU::' + item.lote, 'CMU3::' + item.loteCMU3] : [item.clave];
+        var total = 0, faltan = claves.length;
+        claves.forEach(function (c) {
+          google.script.run
+            .withSuccessHandler(function (n) { total += Number(n) || 0; fin(); })
+            .withFailureHandler(function () { fin(); })
+            .obtenerNoConformesAnexo(c);
+        });
+        function fin() {
+          if (--faltan > 0) return;
+          if (document.getElementById('loteRegistro').value !== clave) return;
+          campo.value = String(total);
+          hint.innerText = total > 0 ? ('Tomado del Anexo: ' + total + ' no conforme(s) descontado(s) del total liberado.') : '';
+        }
       }
 
       /* ---------- Etiquetas: una medida por etiqueta ---------- */
@@ -316,9 +400,14 @@
         ['medidaPackaging', 'refPackaging', '— Igual que Blíster —'],
         ['medidaPaciente',  'refPaciente',  '— Igual que Blíster —']
       ];
+      var ETIQUETAS_3 = [
+        ['medidaProducto3',  'refBlister3',   '-- Seleccioná una medida --'],
+        ['medidaPackaging3', 'refPackaging3', '— Igual que Blíster —'],
+        ['medidaPaciente3',  'refPaciente3',  '— Igual que Blíster —']
+      ];
 
-      function llenarSelectsEtiquetas_(medidas, textoSinDatos) {
-        ETIQUETAS.forEach(function (e) {
+      function llenarSelects_(grupo, medidas, textoSinDatos) {
+        grupo.forEach(function (e) {
           var sel = document.getElementById(e[0]);
           if (textoSinDatos) { sel.innerHTML = '<option value="">' + textoSinDatos + '</option>'; return; }
           sel.innerHTML = '<option value="">' + e[2] + '</option>' +
@@ -326,64 +415,78 @@
         });
       }
 
-      function cargarMedidasDelLote() {
-        var clave = document.getElementById('loteRegistro').value;
-        REFS_POR_MEDIDA = {};
-        ETIQUETAS.forEach(function (e) { document.getElementById(e[1]).value = ''; });
-        if (!clave) { llenarSelectsEtiquetas_([], '-- Elegí un lote primero --'); return; }
-        llenarSelectsEtiquetas_([], 'Cargando medidas...');
+      function cargarMedidasGrupo_(clave, grupo, guardar) {
+        llenarSelects_(grupo, [], 'Cargando medidas...');
+        var claveSel = document.getElementById('loteRegistro').value;
         google.script.run
           .withSuccessHandler(function (datos) {
-            if (document.getElementById('loteRegistro').value !== clave) return; // se cambió de lote mientras tanto
+            if (document.getElementById('loteRegistro').value !== claveSel) return;
             var medidas = (datos && datos.medidas) ? datos.medidas : [];
-            REFS_POR_MEDIDA = (datos && datos.refsPorMedida) ? datos.refsPorMedida : {};
-            if (medidas.length) llenarSelectsEtiquetas_(medidas);
-            else llenarSelectsEtiquetas_([], 'No hay medidas en el Anexo de este lote');
+            guardar((datos && datos.refsPorMedida) ? datos.refsPorMedida : {});
+            if (medidas.length) llenarSelects_(grupo, medidas);
+            else llenarSelects_(grupo, [], 'No hay medidas en el Anexo de este lote');
             actualizarRefSegunMedida();
           })
           .withFailureHandler(function (err) {
-            console.error('Detalle del error al cargar medidas:', err);
             var detalle = (err && err.message) ? err.message : String(err);
-            llenarSelectsEtiquetas_([], 'Error: ' + detalle);
+            llenarSelects_(grupo, [], 'Error: ' + detalle);
           })
           .obtenerDatosAnexoPorLote(clave);
+      }
+
+      function cargarMedidasDelLote() {
+        var item = loteSeleccionado_();
+        REFS_POR_MEDIDA = {}; REFS_POR_MEDIDA_3 = {};
+        ETIQUETAS.concat(ETIQUETAS_3).forEach(function (e) { document.getElementById(e[1]).value = ''; });
+        if (!item) { llenarSelects_(ETIQUETAS, [], '-- Elegí un lote primero --'); llenarSelects_(ETIQUETAS_3, [], '-- Elegí un lote primero --'); return; }
+        if (item.combinado) {
+          cargarMedidasGrupo_('CMU::' + item.lote, ETIQUETAS, function (r) { REFS_POR_MEDIDA = r; });
+          cargarMedidasGrupo_('CMU3::' + item.loteCMU3, ETIQUETAS_3, function (r) { REFS_POR_MEDIDA_3 = r; });
+        } else {
+          cargarMedidasGrupo_(item.clave, ETIQUETAS, function (r) { REFS_POR_MEDIDA = r; });
+        }
       }
 
       // Pone la REF de cada etiqueta según su medida (si Packaging/Paciente
       // están en "Igual que Blíster", muestran la REF del Blíster).
       function actualizarRefSegunMedida() {
-        var medBli = document.getElementById('medidaProducto').value;
-        ETIQUETAS.forEach(function (e) {
-          var med = document.getElementById(e[0]).value || medBli;
-          document.getElementById(e[1]).value = (med && REFS_POR_MEDIDA[med]) ? REFS_POR_MEDIDA[med] : '';
+        [[ETIQUETAS, function () { return REFS_POR_MEDIDA; }], [ETIQUETAS_3, function () { return REFS_POR_MEDIDA_3; }]].forEach(function (par) {
+          var grupo = par[0], refs = par[1]();
+          var medBli = document.getElementById(grupo[0][0]).value;
+          grupo.forEach(function (e) {
+            var med = document.getElementById(e[0]).value || medBli;
+            document.getElementById(e[1]).value = (med && refs[med]) ? refs[med] : '';
+          });
         });
       }
 
-      function cargarContramuestrasRegistro() {
-        var clave = document.getElementById('loteRegistro').value;
-        var selectMedidas = document.getElementById('contramuestrasRegistro');
-        if (!clave) { selectMedidas.innerHTML = '<option value="">Seleccione primero un lote...</option>'; return; }
-        selectMedidas.innerHTML = '<option value="">Cargando medidas...</option>';
+      function llenarContramuestras_(selectId, clave) {
+        var sel = document.getElementById(selectId);
+        sel.innerHTML = '<option value="">Cargando medidas...</option>';
         google.script.run
           .withSuccessHandler(function (detalle) {
-            selectMedidas.innerHTML = '';
-            if (!detalle || detalle.length === 0) {
-              selectMedidas.innerHTML = '<option value="">No hay medidas disponibles</option>';
-              return;
-            }
-            selectMedidas.innerHTML = '<option value="">Seleccione una medida...</option>';
+            if (!detalle || !detalle.length) { sel.innerHTML = '<option value="">No hay medidas disponibles</option>'; return; }
+            sel.innerHTML = '<option value="">Seleccione una medida...</option>';
             detalle.forEach(function (item) {
               var option = document.createElement('option');
-              var valorMedida = (typeof item === 'object' && item !== null) ? item.medida : item;
-              option.value = valorMedida;
-              option.text = valorMedida;
-              selectMedidas.appendChild(option);
+              var v = (typeof item === 'object' && item !== null) ? item.medida : item;
+              option.value = v; option.text = v;
+              sel.appendChild(option);
             });
           })
-          .withFailureHandler(function () {
-            selectMedidas.innerHTML = '<option value="">Error al cargar medidas</option>';
-          })
+          .withFailureHandler(function () { sel.innerHTML = '<option value="">Error al cargar medidas</option>'; })
           .obtenerMedidasSecundarioPorClave(clave);
+      }
+
+      function cargarContramuestrasRegistro() {
+        var item = loteSeleccionado_();
+        if (!item) { document.getElementById('contramuestrasRegistro').innerHTML = '<option value="">Seleccione primero un lote...</option>'; return; }
+        if (item.combinado) {
+          llenarContramuestras_('contramuestrasCMU', 'CMU::' + item.lote);
+          llenarContramuestras_('contramuestrasCMU3', 'CMU3::' + item.loteCMU3);
+        } else {
+          llenarContramuestras_('contramuestrasRegistro', item.clave);
+        }
       }
 
       function leerArchivosComoBase64(fileList) {
@@ -402,14 +505,39 @@
         return Promise.all(promesas);
       }
 
+      // { blister:{medida,ref}, packaging:{...}, paciente:{...} } de un grupo de selects
+      function leerEtiquetasGrupo_(grupo) {
+        var medBli = document.getElementById(grupo[0][0]).value;
+        var refBli = document.getElementById(grupo[0][1]).value;
+        var nombres = ['blister', 'packaging', 'paciente'];
+        var out = {};
+        grupo.forEach(function (e, i) {
+          out[nombres[i]] = {
+            medida: document.getElementById(e[0]).value || medBli,
+            ref: document.getElementById(e[1]).value || refBli
+          };
+        });
+        return out;
+      }
+
       function finalizarRegistro() {
-        var clave = document.getElementById('loteRegistro').value;
-        var contramuestras = document.getElementById('contramuestrasRegistro').value.trim();
-        if (!clave) { alert('Seleccione un lote.'); return; }
-        if (!contramuestras) { alert('Indique el diámetro de las Contramuestras.'); return; }
+        var item = loteSeleccionado_();
+        if (!item) { alert('Seleccione un lote.'); return; }
+        var comb = !!item.combinado;
+
+        var contramuestras = '', contCMU = '', contCMU3 = '';
+        if (comb) {
+          contCMU = document.getElementById('contramuestrasCMU').value.trim();
+          contCMU3 = document.getElementById('contramuestrasCMU3').value.trim();
+          if (!contCMU || !contCMU3) { alert('Indique la medida de las Contramuestras de CMU y de CMU3.'); return; }
+        } else {
+          contramuestras = document.getElementById('contramuestrasRegistro').value.trim();
+          if (!contramuestras) { alert('Indique el diámetro de las Contramuestras.'); return; }
+        }
 
         var medBli = document.getElementById('medidaProducto').value;
-        if (!medBli) { alert('Elegí la medida de la etiqueta Blíster.'); return; }
+        if (!medBli) { alert(comb ? 'Elegí la medida de la etiqueta Blíster de CMU.' : 'Elegí la medida de la etiqueta Blíster.'); return; }
+        if (comb && !document.getElementById('medidaProducto3').value) { alert('Elegí la medida de la etiqueta Blíster de CMU3.'); return; }
         var refBli = document.getElementById('refBlister').value;
         var medPack = document.getElementById('medidaPackaging').value || medBli;
         var medPac  = document.getElementById('medidaPaciente').value  || medBli;
@@ -423,7 +551,7 @@
 
         leerArchivosComoBase64(archivosInput.files).then(function (archivosAdicionales) {
           var datos = {
-            claveAnexo: clave,
+            claveAnexo: item.clave,
             operadorEnvasado: document.getElementById('operadorEnvasado').value,
             operadorEsterilizacion: document.getElementById('operadorEsterilizacion').value,
             fechaEsterilizacion: document.getElementById('fechaEsterilizacion').value,
@@ -450,6 +578,11 @@
             contramuestras: contramuestras,
             archivosAdicionales: archivosAdicionales
           };
+          if (comb) {
+            datos.contramuestrasCMU = contCMU;
+            datos.contramuestrasCMU3 = contCMU3;
+            datos.etiquetas = { CMU: leerEtiquetasGrupo_(ETIQUETAS), CMU3: leerEtiquetasGrupo_(ETIQUETAS_3) };
+          }
           msg.innerText = "Generando Word, exportando y combinando el PDF final...";
           google.script.run
             .withSuccessHandler(function (res) {
