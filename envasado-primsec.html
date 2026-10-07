@@ -6,12 +6,12 @@
     <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
     <script>window.BIOFIX_PANTALLA = 'envasado';</script>
     <script src="envasados-config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="gas.js"></script>
     <!-- URL del Apps Script de ENVASADOS fijada acá, DESPUÉS de config.js y gas.js,
          para que ningún otro archivo la pise. Si cambia la implementación, se cambia solo esta línea. -->
-    <script>window.BIOFIX_API_URL = 'https://script.google.com/macros/s/AKfycbxIMCpzR0WSGRZRo7JrLDXEfmusB3AqdwHGoRMSwWunrsh06wc_Ksk6bzWsXlaLTWKS/exec';</script>
+    <script>window.BIOFIX_API_URL = 'https://script.google.com/macros/s/AKfycbw7-S3ZzEKgafRfd5aE5sK6rE90ciwakXph42sLvqWTYcvuUPf21yBOAjfkBXlZqyfW/exec';</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
@@ -120,7 +120,7 @@
   var DEMORA_GUARDADO = 1500; // ms después de dejar de tipear
 
   function textoError_(err) { return (err && err.message) ? err.message : String(err); }
-  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
   function mostrarMsg(texto, ok) {
     var el = document.getElementById('msg');
@@ -231,7 +231,7 @@
       var ofLav = ofLavSug || f.ofLavado || '';
       var operario = f.operario || 'Miguel Gomez';
       html +=
-        '<div class="fila-cierre prim-card" data-fila="' + f.fila + '" data-componente="' + (f.esComponente ? '1' : '0') + '">' +
+        '<div class="fila-cierre prim-card" data-fila="' + esc(f.fila) + '" data-componente="' + (f.esComponente ? '1' : '0') + '">' +
           '<div class="med">' + esc(f.medida) + ' <span class="cant">(' + esc(f.cantidad) + ' u.)</span></div>' +
           '<div class="grid-fila">' +
             '<div><label>O.F Prod.' + (ofProdSug ? ' <span class="tag-auto">· de Sala Blanca</span>' : '') + '</label><input class="in-ofProd" type="text" value="' + esc(ofProd) + '"' + (ofProdSug ? BLOQ : '') + '></div>' +
