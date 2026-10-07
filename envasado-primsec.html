@@ -21,14 +21,17 @@
   .panel-lote{ border-top:4px solid #64748b; }
   .panel-prim{ border-top:4px solid var(--acc); }
   .panel-sec{ border-top:4px solid #16a34a; }
-  .oculto{ display:none; }
+  .oculto{ display:none !important; }
   label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
   select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
   select:focus, input:focus{ border-color:var(--acc); outline:none; }
   .btn{ color:#fff; border:none; padding:14px 18px; font-size:15px; font-weight:700; border-radius:8px; cursor:pointer; width:100%; background:#0f766e; }
   .btn:disabled{ opacity:0.5; cursor:default; }
+  .estado-guardado{ font-size:12px; color:var(--mut); margin:8px 0 0 0; min-height:16px; }
+  .estado-guardado.ok{ color:#15803d; font-weight:600; }
+  .estado-guardado.guardando{ color:#92400e; }
+  .estado-guardado.err{ color:#b91c1c; font-weight:600; }
   .hint{ font-size:11px; color:var(--mut); margin:4px 0 10px 0; }
-  .fila-cerrada{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:13px; color:#15803d; font-weight:600; }
   .fila-cierre{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fafafa; }
   .fila-cierre .med{ font-weight:700; font-size:13px; margin-bottom:8px; color:#1e293b; }
   .fila-cierre .med .cant{ font-weight:400; color:var(--mut); font-size:12px; }
@@ -65,7 +68,7 @@
     <select id="loteSelect" onchange="cargarDetalle()">
       <option value="">Cargando lotes...</option>
     </select>
-    <p class="hint">Elegí el lote: abajo aparecen el Primario y el Secundario de ese lote. Completá los dos y guardá una sola vez.</p>
+    <p class="hint">Elegí el lote. Lo que vayas cargando se escribe solo en las hojas del sistema (Envasado Primario y Envasado Secundario "EN CURSO"). El lote se cierra recién al tocar "Finalizar lote", cuando está todo completo.</p>
   </div>
 
   <div class="panel panel-prim oculto" id="panelPrimario">
@@ -79,7 +82,10 @@
     <div id="sFilas"></div>
   </div>
 
-  <button class="btn oculto" id="btnGuardar" onclick="guardarAmbos()">Guardar Primario y Secundario</button>
+  <div class="oculto" id="zonaAcciones">
+    <button class="btn" id="btnGuardar" onclick="finalizarLote()">Finalizar lote (Primario + Secundario)</button>
+    <p class="estado-guardado" id="estadoGuardado"></p>
+  </div>
 
   <div id="diag"></div>
 </div>
@@ -98,8 +104,17 @@
   };
 
   var DETALLE = [];
+  var SEC_GUARDADO = null;   // lo que ya estaba escrito en el Secundario EN CURSO
   var LOTES = [];
-  var LOTE_INICIAL = new URLSearchParams(location.search).get('lote') || '';   // antes venía del doGet (?envasados&lote=...)
+  var LOTE_INICIAL = new URLSearchParams(location.search).get('lote') || '';
+
+  /* ---------- Guardado en vivo ---------- */
+  var CLAVE_ACTUAL = '';
+  var FINALIZANDO = false;
+  var timerGuardado = null;
+  var guardadoEnVuelo = false;
+  var guardadoPendiente = null;
+  var DEMORA_GUARDADO = 1500; // ms después de dejar de tipear
 
   function textoError_(err) { return (err && err.message) ? err.message : String(err); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -112,6 +127,12 @@
     mostrarMsg._t = setTimeout(function () { el.className = ''; }, ok ? 6000 : 9000);
   }
 
+  function estadoGuardado(texto, clase) {
+    var el = document.getElementById('estadoGuardado');
+    el.textContent = texto || '';
+    el.className = 'estado-guardado' + (clase ? ' ' + clase : '');
+  }
+
   function buscarLotePorTexto_(lista, texto) {
     if (!texto) return null;
     var t = String(texto).trim().toUpperCase();
@@ -122,28 +143,18 @@
     return null;
   }
 
-  /* ---------- Lista de lotes: pendientes de Primario + Primario cerrado sin Secundario ---------- */
+  /* ---------- Lista de lotes (todo lo que todavía no tiene Secundario finalizado) ---------- */
   function cargarLotes(callback) {
     var sel = document.getElementById('loteSelect');
-    google.script.run.withSuccessHandler(function (pendientes) {
-      google.script.run.withSuccessHandler(function (sinSec) {
-        var vistos = {};
-        LOTES = [];
-        (pendientes || []).forEach(function (l) { vistos[l.clave] = 1; l.primCerrado = false; LOTES.push(l); });
-        (sinSec || []).forEach(function (l) { if (!vistos[l.clave]) { l.primCerrado = true; LOTES.push(l); } });
-        renderLotes();
-        if (callback) callback(LOTES);
-      }).withFailureHandler(function (err) {
-        mostrarDiag('obtenerLotesDisponiblesSecundario -> ' + textoError_(err));
-        LOTES = (pendientes || []).map(function (l) { l.primCerrado = false; return l; });
-        renderLotes();
-        if (callback) callback(LOTES);
-      }).obtenerLotesDisponiblesSecundario();
+    google.script.run.withSuccessHandler(function (lista) {
+      LOTES = lista || [];
+      renderLotes();
+      if (callback) callback(LOTES);
     }).withFailureHandler(function (err) {
       var t = 'Error: ' + textoError_(err);
       sel.innerHTML = '<option value="">' + t + '</option>';
-      mostrarDiag('obtenerLotesPendientes -> ' + t);
-    }).obtenerLotesPendientes();
+      mostrarDiag('obtenerLotesEnvasadoCombinado -> ' + t);
+    }).obtenerLotesEnvasadoCombinado();
   }
 
   function renderLotes() {
@@ -156,34 +167,47 @@
     }
     sel.innerHTML = '<option value="">Elegí un lote...</option>' + LOTES.map(function (l) {
       return '<option value="' + esc(l.clave) + '">Lote ' + esc(l.sistema + '-' + l.lote) + ' - ' + esc(l.producto) + ' (' + esc(l.fecha) + ')' +
-        (l.primCerrado ? ' — Primario ya cerrado, falta Secundario' : '') + '</option>';
+        (l.enCurso ? ' — en curso' : '') + '</option>';
     }).join('');
     if (previo && LOTES.some(function (l) { return l.clave === previo; })) sel.value = previo;
   }
 
   function limpiar() {
     DETALLE = [];
+    SEC_GUARDADO = null;
+    CLAVE_ACTUAL = '';
+    clearTimeout(timerGuardado); timerGuardado = null;
     document.getElementById('pFilas').innerHTML = '';
     document.getElementById('sFilas').innerHTML = '';
     document.getElementById('sInfoComponentes').style.display = 'none';
-    ['panelPrimario', 'panelSecundario', 'btnGuardar'].forEach(function (id) { document.getElementById(id).classList.add('oculto'); });
+    estadoGuardado('');
+    ['panelPrimario', 'panelSecundario', 'zonaAcciones'].forEach(function (id) { document.getElementById(id).classList.add('oculto'); });
   }
 
   function cargarDetalle() {
+    // si quedó algo sin escribir del lote anterior, se escribe antes de cambiar
+    if (timerGuardado) { clearTimeout(timerGuardado); timerGuardado = null; guardarAhora(); }
+
     var clave = document.getElementById('loteSelect').value;
     limpiar();
     if (!clave) return;
     document.getElementById('panelPrimario').classList.remove('oculto');
     document.getElementById('pFilas').innerHTML = '<p class="vacio">Cargando...</p>';
-    google.script.run.withSuccessHandler(function (detalle) {
+    google.script.run.withSuccessHandler(function (det) {
       if (document.getElementById('loteSelect').value !== clave) return;
-      DETALLE = detalle || [];
+      DETALLE = (det && det.filas) || [];
+      SEC_GUARDADO = (det && det.secundario) || null;
       try { renderPrimario(); renderSecundario(); }
-      catch (e) { mostrarDiag('Error mostrando el lote: ' + e.message); }
+      catch (e) { mostrarDiag('Error mostrando el lote: ' + e.message); return; }
+      CLAVE_ACTUAL = clave;
+      var l = LOTES.filter(function (x) { return x.clave === clave; })[0];
+      estadoGuardado(l && l.enCurso
+        ? 'Se cargó lo que ya estaba escrito en la planilla. Los cambios se guardan solos.'
+        : 'Los cambios se guardan solos en la planilla mientras cargás.');
     }).withFailureHandler(function (err) {
       document.getElementById('pFilas').innerHTML = '';
-      mostrarDiag('obtenerDetalleLote -> Error: ' + textoError_(err));
-    }).obtenerDetalleLote(clave);
+      mostrarDiag('obtenerDetalleLoteEditable -> Error: ' + textoError_(err));
+    }).obtenerDetalleLoteEditable(clave);
   }
 
   /* ---------- PRIMARIO ---------- */
@@ -191,39 +215,37 @@
     var cont = document.getElementById('pFilas');
     if (!DETALLE.length) { cont.innerHTML = '<p class="vacio">Este lote no tiene medidas cargadas.</p>'; return; }
     var BLOQ = ' readonly style="background:#e9ecef;"';
-    var opcionesRefComp = '<option value="">-</option>';
-    for (var nc = 0; nc <= 7; nc++) { var cod = '0' + nc; opcionesRefComp += '<option value="' + cod + '">' + cod + '</option>'; }
     var html = '';
     DETALLE.forEach(function (f) {
-      if (f.yaCerrada) {
-        html += '<div class="fila-cerrada"><span>✓ Ya cerrada — ' + esc(f.medida) + '</span><span>' + esc(f.cantidad) + ' u.</span></div>';
-        return;
-      }
-      var refSug = f.refSugerida || '';
-      var opcionesRef = '<option value=""' + (refSug === '' ? ' selected' : '') + '>-</option>';
+      var refSel = f.ref || f.refSugerida || '';
+      var opcionesRef = '<option value=""' + (refSel === '' ? ' selected' : '') + '>-</option>';
       for (var n = 0; n <= 7; n++) {
-        opcionesRef += '<option value="' + n + '"' + (refSug !== '' && String(n) === refSug ? ' selected' : '') + '>' + n + '</option>';
+        var v = f.esComponente ? ('0' + n) : String(n);
+        opcionesRef += '<option value="' + v + '"' + (refSel === v ? ' selected' : '') + '>' + v + '</option>';
       }
-      var ofProd = f.loteSugerido || '', ofLav = f.ofLavadoSugerido || '';
+      var ofProdSug = f.loteSugerido || '', ofLavSug = f.ofLavadoSugerido || '';
+      var ofProd = ofProdSug || f.ofProd || '';
+      var ofLav = ofLavSug || f.ofLavado || '';
+      var operario = f.operario || 'Miguel Gomez';
       html +=
         '<div class="fila-cierre prim-card" data-fila="' + f.fila + '" data-componente="' + (f.esComponente ? '1' : '0') + '">' +
           '<div class="med">' + esc(f.medida) + ' <span class="cant">(' + esc(f.cantidad) + ' u.)</span></div>' +
           '<div class="grid-fila">' +
-            '<div><label>O.F Prod.' + (ofProd ? ' <span class="tag-auto">· de Sala Blanca</span>' : '') + '</label><input class="in-ofProd" type="text" value="' + esc(ofProd) + '"' + (ofProd ? BLOQ : '') + '></div>' +
-            '<div><label>O.F Lav. Final' + (ofLav ? ' <span class="tag-auto">· de Lavado Final</span>' : '') + '</label><input class="in-ofLavado" type="text" value="' + esc(ofLav) + '"' + (ofLav ? BLOQ : '') + '></div>' +
+            '<div><label>O.F Prod.' + (ofProdSug ? ' <span class="tag-auto">· de Sala Blanca</span>' : '') + '</label><input class="in-ofProd" type="text" value="' + esc(ofProd) + '"' + (ofProdSug ? BLOQ : '') + '></div>' +
+            '<div><label>O.F Lav. Final' + (ofLavSug ? ' <span class="tag-auto">· de Lavado Final</span>' : '') + '</label><input class="in-ofLavado" type="text" value="' + esc(ofLav) + '"' + (ofLavSug ? BLOQ : '') + '></div>' +
             (f.esComponente
               ? '<div><label>Lote Tapón</label><input class="in-loteTap" type="text" value="No aplica" disabled></div>' +
-                '<div><label>Ref</label><select class="in-referencia">' + opcionesRefComp + '</select></div>'
-              : '<div><label>Lote Tapón</label><input class="in-loteTap" type="text"></div>' +
-                '<div><label>Ref (OP-XXXX-N)' + (refSug !== '' ? ' <span class="tag-auto">· autocompletada</span>' : '') + '</label><select class="in-referencia">' + opcionesRef + '</select></div>') +
-            '<div><label>Operario / Responsable</label><input class="in-operario" type="text" value="Miguel Gomez" placeholder="- (si no hay)"></div>' +
+                '<div><label>Ref</label><select class="in-referencia">' + opcionesRef + '</select></div>'
+              : '<div><label>Lote Tapón</label><input class="in-loteTap" type="text" value="' + esc(f.loteTap || '') + '"></div>' +
+                '<div><label>Ref (OP-XXXX-N)' + (!f.ref && f.refSugerida ? ' <span class="tag-auto">· autocompletada</span>' : '') + '</label><select class="in-referencia">' + opcionesRef + '</select></div>') +
+            '<div><label>Operario / Responsable</label><input class="in-operario" type="text" value="' + esc(operario) + '" placeholder="- (si no hay)"></div>' +
           '</div>' +
         '</div>';
     });
     cont.innerHTML = html;
   }
 
-  /* ---------- SECUNDARIO (mismo lote, en la misma pantalla) ---------- */
+  /* ---------- SECUNDARIO ---------- */
   function renderSecundario() {
     var medidas = DETALLE.filter(function (f) { return !f.esComponente; });
     var componentes = DETALLE.filter(function (f) { return f.esComponente; });
@@ -240,20 +262,25 @@
       cont.innerHTML = '<p class="vacio">Este lote no tiene medidas para Envasado Secundario.</p>';
       return;
     }
-    cont.innerHTML = medidas.map(function (f) {
+    cont.innerHTML = medidas.map(function (f, i) {
+      var g = (SEC_GUARDADO && SEC_GUARDADO[i] && SEC_GUARDADO[i].medida === String(f.medida).trim()) ? SEC_GUARDADO[i] : null;
+      var cant = (g && g.cantidad !== '') ? g.cantidad : f.cantidad;
+      var oper = (g && g.operario) ? g.operario : 'Miguel Gomez';
+      var obs = g ? (g.observaciones || '') : '';
+      var difiere = Number(cant) !== Number(f.cantidad);
       return '' +
         '<div class="fila-cierre sec-card">' +
           '<div class="med">' + esc(f.medida) + ' <span class="cant">(Primario: ' + esc(f.cantidad) + ' u.)</span></div>' +
           '<div class="grid-fila">' +
-            '<div><label>Cantidad</label><input class="in-cantidad" type="number" min="0" value="' + esc(f.cantidad) + '" data-esperado="' + esc(f.cantidad) + '" oninput="revisarCantidad(this)"></div>' +
-            '<div><label>Operario</label><input class="in-operario" type="text" value="Miguel Gomez"></div>' +
-            '<div style="grid-column:span 2;"><label>Observaciones</label><input class="in-observaciones" type="text" placeholder="OK, o el motivo si difiere"></div>' +
+            '<div><label>Cantidad</label><input class="in-cantidad" type="number" min="0" value="' + esc(cant) + '" data-esperado="' + esc(f.cantidad) + '" oninput="revisarCantidad(this)"></div>' +
+            '<div><label>Operario</label><input class="in-operario" type="text" value="' + esc(oper) + '"></div>' +
+            '<div style="grid-column:span 2;"><label>Observaciones</label><input class="in-observaciones" type="text" value="' + esc(obs) + '" placeholder="OK, o el motivo si difiere"></div>' +
           '</div>' +
-          '<div class="aviso-warn aviso-cantidad">La cantidad difiere de la del Primario.</div>' +
+          '<div class="aviso-warn aviso-cantidad"' + (difiere ? ' style="display:block"' : '') + '>La cantidad difiere de la del Primario.</div>' +
           '<input type="hidden" class="in-medida-nombre" value="' + esc(f.medida) + '">' +
         '</div>';
     }).join('');
-    document.getElementById('btnGuardar').classList.remove('oculto');
+    document.getElementById('zonaAcciones').classList.remove('oculto');
   }
 
   function revisarCantidad(input) {
@@ -261,61 +288,145 @@
     aviso.style.display = (Number(input.value) !== Number(input.dataset.esperado)) ? 'block' : 'none';
   }
 
-  /* ---------- GUARDAR AMBOS ---------- */
-  function guardarAmbos() {
-    var clave = document.getElementById('loteSelect').value;
-    if (!clave) { mostrarMsg('Elegí un lote primero.', false); return; }
-
-    var filasPrimario = [], faltaPrim = false;
+  /* ---------- Lectura de la pantalla ---------- */
+  function leerPrimario() {
+    var filas = [];
     document.querySelectorAll('#pFilas .prim-card').forEach(function (card) {
       var esComp = card.dataset.componente === '1';
-      var ofProd = card.querySelector('.in-ofProd').value.trim();
-      var ofLavado = card.querySelector('.in-ofLavado').value.trim();
-      var loteTap = esComp ? '' : card.querySelector('.in-loteTap').value.trim();
-      if (!ofProd || !ofLavado || (!esComp && !loteTap)) faltaPrim = true;
-      filasPrimario.push({
-        fila: card.dataset.fila, ofProd: ofProd, ofLavado: ofLavado, loteTap: loteTap,
+      filas.push({
+        fila: card.dataset.fila,
+        esComponente: esComp,
+        ofProd: card.querySelector('.in-ofProd').value.trim(),
+        ofLavado: card.querySelector('.in-ofLavado').value.trim(),
+        loteTap: esComp ? '' : card.querySelector('.in-loteTap').value.trim(),
         referencia: card.querySelector('.in-referencia').value,
-        operario: card.querySelector('.in-operario').value.trim() || '-'
+        operario: card.querySelector('.in-operario').value.trim()
       });
     });
-    if (faltaPrim) { mostrarMsg('Primario: completá O.F Prod., O.F Lav. Final y Lote Tapón en todas las filas.', false); return; }
+    return filas;
+  }
 
-    var filasSecundario = [], faltaSec = false;
+  function leerSecundario() {
+    var filas = [];
     document.querySelectorAll('#sFilas .sec-card').forEach(function (card) {
-      var cantidad = card.querySelector('.in-cantidad').value;
-      var operario = card.querySelector('.in-operario').value.trim();
-      if (cantidad === '' || !operario) faltaSec = true;
-      filasSecundario.push({
+      filas.push({
         medida: card.querySelector('.in-medida-nombre').value,
-        cantidad: cantidad,
-        operario: operario,
+        cantidad: card.querySelector('.in-cantidad').value,
+        operario: card.querySelector('.in-operario').value.trim(),
         observaciones: card.querySelector('.in-observaciones').value.trim()
       });
     });
+    return filas;
+  }
+
+  /* ---------- Guardado en vivo en la planilla ---------- */
+  function programarGuardado() {
+    if (!CLAVE_ACTUAL || FINALIZANDO) return;
+    clearTimeout(timerGuardado);
+    estadoGuardado('Escribiendo en la planilla...', 'guardando');
+    timerGuardado = setTimeout(function () { timerGuardado = null; guardarAhora(); }, DEMORA_GUARDADO);
+  }
+
+  function guardarAhora() {
+    if (!CLAVE_ACTUAL || FINALIZANDO) return;
+    clearTimeout(timerGuardado); timerGuardado = null;
+    var payload = { clave: CLAVE_ACTUAL, primario: leerPrimario(), secundario: leerSecundario() };
+    if (guardadoEnVuelo) { guardadoPendiente = payload; return; }
+    enviarAvance_(payload);
+  }
+
+  function enviarAvance_(payload) {
+    guardadoEnVuelo = true;
+    google.script.run.withSuccessHandler(function (r) {
+      guardadoEnVuelo = false;
+      if (r && r.ocupado) {
+        // el servidor estaba ocupado (por ejemplo finalizando otro lote): se reintenta
+        if (!guardadoPendiente) guardadoPendiente = payload;
+        setTimeout(siguienteAvance_, 3000);
+        return;
+      }
+      if (payload.clave === CLAVE_ACTUAL) {
+        if (r && r.finalizado) {
+          estadoGuardado(r.mensaje, '');
+        } else {
+          estadoGuardado('✓ Guardado en la planilla a las ' + r.hora + ' (' + r.hojaPrim + (r.hojaSec ? ' / ' + r.hojaSec : '') + ')', 'ok');
+        }
+      }
+      siguienteAvance_();
+    }).withFailureHandler(function (err) {
+      guardadoEnVuelo = false;
+      if (payload.clave === CLAVE_ACTUAL) estadoGuardado('No se pudo escribir en la planilla: ' + textoError_(err), 'err');
+      siguienteAvance_();
+    }).guardarAvanceEnvasado(payload);
+  }
+
+  function siguienteAvance_() {
+    if (guardadoEnVuelo) return;
+    if (!guardadoPendiente || FINALIZANDO) { guardadoPendiente = null; return; }
+    var p = guardadoPendiente;
+    guardadoPendiente = null;
+    enviarAvance_(p);
+  }
+
+  /* ---------- FINALIZAR ---------- */
+  function finalizarLote() {
+    var clave = document.getElementById('loteSelect').value;
+    if (!clave) { mostrarMsg('Elegí un lote primero.', false); return; }
+
+    var faltaPrim = false;
+    var filasPrimario = leerPrimario().map(function (f) {
+      if (!f.ofProd || !f.ofLavado || (!f.esComponente && !f.loteTap)) faltaPrim = true;
+      return { fila: f.fila, ofProd: f.ofProd, ofLavado: f.ofLavado, loteTap: f.loteTap, referencia: f.referencia, operario: f.operario || '-' };
+    });
+    if (faltaPrim) { mostrarMsg('Primario: faltan O.F Prod., O.F Lav. Final o Lote Tapón. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
+
+    var faltaSec = false;
+    var filasSecundario = leerSecundario().map(function (f) {
+      if (f.cantidad === '' || !f.operario) faltaSec = true;
+      return f;
+    });
     if (!filasSecundario.length) { mostrarMsg('No hay medidas de Secundario para guardar.', false); return; }
-    if (faltaSec) { mostrarMsg('Secundario: completá cantidad y operario en todas las filas.', false); return; }
+    if (faltaSec) { mostrarMsg('Secundario: falta cantidad u operario. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
+
+    clearTimeout(timerGuardado); timerGuardado = null;
+    guardadoPendiente = null;
+    FINALIZANDO = true;
 
     var btn = document.getElementById('btnGuardar');
     btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    btn.textContent = 'Finalizando...';
     google.script.run.withSuccessHandler(function (res) {
       btn.disabled = false;
-      btn.textContent = 'Guardar Primario y Secundario';
+      btn.textContent = 'Finalizar lote (Primario + Secundario)';
+      FINALIZANDO = false;
       mostrarMsg(res, true);
       document.getElementById('loteSelect').value = '';
       limpiar();
       cargarLotes();
     }).withFailureHandler(function (err) {
       btn.disabled = false;
-      btn.textContent = 'Guardar Primario y Secundario';
+      btn.textContent = 'Finalizar lote (Primario + Secundario)';
+      FINALIZANDO = false;
       mostrarMsg(textoError_(err), false);
-      mostrarDiag('guardarPrimarioYSecundario -> ' + textoError_(err));
-      cargarLotes(); // por si el Primario llegó a guardarse y el lote cambió de estado
-    }).guardarPrimarioYSecundario({ clave: clave, filasPrimario: filasPrimario, filasSecundario: filasSecundario });
+      mostrarDiag('finalizarEnvasadoCombinado -> ' + textoError_(err));
+      cargarLotes();
+    }).finalizarEnvasadoCombinado({ clave: clave, filasPrimario: filasPrimario, filasSecundario: filasSecundario });
   }
 
   window.onload = function () {
+    ['panelPrimario', 'panelSecundario'].forEach(function (id) {
+      var p = document.getElementById(id);
+      p.addEventListener('input', programarGuardado);
+      p.addEventListener('change', programarGuardado);
+    });
+    window.addEventListener('beforeunload', function (e) {
+      if (timerGuardado || guardadoEnVuelo) {
+        if (timerGuardado) guardarAhora();
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
     cargarLotes(function (lista) {
       var m = buscarLotePorTexto_(lista, LOTE_INICIAL);
       if (m) {
