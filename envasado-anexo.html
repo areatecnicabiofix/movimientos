@@ -6,7 +6,7 @@
     <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
     <script>window.BIOFIX_PANTALLA = 'envasado'; window.BIOFIX_SOLO_ADMIN = true;   // solo técnica</script>
     <script src="envasados-config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="gas.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -289,6 +289,8 @@
     </div>
 
     <script>
+      // Escapa texto antes de meterlo en innerHTML (evita que un dato tipeado en la planilla ejecute código)
+      function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
       function mostrarPestana(nombre) {
         document.getElementById('panelAnexo').classList.toggle('activo', nombre === 'anexo');
         document.getElementById('panelHistorico').classList.toggle('activo', nombre === 'historico');
@@ -411,7 +413,7 @@
           var sel = document.getElementById(e[0]);
           if (textoSinDatos) { sel.innerHTML = '<option value="">' + textoSinDatos + '</option>'; return; }
           sel.innerHTML = '<option value="">' + e[2] + '</option>' +
-            medidas.map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join('');
+            medidas.map(function (m) { return '<option value="' + esc(m) + '">' + esc(m) + '</option>'; }).join('');
         });
       }
 
@@ -700,7 +702,7 @@
           })
           .withFailureHandler(function (err) {
             if (miToken !== _tokenRotos) return;
-            cont.innerHTML = '<p style="font-size:14px; color:#b91c1c;">No se pudieron cargar las medidas: ' + err.message + '</p>';
+            cont.innerHTML = '<p style="font-size:14px; color:#b91c1c;">No se pudieron cargar las medidas: ' + esc(err && err.message) + '</p>';
           })
           .obtenerDetalleSecundarioParaAnexo(clave);
       }
@@ -713,9 +715,9 @@
         }
         var filas = DETALLE_ANEXO.map(function (d, i) {
           return '<tr>' +
-            '<td>' + d.medida + '</td>' +
-            '<td style="text-align:center;">' + d.cantidad + '</td>' +
-            '<td><input type="number" min="0" max="' + d.cantidad + '" step="1" id="rotos_' + i + '" value="0" oninput="actualizarTotalRotos()"></td>' +
+            '<td>' + esc(d.medida) + '</td>' +
+            '<td style="text-align:center;">' + esc(d.cantidad) + '</td>' +
+            '<td><input type="number" min="0" max="' + (Number(d.cantidad) || 0) + '" step="1" id="rotos_' + i + '" value="0" oninput="actualizarTotalRotos()"></td>' +
           '</tr>';
         }).join('');
         cont.innerHTML =
@@ -801,7 +803,7 @@
         google.script.run.withSuccessHandler(function (sistemas) {
           var sel = document.getElementById('ofSistema');
           sel.innerHTML = '<option value="">Seleccionar...</option>' +
-            sistemas.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+            sistemas.map(function (s) { return '<option value="' + esc(s) + '">' + esc(s) + '</option>'; }).join('');
         }).withFailureHandler(function (err) {
           document.getElementById('ofSistema').innerHTML = '<option value="">Error al cargar sistemas</option>';
           var msg = document.getElementById('mensajeOrden');
@@ -821,7 +823,7 @@
 
           google.script.run.withSuccessHandler(function (piezas) {
             selPieza.innerHTML = '<option value="">Seleccionar...</option>' +
-              piezas.map(function (p) { return '<option value="' + p.indice + '">' + p.nombre + '</option>'; }).join('');
+              piezas.map(function (p) { return '<option value="' + esc(p.indice) + '">' + esc(p.nombre) + '</option>'; }).join('');
             selPieza.disabled = false;
           }).obtenerPiezasOrdenFabricacion(sistema);
         });
@@ -841,7 +843,7 @@
         google.script.run.withSuccessHandler(function (lotes) {
           if (miToken !== _tokenLotesOrden) return;
           selLote.innerHTML = lotes.length
-            ? '<option value="">Seleccionar...</option>' + lotes.map(function (l) { return '<option value="' + l.clave + '">Lote ' + l.lote + ' (O.F ' + l.of + ' - ' + l.fecha + ')</option>'; }).join('')
+            ? '<option value="">Seleccionar...</option>' + lotes.map(function (l) { return '<option value="' + esc(l.clave) + '">Lote ' + esc(l.lote) + ' (O.F ' + esc(l.of) + ' - ' + esc(l.fecha) + ')</option>'; }).join('')
             : '<option value="">No hay lotes pendientes para esta pieza</option>';
           selLote.disabled = false;
         }).obtenerLotesParaOrdenFabricacionPorPieza(sistema, piezaIndice);
