@@ -73,7 +73,6 @@
     <div class="tab" id="tb_aud" onclick="ver('aud')">Auditoría</div>
     <div class="tab" id="tb_wip" onclick="ver('wip')">En proceso (WIP)</div>
     <div class="tab" id="tb_lote" onclick="ver('lote')">Historia de lote</div>
-    <div class="tab" id="tb_gra" onclick="ver('gra')">Gráficos</div>
     <div class="tab" id="tb_lt" onclick="ver('lt')">Tiempos por etapa</div>
     <div class="tab" id="tb_rend" onclick="ver('rend')">Rendimiento</div>
     <div class="tab" id="tb_prod" onclick="ver('prod')">Productividad</div>
@@ -144,40 +143,6 @@
     <div id="loteBusq"></div>
     <div id="loteRes"><p class="mut">Ingresá un número de lote, o buscá por tipo de implante y/o medida.</p></div>
   </div>
-
-  <!-- ================= GRÁFICOS ================= -->
-  <div id="p_gra" class="hide viz-root">
-    <div class="fila">
-      <select id="gDesde" onchange="cargarGra()">
-        <option value="d30">Últimos 30 días (por día)</option>
-        <option value="s90" selected>Últimos 90 días (por semana)</option>
-        <option value="s180">Últimos 180 días (por semana)</option>
-        <option value="mes">Mes a mes (desde julio 2026)</option>
-      </select>
-      <select id="gProd" onchange="if (GRA) renderGra()"><option value="">Todos los productos</option></select>
-      <span class="mut">Pasá el dedo o el mouse sobre una barra o un punto para ver el valor.</span>
-    </div>
-    <div class="card"><h2>Piezas que pasaron cada sector</h2>
-      <div class="mut" style="margin-bottom:8px">Piezas buenas que salieron de cada sector hacia el siguiente (sin la carga inicial). Cada sector tiene su propia escala.</div>
-      <div class="mini-grid" id="gMini"><p class="mut">Cargando…</p></div></div>
-    <div class="card"><h2>% de rechazo por <span id="gPer">semana</span></h2>
-      <div class="mut">Piezas mandadas a Descarte Calidad sobre las procesadas en cada sector. Los períodos con menos de 20 piezas no se muestran.</div>
-      <div class="leyenda" id="gLeyRech"></div>
-      <div id="gRech"></div>
-      <details style="margin-top:6px"><summary class="mut" style="cursor:pointer">Ver tabla</summary><div class="tabla-wrap" id="gRechTabla"></div></details></div>
-    <div class="card"><h2>Lo que entra y lo que sale de cada etapa</h2>
-      <div class="mut">Si entra más de lo que sale, la cola de esa etapa crece (se está juntando trabajo). Incluye lo descartado como "sale".</div>
-      <div class="leyenda"><span><i class="sq" style="background:var(--s1)"></i>Entra</span><span><i class="sq" style="background:var(--s2)"></i>Sale</span></div>
-      <div class="mini-grid" id="gFlujo"><p class="mut">Cargando…</p></div></div>
-    <div class="card"><h2>Stock de cada etapa, día a día</h2>
-      <div class="mut" id="gHistNota">Foto del stock que se guarda todas las noches (desde el 29/09/2026). En semana o mes, se muestra el último día de cada período.</div>
-      <div class="mini-grid" id="gHist" style="margin-top:8px"><p class="mut">Cargando…</p></div></div>
-    <div class="card"><h2>En proceso hoy, por etapa y antigüedad</h2>
-      <div class="mut">Mismas cantidades que la pestaña En proceso (sin la carga inicial).</div>
-      <div class="leyenda"><span><i class="sq" style="background:var(--o1)"></i>Hasta 7 días</span><span><i class="sq" style="background:var(--o2)"></i>8 a 14 días</span><span><i class="sq" style="background:var(--o3)"></i>Más de 14 días</span></div>
-      <div id="gWip"></div></div>
-  </div>
-  <div id="vizTip"></div>
 
   <!-- ================= TIEMPOS POR ETAPA ================= -->
   <div id="p_lt" class="hide">
@@ -287,7 +252,6 @@
 </div>
 
 <script>
-var GRA = null;
 var QP = null, MECOP = {};
 var AUD = [], COTAS = [], ACT = 'ale', WIP = null, WETAPA = '', ALE = [], LT = null, REND = null, PROD = null, AUD_OK = false, DERIVA = [];
 function $(id){ return document.getElementById(id); }
@@ -300,12 +264,11 @@ function rpc(nombre, args){
 }
 function ver(t){
   ACT = t;
-  ['ale','aud','wip','lote','gra','lt','rend','prod','rp','ws','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
+  ['ale','aud','wip','lote','lt','rend','prod','rp','ws','qp','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x!==t); $('tb_'+x).className = x===t ? 'tab active' : 'tab'; });
   if (t === 'cotas' && !COTAS.length) cargarCotas();
   if (t === 'wip' && !WIP) cargarWip();
   if (t === 'aud' && !AUD_OK) cargarAud();
   if (t === 'lt' && !LT) cargarLt();
-  if (t === 'gra' && !GRA) cargarGra();
   if (t === 'rend' && !REND) cargarRend();
   if (t === 'prod' && !PROD) cargarProd();
   if (t === 'qp' && !QP) cargarQp();
@@ -437,195 +400,6 @@ function renderAle(){
         '<td style="width:60px;text-align:right" class="mut">Ver ›</td></tr>';
     }).join('') + '</tbody></table></div>';
   }).join('');
-}
-
-/* ---------------- Gráficos por sector ---------------- */
-var G_SECT = ['1 Mecanizado','2 Lavado','3 Control de Calidad','4 Lavado Grueso','5 Blasting','6 Lavado Final','7 Sala Blanca'];
-var G_RECH = [['1 Mecanizado','var(--s1)'],['3 Control de Calidad','var(--s2)'],['5 Blasting','var(--s3)'],['6 Lavado Final','var(--s4)']];
-function vizTip(e, html){ var t = $('vizTip'); if (!html){ t.style.display = 'none'; return; }
-  t.innerHTML = html; t.style.display = 'block';
-  var x = e.clientX + 14, y = e.clientY + 14; if (x + t.offsetWidth > innerWidth - 8) x = e.clientX - t.offsetWidth - 14;
-  t.style.left = x + 'px'; t.style.top = y + 'px'; }
-document.addEventListener('scroll', function(){ vizTip(null, ''); }, true);
-function lunes(d){ var x = new Date(d + 'T12:00:00'); var w = (x.getDay() + 6) % 7; x.setDate(x.getDate() - w); return x.toISOString().slice(0,10); }
-function fmtCorto(iso){ var p = iso.split('-'); return p[2] + '/' + p[1]; }
-function niceMax(v){ if (v <= 0) return 1; var e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e, pasos = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
-  for (var i = 0; i < pasos.length; i++) if (f <= pasos[i]) return pasos[i] * e; return 10 * e; }
-var G_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-function isoHoy(){ var d = new Date(); d.setHours(12,0,0,0); return d.toISOString().slice(0,10); }
-function isoMenos(dias){ var d = new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate() - dias); return d.toISOString().slice(0,10); }
-function finDeMes(ym){ var p = ym.split('-'), d = new Date(+p[0], +p[1], 0, 12); return d.toISOString().slice(0,10); }
-// Agrega al selector un renglón por cada mes (desde julio 2026 hasta el actual), para ver un mes puntual día por día
-function opcionesMeses(){
-  var sel = $('gDesde'); if (sel.getAttribute('data-meses')) return; sel.setAttribute('data-meses', '1');
-  var hoy = isoHoy().slice(0,7), y = 2026, m = 7, lista = [];
-  while ((y + '-' + ('0'+m).slice(-2)) <= hoy){ lista.push(y + '-' + ('0'+m).slice(-2)); m++; if (m > 12){ m = 1; y++; } }
-  var g = document.createElement('optgroup'); g.label = 'Un mes (por día)';
-  lista.reverse().forEach(function(ym){ var o = document.createElement('option'); o.value = 'M' + ym;
-    o.textContent = G_MESES[+ym.slice(5) - 1].replace(/^./, function(c){ return c.toUpperCase(); }) + ' ' + ym.slice(0,4); g.appendChild(o); });
-  sel.appendChild(g);
-}
-function rangoGra(v){
-  var hoy = isoHoy();
-  if (v === 'd30') return { desde: isoMenos(30), hasta: hoy, modo: 'dia', txt: 'últimos 30 días' };
-  if (v === 's90') return { desde: isoMenos(90), hasta: hoy, modo: 'semana', txt: 'últimos 90 días' };
-  if (v === 's180') return { desde: isoMenos(180), hasta: hoy, modo: 'semana', txt: 'últimos 180 días' };
-  if (v === 'mes') return { desde: '2026-07-01', hasta: hoy, modo: 'mes', txt: 'desde julio 2026' };
-  var ym = v.slice(1), fin = finDeMes(ym);
-  return { desde: ym + '-01', hasta: fin < hoy ? fin : hoy, modo: 'dia', txt: G_MESES[+ym.slice(5) - 1] + ' ' + ym.slice(0,4) };
-}
-function idxEtq(n){ if (n <= 6){ var t = []; for (var i = 0; i < n; i++) t.push(i); return t; } return [0, Math.floor((n-1)/2), n-1]; }
-function claveGra(iso, modo){ return modo === 'dia' ? iso : modo === 'semana' ? lunes(iso) : iso.slice(0,7) + '-01'; }
-function etqGra(k, modo, larga){
-  if (modo === 'mes') return larga ? G_MESES[+k.slice(5,7) - 1] + ' ' + k.slice(0,4) : G_MESES[+k.slice(5,7) - 1].slice(0,3) + ' ' + k.slice(0,4);
-  return (larga && modo === 'semana' ? 'Semana del ' : '') + fmtCorto(k);
-}
-function periodos(r){
-  var out = [], d = new Date(r.desde + 'T12:00:00'), fin = r.hasta;
-  while (true){ var iso = d.toISOString().slice(0,10); if (iso > fin) break; var k = claveGra(iso, r.modo); if (out.indexOf(k) < 0) out.push(k); d.setDate(d.getDate() + 1); }
-  return out;
-}
-function cargarGra(){
-  opcionesMeses();
-  var r = rangoGra($('gDesde').value);
-  $('gMini').innerHTML = '<p class="mut">Cargando…</p>';
-  var pWip = WIP ? Promise.resolve(WIP) : rpc('wip_etapas').then(function(d){ WIP = d || []; return WIP; });
-  Promise.all([rpc('sector_diario', { p_desde: r.desde }), pWip, rpc('flujo_etapas', { p_desde: r.desde }),
-               rpc('stock_diario_etapas', { p_desde: r.desde }).catch(function(){ return []; })]).then(function(res){
-    GRA = { datos: (res[0] || []).filter(function(x){ return x.dia <= r.hasta; }), r: r,
-            flujo: (res[2] || []).filter(function(x){ return x.dia <= r.hasta; }),
-            hist: (res[3] || []).filter(function(x){ return x.dia <= r.hasta; }) };
-    var prods = {}; GRA.datos.forEach(function(x){ prods[x.producto] = 1; }); (WIP || []).forEach(function(w){ if (w.producto) prods[w.producto] = 1; });
-    var sel = $('gProd'), act = sel.value;
-    sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+' value="'+esc(p)+'">'+esc(p)+'</option>'; }).join('');
-    renderGra();
-  }).catch(function(e){ $('gMini').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
-}
-function renderGra(){
-  var R = GRA.r, modo = R.modo, porDia = modo === 'dia', per = periodos(R);
-  $('gPer').textContent = { dia: 'día', semana: 'semana', mes: 'mes' }[modo] + ' · ' + R.txt + ($('gProd').value ? ' · ' + $('gProd').value : '');
-  var M = {};   // M[grupo][periodo] = {b, r}
-  var PF = $('gProd').value;
-  GRA.datos.forEach(function(x){ if (PF && x.producto !== PF) return; var k = claveGra(x.dia, modo); var g = M[x.grupo] = M[x.grupo] || {};
-    var c = g[k] = g[k] || { b: 0, r: 0 }; c.b += +x.buenas; c.r += +x.rechazo; });
-  window._GRA_M = M; window._GRA_P = per;
-  // ---- small multiples: columnas por sector
-  $('gMini').innerHTML = G_SECT.map(function(g, gi){
-    var serie = per.map(function(k){ return (M[g] && M[g][k]) ? M[g][k].b : 0; });
-    var tot = serie.reduce(function(a,b){ return a+b; }, 0), mx = niceMax(Math.max.apply(null, serie));
-    if (!tot) return '<div class="mini"><div class="t">'+esc(g.slice(2))+'</div><div class="s">Sin piezas en el período</div><div style="height:90px"></div></div>';
-    var W = 300, H = 120, pl = 34, pr = 6, pt = 8, pb = 18, n = per.length, band = (W - pl - pr) / n, bw = Math.min(24, Math.max(2, band - 2));
-    var Y = function(v){ return pt + (H - pt - pb) * (1 - v / mx); };
-    var bars = serie.map(function(v, i){ if (!v) return ''; var x = pl + i * band + (band - bw) / 2, y = Y(v), h = H - pb - y, r = Math.min(4, h, bw/2);
-      return '<path d="M'+x+','+(H-pb)+'V'+(y+r)+'Q'+x+','+y+' '+(x+r)+','+y+'H'+(x+bw-r)+'Q'+(x+bw)+','+y+' '+(x+bw)+','+(y+r)+'V'+(H-pb)+'Z" style="fill:var(--s1)"/>'; }).join('');
-    var hits = serie.map(function(v, i){ return '<rect x="'+(pl + i*band)+'" y="'+pt+'" width="'+band+'" height="'+(H-pt-pb)+'" fill="transparent" onmousemove="vizTip(event,\'<b>'+etqGra(per[i], modo, true)+'</b><br>'+num(v,0)+' piezas\')" onmouseleave="vizTip(null,\'\')"/>'; }).join('');
-    var grid = [0, mx/2, mx].map(function(v){ var y = Y(v); return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--grid)" stroke-width="1"/><text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end">'+num(v,0)+'</text>'; }).join('');
-    var xl = idxEtq(n).map(function(i){ var solo = n <= 6; return '<text x="'+(pl + i*band + band/2)+'" y="'+(H-4)+'" text-anchor="'+(solo?'middle':i===n-1&&n>1?'end':i===0?'start':'middle')+'">'+etqGra(per[i], modo, false)+'</text>'; }).join('');
-    return '<div class="mini"><div class="t">'+esc(g.slice(2))+'</div><div class="s">'+num(tot,0)+' piezas en el período</div>' +
-      '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Piezas por período en '+esc(g.slice(2))+'">'+grid+bars+xl+hits+'</svg></div>';
-  }).join('');
-  // ---- líneas: % de rechazo
-  var W = Math.max(320, ($('gRech').clientWidth || 900)), H = W < 560 ? 220 : 240, pl = 40, pr = W < 560 ? 104 : 150, pt = 12, pb = 24, n = per.length;
-  var series = G_RECH.map(function(s){ return { g: s[0], c: s[1], v: per.map(function(k){ var c = M[s[0]] && M[s[0]][k]; var tot = c ? c.b + c.r : 0; return tot >= 20 ? 100 * c.r / tot : null; }) }; });
-  var mx = niceMax(Math.max(1, Math.max.apply(null, series.map(function(s){ return Math.max.apply(null, s.v.map(function(x){ return x || 0; })); }))));
-  var X = function(i){ return pl + (n === 1 ? 0 : i * (W - pl - pr) / (n - 1)); }, Y = function(v){ return pt + (H - pt - pb) * (1 - v / mx); };
-  var grid = [0, mx/2, mx].map(function(v){ var y = Y(v); return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--grid)"/><text x="'+(pl-6)+'" y="'+(y+3)+'" text-anchor="end">'+num(v,1)+' %</text>'; }).join('');
-  var xl = idxEtq(n).map(function(i){ return '<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle">'+etqGra(per[i], modo, false)+'</text>'; }).join('');
-  var labs = [];
-  var lineas = series.map(function(s){
-    var d = '', abierto = false;
-    s.v.forEach(function(v, i){ if (v == null){ abierto = false; return; } d += (abierto ? 'L' : 'M') + X(i) + ',' + Y(v); abierto = true; });
-    var ult = -1; s.v.forEach(function(v, i){ if (v != null) ult = i; });
-    var puntos = s.v.map(function(v, i){ return v == null ? '' : '<circle cx="'+X(i)+'" cy="'+Y(v)+'" r="3.5" style="fill:'+s.c+';stroke:var(--surface-1);stroke-width:2"/>'; }).join('');
-    if (ult >= 0) labs.push({ x: W - pr + 8, y: Y(s.v[ult]) + 3, t: esc(W < 560 ? ({'1 Mecanizado':'Mecan.','3 Control de Calidad':'Control','5 Blasting':'Blasting','6 Lavado Final':'L. Final'}[s.g] || s.g.slice(2)) : s.g.slice(2))+' '+num(s.v[ult],1)+' %' });
-    return '<path d="'+d+'" fill="none" style="stroke:'+s.c+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' + puntos;
-  }).join('');
-  labs.sort(function(a, b){ return a.y - b.y; });   // que las etiquetas finales no se pisen
-  labs.forEach(function(l, i){ if (i && l.y - labs[i-1].y < 13) l.y = labs[i-1].y + 13; });
-  var tope = H - pb - 2;   // que ninguna etiqueta baje hasta las fechas del eje
-  for (var li = labs.length - 1; li >= 0; li--){ if (labs[li].y > tope) labs[li].y = tope; tope = labs[li].y - 13; }
-  lineas += labs.map(function(l){ return '<text x="'+l.x+'" y="'+l.y+'" style="fill:var(--text-secondary);font-size:11px">'+l.t+'</text>'; }).join('');
-  var hits = per.map(function(k, i){ var html = '<b>'+etqGra(k, modo, true)+'</b>' + series.map(function(s){
-      return '<br><span style="display:inline-block;width:10px;height:3px;border-radius:2px;background:'+s.c+';vertical-align:middle;margin-right:5px"></span>'+esc(s.g.slice(2))+': '+(s.v[i]==null?'—':num(s.v[i],2)+' %'); }).join('');
-    var x0 = i === 0 ? pl : (X(i-1) + X(i)) / 2, x1 = i === n-1 ? W-pr : (X(i) + X(i+1)) / 2;
-    return '<rect x="'+x0+'" y="'+pt+'" width="'+Math.max(1,x1-x0)+'" height="'+(H-pt-pb)+'" fill="transparent" data-i="'+i+'" onmousemove="gCross('+i+',event,this)" onmouseleave="gCross(-1,event)" data-tip="'+esc(html)+'"/>'; }).join('');
-  $('gLeyRech').innerHTML = series.map(function(s){ return '<span><i style="background:'+s.c+'"></i>'+esc(s.g.slice(2))+'</span>'; }).join('');
-  $('gRech').innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Porcentaje de rechazo por período">'+grid+xl+
-    '<line id="gCrossL" x1="0" x2="0" y1="'+pt+'" y2="'+(H-pb)+'" stroke-width="1" style="stroke:var(--text-muted);display:none"/>'+lineas+hits+'</svg>';
-  window._GX = X;
-  $('gRechTabla').innerHTML = '<table><thead><tr><th>'+({ dia: 'Día', semana: 'Semana del', mes: 'Mes' }[modo])+'</th>'+series.map(function(s){ return '<th>'+esc(s.g.slice(2))+'</th>'; }).join('')+'</tr></thead><tbody>'+
-    per.map(function(k, i){ return '<tr><td>'+etqGra(k, modo, false)+'</td>'+series.map(function(s){ return '<td class="r">'+(s.v[i]==null?'—':num(s.v[i],2)+' %')+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>';
-  // ---- entra / sale por etapa (columnas de a pares)
-  var F = {};
-  (GRA.flujo || []).forEach(function(x){ if (PF && x.producto !== PF) return; var k = claveGra(x.dia, modo), g = F[x.grupo] = F[x.grupo] || {};
-    var c = g[k] = g[k] || { e: 0, s: 0 }; c.e += +x.entra; c.s += +x.sale; });
-  $('gFlujo').innerHTML = G_SECT.slice(1).map(function(g){
-    var se = per.map(function(k){ return (F[g] && F[g][k]) ? F[g][k].e : 0; }), ss = per.map(function(k){ return (F[g] && F[g][k]) ? F[g][k].s : 0; });
-    var te = se.reduce(function(a,b){ return a+b; }, 0), ts = ss.reduce(function(a,b){ return a+b; }, 0), neto = te - ts;
-    if (!te && !ts) return '<div class="mini"><div class="t">'+esc(g.slice(2))+'</div><div class="s">Sin movimientos en el período</div><div style="height:90px"></div></div>';
-    var mx = niceMax(Math.max.apply(null, se.concat(ss)));
-    var W = 300, H = 120, pl = 34, pr = 6, pt = 8, pb = 18, n = per.length, band = (W - pl - pr) / n, bw = Math.max(1, Math.min(11, (band - 3) / 2));
-    var Y = function(v){ return pt + (H - pt - pb) * (1 - v / mx); };
-    function col(x, v, c){ if (!v) return ''; var y = Y(v), h = H - pb - y, r = Math.min(3, h, bw/2);
-      return '<path d="M'+x+','+(H-pb)+'V'+(y+r)+'Q'+x+','+y+' '+(x+r)+','+y+'H'+(x+bw-r)+'Q'+(x+bw)+','+y+' '+(x+bw)+','+(y+r)+'V'+(H-pb)+'Z" style="fill:'+c+'"/>'; }
-    var bars = per.map(function(k, i){ var x0 = pl + i * band + (band - 2*bw - 1) / 2; return col(x0, se[i], 'var(--s1)') + col(x0 + bw + 1, ss[i], 'var(--s2)'); }).join('');
-    var hits = per.map(function(k, i){ return '<rect x="'+(pl + i*band)+'" y="'+pt+'" width="'+band+'" height="'+(H-pt-pb)+'" fill="transparent" onmousemove="vizTip(event,\'<b>'+etqGra(k, modo, true)+'</b><br>Entró: '+num(se[i],0)+'<br>Salió: '+num(ss[i],0)+'\')" onmouseleave="vizTip(null,\'\')"/>'; }).join('');
-    var grid = [0, mx/2, mx].map(function(v){ var y = Y(v); return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--grid)" stroke-width="1"/><text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end">'+num(v,0)+'</text>'; }).join('');
-    var xl = idxEtq(n).map(function(i){ var solo = n <= 6; return '<text x="'+(pl + i*band + band/2)+'" y="'+(H-4)+'" text-anchor="'+(solo?'middle':i===n-1&&n>1?'end':i===0?'start':'middle')+'">'+etqGra(per[i], modo, false)+'</text>'; }).join('');
-    var txt = neto > 0 ? '<b style="color:#b91c1c">la cola creció '+num(neto,0)+'</b>' : neto < 0 ? '<b style="color:#15803d">la cola bajó '+num(-neto,0)+'</b>' : 'la cola quedó igual';
-    return '<div class="mini"><div class="t">'+esc(g.slice(2))+'</div><div class="s">Entraron '+num(te,0)+' · salieron '+num(ts,0)+' · '+txt+'</div>' +
-      '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Entra y sale en '+esc(g.slice(2))+'">'+grid+bars+xl+hits+'</svg></div>';
-  }).join('');
-  // ---- stock por etapa, día a día (nivel: en semana/mes se toma el último día del período)
-  var HS = {}, HO = {}, HD = {};
-  (GRA.hist || []).forEach(function(x){ if (PF && x.producto !== PF) return;
-    var e = x.etapa; HO[e] = +x.orden; var k = claveGra(x.dia, modo); var g = HS[e] = HS[e] || {};
-    var c = g[k] = g[k] || { dia: '', v: 0 };
-    if (x.dia > c.dia) { c.dia = x.dia; c.v = 0; }
-    if (x.dia === c.dia) c.v += +x.cantidad; HD[x.dia] = 1; });
-  var nDias = Object.keys(HD).length, etH = Object.keys(HS).sort(function(a, b){ return HO[a] - HO[b]; });
-  $('gHist').innerHTML = !etH.length ? '<p class="mut">Todavía no hay fotos guardadas en este período.</p>' : etH.map(function(e){
-    var serie = per.map(function(k){ return HS[e][k] ? HS[e][k].v : null; });
-    var vals = serie.filter(function(v){ return v != null; }), ult = vals.length ? vals[vals.length - 1] : 0;
-    var mx = niceMax(Math.max.apply(null, vals.concat([1])));
-    var W = 300, H = 110, pl = 38, pr = 8, pt = 8, pb = 18, n = per.length;
-    var X = function(i){ return pl + (n === 1 ? (W - pl - pr) / 2 : i * (W - pl - pr) / (n - 1)); }, Y = function(v){ return pt + (H - pt - pb) * (1 - v / mx); };
-    var d = '', ab = false, pts = '';
-    serie.forEach(function(v, i){ if (v == null){ ab = false; return; } d += (ab ? 'L' : 'M') + X(i) + ',' + Y(v); ab = true;
-      pts += '<circle cx="'+X(i)+'" cy="'+Y(v)+'" r="3" style="fill:var(--s1);stroke:var(--surface-1);stroke-width:1.5"><title>'+etqGra(per[i], modo, true)+': '+num(v,0)+'</title></circle>'; });
-    var grid = [0, mx/2, mx].map(function(v){ var y = Y(v); return '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--grid)"/><text x="'+(pl-4)+'" y="'+(y+3)+'" text-anchor="end">'+num(v,0)+'</text>'; }).join('');
-    var xl = idxEtq(n).map(function(i){ return '<text x="'+X(i)+'" y="'+(H-4)+'" text-anchor="'+(n > 6 && i === n-1 ? 'end' : n > 6 && i === 0 ? 'start' : 'middle')+'">'+etqGra(per[i], modo, false)+'</text>'; }).join('');
-    return '<div class="mini"><div class="t">'+esc(e)+'</div><div class="s">Último: '+num(ult,0)+' piezas</div>' +
-      '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Stock de '+esc(e)+' por período">'+grid+'<path d="'+d+'" fill="none" style="stroke:var(--s1)" stroke-width="2" stroke-linejoin="round"/>'+pts+xl+'</svg></div>';
-  }).join('');
-  if (nDias < 2 && etH.length) $('gHist').insertAdjacentHTML('afterbegin', '<p class="mut" style="grid-column:1/-1">Hay una sola foto guardada: a partir de mañana se empieza a ver la evolución.</p>');
-
-  // ---- barras horizontales apiladas: WIP por etapa y antigüedad
-  var E = {}, ord = [];
-  (WIP || []).forEach(function(w){ if (w.inicial || (PF && w.producto !== PF)) return; if (!E[w.etapa]){ E[w.etapa] = { o: w.orden, a: 0, b: 0, c: 0 }; ord.push(w.etapa); }
-    var d = Number(w.dias) || 0, q = Number(w.cantidad) || 0; if (d > 14) E[w.etapa].c += q; else if (d > 7) E[w.etapa].b += q; else E[w.etapa].a += q; });
-  ord.sort(function(a, b){ return E[a].o - E[b].o; });
-  var mxw = niceMax(Math.max.apply(null, ord.map(function(k){ return E[k].a + E[k].b + E[k].c; }).concat([1])));
-  var Wb = Math.max(320, ($('gWip').clientWidth || 900)), lab = Wb < 560 ? 130 : 190, rowH = 30, Hb = ord.length * rowH + 26, bh = 18;
-  var XB = function(v){ return lab + (Wb - lab - 70) * v / mxw; };
-  var gridB = [0, mxw/2, mxw].map(function(v){ return '<line x1="'+XB(v)+'" x2="'+XB(v)+'" y1="0" y2="'+(Hb-20)+'" style="stroke:var(--grid)"/><text x="'+XB(v)+'" y="'+(Hb-6)+'" text-anchor="middle">'+num(v,0)+'</text>'; }).join('');
-  var filas = ord.map(function(k, i){
-    var e = E[k], y = i * rowH + 4, x = lab, segs = [[e.a,'var(--o1)','hasta 7 días'],[e.b,'var(--o2)','8 a 14 días'],[e.c,'var(--o3)','más de 14 días']].filter(function(s){ return s[0] > 0; });
-    var tot = e.a + e.b + e.c, out = '<text x="'+(lab-8)+'" y="'+(y+bh/2+4)+'" text-anchor="end" style="fill:var(--text-primary);font-size:'+(Wb < 560 ? 10 : 11.5)+'px">'+esc(Wb < 560 ? k.replace(' (produciendo)','') : k)+'</text>';
-    segs.forEach(function(s, j){ var w = XB(s[0]) - lab - (j < segs.length - 1 ? 2 : 0); if (w <= 0) { x += XB(s[0]) - lab; return; }
-      var ultimo = j === segs.length - 1, r = ultimo ? Math.min(4, w) : 0;
-      out += '<path d="M'+x+','+y+'H'+(x+w-r)+(r?'Q'+(x+w)+','+y+' '+(x+w)+','+(y+r)+'V'+(y+bh-r)+'Q'+(x+w)+','+(y+bh)+' '+(x+w-r)+','+(y+bh):'V'+(y+bh))+'H'+x+'Z" style="fill:'+s[1]+'" onmousemove="vizTip(event,\'<b>'+esc(k)+'</b><br>'+s[2]+': '+num(s[0],0)+' piezas\')" onmouseleave="vizTip(null,\'\')"/>';
-      x += w + (ultimo ? 0 : 2); });
-    return out + '<text x="'+(XB(tot)+6)+'" y="'+(y+bh/2+4)+'" style="fill:var(--text-secondary);font-size:11px">'+num(tot,0)+'</text>';
-  }).join('');
-  $('gWip').innerHTML = ord.length ? '<svg viewBox="0 0 '+Wb+' '+Hb+'" width="100%" role="img" aria-label="Piezas en proceso por etapa y antigüedad">'+gridB+filas+'</svg>' : '<p class="mut">Nada en proceso.</p>';
-}
-var _graT; window.addEventListener('resize', function(){ clearTimeout(_graT); _graT = setTimeout(function(){ if (GRA && ACT === 'gra') renderGra(); }, 200); });
-function gCross(i, e, el){
-  var l = $('gCrossL'); if (!l) return;
-  if (i < 0){ l.style.display = 'none'; vizTip(null, ''); return; }
-  var x = window._GX(i); l.setAttribute('x1', x); l.setAttribute('x2', x); l.style.display = '';
-  vizTip(e, el.getAttribute('data-tip'));
 }
 
 /* ---------------- Tiempos por etapa (lead time) ---------------- */
