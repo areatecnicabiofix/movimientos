@@ -9,6 +9,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="gas.js"></script>
+    <!-- La URL del Apps Script de ENVASADOS sale SOLO de envasados-config.js. Se vuelve a cargar acá,
+         DESPUÉS de config.js y gas.js, para que ningún otro archivo la pise. -->
+    <script src="envasados-config.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 32px; color: #333; font-size: 17px; }
@@ -737,14 +740,24 @@
         });
       }
 
+      function esComponenteAnexo(medida) {
+        return /pilar|tapa|tornillo|porta\s*implante|transfer|an[aá]logo|cicatriz/i.test(String(medida || ''));
+      }
+
       function actualizarTotalRotos() {
         var el = document.getElementById('rotosTotal');
         if (!el) return;
+        // Solo cuentan los IMPLANTES. Los componentes (pilares, tapas de cierre, tornillos,
+        // porta implantes, etc.) acompañan al lote pero no suman al total a liberar.
         var rotos = leerRotos();
-        var totalEnv = rotos.reduce(function (a, r) { return a + r.max; }, 0);
-        var totalRotos = rotos.reduce(function (a, r) { return a + (r.cantidad > 0 ? r.cantidad : 0); }, 0);
-        el.innerHTML = 'Total a liberar: ' + (totalEnv - totalRotos) +
-          (totalRotos > 0 ? ' <span class="desc">(se descuentan ' + totalRotos + ' no conforme(s))</span>' : '');
+        var impl = rotos.filter(function (r) { return !esComponenteAnexo(r.medida); });
+        var comp = rotos.filter(function (r) { return esComponenteAnexo(r.medida); });
+        var totalEnv = impl.reduce(function (a, r) { return a + r.max; }, 0);
+        var totalRotos = impl.reduce(function (a, r) { return a + (r.cantidad > 0 ? r.cantidad : 0); }, 0);
+        var totalComp = comp.reduce(function (a, r) { return a + r.max; }, 0);
+        el.innerHTML = 'Total a liberar: ' + (totalEnv - totalRotos) + ' implantes' +
+          (totalRotos > 0 ? ' <span class="desc">(se descuentan ' + totalRotos + ' no conforme(s))</span>' : '') +
+          (totalComp > 0 ? '<div style="font-weight:normal; font-size:14px; color:#666;">No se cuentan ' + totalComp + ' componentes (pilares, tapas, etc.).</div>' : '');
       }
 
       function finalizarAnexo() {
@@ -825,6 +838,10 @@
             selPieza.innerHTML = '<option value="">Seleccionar...</option>' +
               piezas.map(function (p) { return '<option value="' + esc(p.indice) + '">' + esc(p.nombre) + '</option>'; }).join('');
             selPieza.disabled = false;
+          }).withFailureHandler(function (err) {
+            selPieza.innerHTML = '<option value="">Error al cargar piezas</option>';
+            var msg = document.getElementById('mensajeOrden');
+            msg.style.color = 'red'; msg.innerText = 'Error al cargar piezas: ' + (err && err.message);
           }).obtenerPiezasOrdenFabricacion(sistema);
         });
       }
@@ -846,6 +863,11 @@
             ? '<option value="">Seleccionar...</option>' + lotes.map(function (l) { return '<option value="' + esc(l.clave) + '">Lote ' + esc(l.lote) + ' (O.F ' + esc(l.of) + ' - ' + esc(l.fecha) + ')</option>'; }).join('')
             : '<option value="">No hay lotes pendientes para esta pieza</option>';
           selLote.disabled = false;
+        }).withFailureHandler(function (err) {
+          if (miToken !== _tokenLotesOrden) return;
+          selLote.innerHTML = '<option value="">Error al cargar lotes</option>';
+          var msg = document.getElementById('mensajeOrden');
+          msg.style.color = 'red'; msg.innerText = 'Error al cargar lotes: ' + (err && err.message);
         }).obtenerLotesParaOrdenFabricacionPorPieza(sistema, piezaIndice);
       });
 
