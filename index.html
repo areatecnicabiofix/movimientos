@@ -37,8 +37,6 @@
     <div class="sub">Menú completo (usuario técnico).</div>
     <h2>GitHub</h2>
     <div class="grid" id="nuevas"></div>
-    <h2>Apps Script (versiones anteriores)</h2>
-    <div class="grid" id="viejas"></div>
   </div>
 </div>
 
@@ -70,11 +68,6 @@
     { t: 'Depósito — Ingreso y revisión', d: 'Pendientes Salida a Depósito y fallas en revisión (IPA)', href: 'movimientos.html' },
     { t: 'Envasado — Anexo',       d: 'Anexo, Orden de Fabricación y Registro Histórico', href: 'envasado-anexo.html' }
   ];
-  var VIEJAS = [
-    { t: 'Mecanizado', v: '' }, { t: 'Lavado', v: 'lavado' }, { t: 'Control de Calidad', v: 'control' },
-    { t: 'Lavados Grueso / Final', v: 'lavados' }, { t: 'Blasting', v: 'blasting' },
-    { t: 'Depósito', v: 'deposito' }, { t: 'Depósito — Lavado Final', v: 'depositolf' }
-  ];
 
   BIOFIX.sesion.then(function (session) {
     var u = BIOFIX.sectorDe(session);
@@ -85,9 +78,6 @@
       document.getElementById('menu').classList.remove('hide');
       document.getElementById('nuevas').innerHTML = NUEVAS.map(function (x) {
         return '<a class="card" href="' + x.href + '"><div class="t">' + x.t + '</div><div class="d">' + x.d + '</div><span class="tag nuevo">GitHub</span></a>';
-      }).join('');
-      document.getElementById('viejas').innerHTML = VIEJAS.map(function (x) {
-        return '<a class="card" href="' + BIOFIX_CFG.apiUrl + (x.v ? '?v=' + x.v : '') + '" target="_top"><div class="t">' + x.t + '</div><span class="tag as">Apps Script</span></a>';
       }).join('');
       return;
     }
