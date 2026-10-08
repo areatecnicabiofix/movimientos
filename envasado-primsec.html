@@ -9,9 +9,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="gas.js"></script>
-    <!-- URL del Apps Script de ENVASADOS fijada acá, DESPUÉS de config.js y gas.js,
-         para que ningún otro archivo la pise. Si cambia la implementación, se cambia solo esta línea. -->
-    <script>window.BIOFIX_API_URL = 'https://script.google.com/macros/s/AKfycbw7-S3ZzEKgafRfd5aE5sK6rE90ciwakXph42sLvqWTYcvuUPf21yBOAjfkBXlZqyfW/exec';</script>
+    <!-- La URL del Apps Script de ENVASADOS sale SOLO de envasados-config.js. Se vuelve a cargar acá,
+         DESPUÉS de config.js y gas.js, para que ningún otro archivo la pise. -->
+    <script src="envasados-config.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
