@@ -8,6 +8,14 @@
  * Además muestra el ingreso (usuario + contraseña) si la tablet no tiene sesión,
  * y las llamadas que haga la pantalla al arrancar esperan a que el puesto ingrese.
  *
+ * MENSAJES CLAROS (oct 2026) — solo cambia lo que se MUESTRA, no cómo se guarda:
+ *   - "Failed to fetch" / "respondió 404" / respuestas que no son datos -> explicación en castellano.
+ *   - Aviso arriba cuando la tablet se queda sin internet (y cuando vuelve).
+ *   - Si un guardado tarda más de 12 s, aviso "el servidor está tardando, no cierres la pantalla".
+ *   - Si la pantalla no tiene manejo de error para una llamada, el error se muestra igual (antes quedaba
+ *     solo en la consola y parecía que no pasaba nada).
+ *   La cola, el código único de cada guardado (rid), los reintentos y las lecturas siguen IGUAL.
+ *
  * Requiere, ANTES de este archivo:
  *   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
  *   <script src="js/config.js"></script>
@@ -116,9 +124,18 @@
         password: document.getElementById('bfPass').value
       }).then(function (r) {
         btn.disabled = false;
-        if (r.error) { m.textContent = 'Usuario o contraseña incorrectos.'; return; }
+        if (r.error) {
+          // NUEVO: sin internet no es "contraseña incorrecta"
+          m.textContent = (navigator.onLine === false || /fetch|network/i.test(r.error.message || ''))
+            ? 'Sin conexión: no se pudo verificar el usuario. Revisá el wifi y probá de nuevo.'
+            : 'Usuario o contraseña incorrectos.';
+          return;
+        }
         d.parentNode.removeChild(d);
         verificar(r.data.session);
+      }, function () {
+        btn.disabled = false;
+        m.textContent = 'Sin conexión: no se pudo verificar el usuario. Revisá el wifi y probá de nuevo.';
       });
     };
     document.getElementById('bfBtn').onclick = go;
@@ -131,6 +148,63 @@
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
+
+  /* ---------------- mensajes claros (NUEVO) ----------------
+   * Solo cambian los textos. Los errores de red siguen siendo TypeError (así la cola los
+   * reconoce igual que antes) y los 5xx siguen diciendo "respondió 5xx". */
+  function errorDeConexion_() {
+    return new TypeError('Sin conexión con el servidor (Failed to fetch): ' +
+      (navigator.onLine === false ? 'la tablet no tiene internet.' : 'no responde el Apps Script o se cortó la señal.') +
+      ' Revisá el wifi y probá de nuevo.');
+  }
+  function errorHttp_(st) {
+    var base = 'Apps Script respondió ' + st;
+    if (st === 404) return new Error(base + ': no encuentra la implementación. Revisá que esté publicada (Gestionar implementaciones → editar → "Nueva versión") y que la dirección de la configuración sea la correcta.');
+    if (st === 401 || st === 403) return new Error(base + ': sin permiso. La implementación tiene que tener acceso "Cualquier usuario".');
+    if (st === 429) return new Error(base + ': demasiados pedidos seguidos. Esperá unos segundos y probá de nuevo.');
+    if (st >= 500) return new Error(base + ': el servidor de Google está ocupado o falló. Se puede reintentar en unos segundos.');
+    return new Error(base + '.');
+  }
+  function errorNoEsDatos_() {
+    return new Error('El Apps Script no devolvió datos (devolvió una página). Suele pasar si la implementación pide ' +
+      'iniciar sesión de Google: tiene que tener acceso "Cualquier usuario". Si recién se publicó, probá de nuevo.');
+  }
+
+  /* Cartel rojo arriba a la derecha para errores que la pantalla no muestra por su cuenta. */
+  function bfAvisoError_(texto) {
+    if (!document.body) return;
+    var d = document.getElementById('bfErr');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'bfErr';
+      d.setAttribute('style', 'position:fixed;right:10px;top:8px;z-index:99997;max-width:min(420px,92vw);background:#fef2f2;border:2px solid #dc2626;border-radius:10px;padding:8px 12px;font:13px Arial,sans-serif;color:#7f1d1d;box-shadow:0 2px 8px rgba(0,0,0,.15);');
+      document.body.appendChild(d);
+    }
+    d.innerHTML = '<b>✗ Error:</b> ' + String(texto).replace(/</g, '&lt;') +
+      ' <a href="#" id="bfErrOk" style="color:#0284c7;margin-left:6px">Cerrar</a>';
+    document.getElementById('bfErrOk').onclick = function (e) { e.preventDefault(); d.remove(); };
+    clearTimeout(bfAvisoError_.t);
+    bfAvisoError_.t = setTimeout(function () { if (d.parentNode) d.remove(); }, 20000);
+  }
+
+  /* "El servidor está tardando": aparece si un guardado lleva más de 12 s sin respuesta. */
+  var LENTOS = 0;
+  function lentoPintar_() {
+    var d = document.getElementById('bfLento');
+    if (!LENTOS) { if (d) d.remove(); return; }
+    if (!document.body) return;
+    if (!d) {
+      d = document.createElement('div'); d.id = 'bfLento';
+      d.setAttribute('style', 'position:fixed;left:50%;transform:translateX(-50%);bottom:52px;z-index:99997;max-width:92vw;background:#fffbeb;border:2px solid #f59e0b;border-radius:10px;padding:8px 14px;font:13px Arial,sans-serif;color:#78350f;box-shadow:0 2px 8px rgba(0,0,0,.15);');
+      document.body.appendChild(d);
+    }
+    d.innerHTML = '<b>↻ Guardando…</b> el servidor está tardando más de lo normal. <b>No cierres la pantalla ni lo vuelvas a cargar.</b>';
+  }
+  function conAvisoLento_(p) {
+    var marcado = false;
+    var t = setTimeout(function () { marcado = true; LENTOS++; lentoPintar_(); }, 12000);
+    function fin() { clearTimeout(t); if (marcado) { LENTOS = Math.max(0, LENTOS - 1); lentoPintar_(); } }
+    return p.then(function (d) { fin(); return d; }, function (e) { fin(); throw e; });
+  }
 
   /* ---------------- llamada al Apps Script ---------------- */
   /** Guarda cuánto tardó cada llamada (tabla api_tiempos) para saber qué conviene acelerar.
@@ -191,11 +265,17 @@
   }
   setInterval(colaEnviar, 15000);
   window.addEventListener('online', colaEnviar);
+  // NUEVO: el cartel de arriba también avisa cuando la tablet se queda sin internet (aunque no haya nada en cola)
+  var VOLVIO_HASTA = 0;
+  window.addEventListener('offline', function () { colaPintar(); });
+  window.addEventListener('online', function () { VOLVIO_HASTA = Date.now() + 4000; colaPintar(); setTimeout(colaPintar, 4100); });
 
   function colaPintar() {
     var d = document.getElementById('bfCola');
     if (!document.body) return;
-    if (!COLA.length && !COLA_ERR.length) { if (d) d.remove(); return; }
+    var offline = navigator.onLine === false;
+    var volvio = !offline && Date.now() < VOLVIO_HASTA;
+    if (!COLA.length && !COLA_ERR.length && !offline && !volvio) { if (d) d.remove(); return; }
     if (!d) {
       d = document.createElement('div'); d.id = 'bfCola';
       d.setAttribute('style', 'position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:99997;max-width:92vw;background:#fff;border-radius:10px;padding:8px 14px;font:13px Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.15);');
@@ -203,10 +283,15 @@
     }
     var html = '';
     if (COLA.length) {
-      var offline = navigator.onLine === false;
       d.style.border = '2px solid ' + (offline ? '#f59e0b' : '#0284c7');
       html += '<b>' + (offline ? '⚠ Sin conexión' : (COLA_ENVIANDO ? '↻ Enviando…' : '⏳ Esperando para enviar')) + '</b> · ' +
         COLA.length + ' guardado(s) en la tablet. Se mandan solos, <b>no los vuelvas a cargar</b>.';
+    } else if (offline) {
+      d.style.border = '2px solid #f59e0b';
+      html += '<b>⚠ Sin conexión</b> · La tablet no tiene internet. Lo que guardes queda en la tablet y se envía solo cuando vuelva la señal.';
+    } else if (volvio) {
+      d.style.border = '2px solid #16a34a';
+      html += '<b style="color:#15803d">✓ Volvió la conexión</b>';
     }
     if (COLA_ERR.length) {
       d.style.border = '2px solid #dc2626';
@@ -233,12 +318,14 @@
         if (/EN_CURSO/.test(e.message || '') && n < 6) return new Promise(function (r) { setTimeout(r, 3000); }).then(function () { return intentar(n + 1); });
         if (esErrorDeRed(e)) {
           colaAgregar(fn, args, rid);
-          throw new Error('Sin conexión: quedó guardado en la tablet y se envía solo cuando vuelva la señal. No lo vuelvas a cargar.');
+          throw new Error(/respondió 5\d\d/.test(e.message || '')
+            ? 'El servidor de Google no respondió bien: quedó guardado en la tablet y se reintenta solo. No lo vuelvas a cargar.'
+            : 'Sin conexión: quedó guardado en la tablet y se envía solo cuando vuelva la señal. No lo vuelvas a cargar.');
         }
         throw e;
       });
     }
-    return colaVaciada().then(function () { return intentar(0); });   // primero lo que estaba pendiente
+    return conAvisoLento_(colaVaciada().then(function () { return intentar(0); }));   // primero lo que estaba pendiente
   }
 
   /* Sesión siempre al día: el permiso del puesto (token) dura 1 hora. Si la tablet estuvo suspendida
@@ -264,10 +351,10 @@
       return fetch(window.BIOFIX_API_URL || CFG.apiUrl, {   // una página puede llamar a OTRO Apps Script (ej. Envasados)
         method: 'POST',
         body: JSON.stringify({ fn: fn, args: args, token: s.access_token, rid: rid || '' }) // text/plain: sin preflight CORS
-      });
+      }).catch(function () { throw errorDeConexion_(); });   // NUEVO: mensaje claro (sigue siendo TypeError)
     }).then(function (resp) {
-      if (!resp.ok) throw new Error('Apps Script respondió ' + resp.status);
-      return resp.json();
+      if (!resp.ok) throw errorHttp_(resp.status);              // NUEVO: explica 404 / 403 / 5xx
+      return resp.json().catch(function () { throw errorNoEsDatos_(); });   // NUEVO: devolvió una página en vez de datos
     }).then(function (j) {
       if (j && !j.ok && !reintento && /sesi[oó]n (vencida|no iniciada)/i.test(j.error || '')) {
         return llamarSinMedir(fn, args, rid, true);            // se renueva el permiso y se prueba otra vez
@@ -337,7 +424,12 @@
             .then(function (d) { if (ok) ok(d, user); })
             .catch(function (e) {
               var err = e instanceof Error ? e : new Error(String(e));
-              if (fail) fail(err, user); else console.error(prop, err);
+              if (fail) fail(err, user);
+              else {
+                console.error(prop, err);
+                // NUEVO: si la pantalla no lo muestra, se muestra igual (sin internet ya lo avisa el cartel de arriba)
+                if (!(esErrorDeRed(err) && navigator.onLine === false)) bfAvisoError_(err.message);
+              }
             });
         };
       }
