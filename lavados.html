@@ -205,10 +205,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   
   <div id="tabFinal" class="hide">
     <div class="card" style="border-color:#86efac; background:#f0fdf4;">
-      <h2 style="color:#15803d;">Ingreso de componentes</h2>
-      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes y pilares no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
+      <h2 style="color:#15803d;">Ingreso de componentes e instrumental</h2>
+      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes, pilares y llaves (instrumental) no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
       <div class="grid-3">
-        <div><label>Componente</label><select id="c_prod"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Componente / Instrumental</label><select id="c_prod"><option value="">— Seleccionar —</option></select></div>
         <div><label>Cantidad</label><input id="c_cant" type="number" min="1"></div>
         <div><label>Lote</label><input id="c_lote" placeholder="Ej: 1043"></div>
       </div>
@@ -867,13 +867,20 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   // Componentes de Lavado Final: igual que los tapones, sin pasos químicos ni conductímetro
   var F_COMPONENTES = ['Tapa de cierre hexágono interno','Tornillo cuadrado M1.72 hexágono interno','Tapa de cierre hexágono externo',
     'Porta implantes hexágono externo','Tornillo cuadrado hexágono externo','Pilar multifuncion hexágono interno 4,8'];
-  function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.some(function (p) { return f_norm_(p) === n; }); }
+  // Instrumental (oct 2026): se carga igual que un componente (tetón "-", sin pasos ni conductímetro)
+  var F_INSTRUMENTAL = ['Llave mediana cuadrada','Llave mediana hexágonal','Llave corta hexágonal',
+    'Llave corta cuadrada','Llave larga cuadrada','Llave larga hexágonal'];
+  function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.concat(F_INSTRUMENTAL).some(function (p) { return f_norm_(p) === n; }); }
   function f_esTapon_(producto) { var n = f_norm_(producto); return f_esComponente_(producto) || F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
 
   function c_pintarCombo_() {
     var s = document.getElementById('c_prod');
     if (!s || s.options.length > 1) return;
-    F_COMPONENTES.forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; s.appendChild(o); });
+    [['Componentes', F_COMPONENTES], ['Instrumental', F_INSTRUMENTAL]].forEach(function (g) {
+      var og = document.createElement('optgroup'); og.label = g[0];
+      g[1].forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; og.appendChild(o); });
+      s.appendChild(og);
+    });
   }
   function c_ingresar() {
     var d = { producto: val_('c_prod'), cantidad: val_('c_cant'), lote: val_('c_lote').trim(), responsable: val_('c_resp') };
