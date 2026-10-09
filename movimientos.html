@@ -443,6 +443,9 @@ function cargarStockTodo_() {
     }, function () { return []; });
   })).then(function (listas) { ORIG_STOCK = [].concat.apply([], listas); return ORIG_STOCK; });
 }
+// Número del lote de Depósito: el ÚLTIMO grupo de dígitos ("CMU3-0195" -> 195, "HI-0189-A" -> 189)
+function loteNum_(lote) { var g = String(lote || '').match(/\d+/g); return g ? Number(g[g.length - 1]) : NaN; }
+function sufijo_(lote) { var m = String(lote || '').match(/\d+\s*-?\s*([A-Za-z]+)\s*$/); return m ? m[1].toUpperCase() : ''; }
 function digitos_(x) { return String(x == null ? '' : x).replace(/\D/g, ''); }
 function coincide_(q, qd, textos, lotes) {
   var t = textos.join(' ').toLowerCase();
@@ -467,13 +470,18 @@ function buscarOrigen() {
     .then(function () { return cargarStockTodo_(); })
     .then(function (stock) {
     // Lotes de Depósito con composición corregida a mano: se muestran esas filas en vez de las del stock
-    var corregidos = {};
-    manual.forEach(function (x) { corregidos[x.sistema + '|' + Number(x.lote_dep_num)] = 1; });
+    var corregidos = [];
+    manual.forEach(function (x) { corregidos.push(x); });
+    // ¿Este lote del stock es uno de los corregidos a mano? (mismo tipo, mismo número y misma letra: HI-0189-A ≠ HI-0189)
+    function esElCorregido_(it, x) {
+      return (it.tipo === x.sistema || String(it.tipo).indexOf(x.sistema) === 0) &&
+             loteNum_(it.lote) === Number(x.lote_dep_num) && sufijo_(it.lote) === String(x.sufijo || '').toUpperCase();
+    }
     var filas = [];
     stock.forEach(function (it) {
       var origenes = (it.origenes && it.origenes.length) ? it.origenes : [{ lote: '', confirmado: '' }];
       var med = it.medidaTxt || it.medida;
-      if (corregidos[it.tipo + '|' + Number(digitos_(it.lote))]) return;
+      if (corregidos.some(function (x) { return esElCorregido_(it, x); })) return;
       origenes.forEach(function (o) {
         if (!coincide_(q, qd, [it.lote, med, it.medida, o.lote, it.tipo], [it.lote, o.lote])) return;
         filas.push({ tipo: it.tipo, loteDep: it.lote, medida: med, medidaRaw: it.medida, origen: o.lote, cant: o.confirmado, stock: it.stock, fallas: o.fallasPrevias });
@@ -482,7 +490,7 @@ function buscarOrigen() {
     manual.forEach(function (x) {
       // stock de HOY de esa medida en ese lote de Depósito (del stock que ya se leyó)
       var st = stock.filter(function (it) {
-        return it.tipo === x.sistema && Number(digitos_(it.lote)) === Number(x.lote_dep_num) && mismaMedida_(it.medidaTxt || it.medida, x.medida);
+        return esElCorregido_(it, x) && mismaMedida_(it.medidaTxt || it.medida, x.medida);
       });
       filas.push({ tipo: x.sistema, loteDep: x.lote_dep, medida: (x.medida || '') + (x.teton ? ' · ' + x.teton : ''), origen: x.lote_origen,
                    cant: x.cantidad, stock: st.length ? st.reduce(function (a, it) { return a + (Number(it.stock) || 0); }, 0) : 0,
