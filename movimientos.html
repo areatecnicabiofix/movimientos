@@ -65,6 +65,21 @@
   .r-full{grid-column:1/-1}
   .btn-rojo{padding:9px 16px;border:none;border-radius:8px;background:#b91c1c;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
   .btn-rojo:disabled{background:#d6a0a0;cursor:default}
+
+  #panelOrig{border:1px solid #bfdbfe;background:#f8fbff;border-radius:12px;padding:14px 16px}
+  .o-titulo{font-weight:600;margin-bottom:6px;color:#1e3a8a;font-size:14px}
+  .o-ayuda{font-size:12px;color:#1e40af;margin-bottom:10px;line-height:1.4}
+  .o-barra{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .o-barra input{flex:1 1 260px;padding:8px 10px;border:1px solid #93c5fd;border-radius:6px;font-size:14px;background:#fff}
+  .o-barra button{padding:8px 16px;border:none;border-radius:6px;background:#1d4ed8;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+  .o-tabla{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  .o-tabla th{background:#eff6ff;color:#1e3a8a;text-align:left;padding:6px 8px;border:1px solid #dbeafe;font-size:12px;white-space:nowrap;position:sticky;top:0}
+  .o-tabla td{padding:5px 8px;border:1px solid #e5edf9;vertical-align:top}
+  .o-tabla td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .o-tabla tr.grupo td{background:#dbeafe;font-weight:700;color:#1e3a8a}
+  .o-wrap{max-height:520px;overflow:auto;border:1px solid #dbeafe;border-radius:8px}
+  .o-ref{font-weight:700;color:#0f172a}
+  .o-ref.inf{color:#64748b;font-weight:600}
 </style>
 </head>
 <body>
@@ -82,6 +97,7 @@
   <div class="tabs">
     <button class="tab activa" id="tabPend" onclick="verTab('pend')">Pendientes Salida</button>
     <button class="tab" id="tabRev" onclick="verTab('rev')">Revisión de stock en depósito</button>
+    <button class="tab" id="tabOrig" onclick="verTab('orig')">🔎 Lote de origen</button>
     <button class="btn-ghost" onclick="recargar()">↻ Actualizar</button>
   </div>
 
@@ -142,6 +158,18 @@
   </div>
 </div>
 
+  <!-- ===== Buscar lote de origen ===== -->
+  <div id="panelOrig" class="hidden">
+    <div class="o-titulo">¿De qué lote original viene?</div>
+    <div class="o-ayuda">Buscá por <b>lote de envasado / Depósito</b> (ej: <b>CMU3-0195</b> o <b>0195</b>), por <b>lote original</b> (ej: <b>0811</b>) o por medida. Sale de las salidas de Sala Blanca: cada medida muestra de qué lote de producción vino, cuántas y su <b>REF</b>. Si la salida no guardó la REF, se muestra la de cuando ese lote entró a Sala Blanca (en gris).</div>
+    <div class="o-barra">
+      <input id="origBuscar" placeholder="Lote de envasado, lote original o medida…" onkeydown="if(event.key==='Enter') buscarOrigen()">
+      <button onclick="buscarOrigen()">Buscar</button>
+    </div>
+    <div id="origMsg" class="msg"></div>
+    <div id="origRes"></div>
+  </div>
+
 <script>
 /* Apps Script del proyecto STOCK (Depósito de producto terminado).
  * Si cambiás la implementación, actualizá esta URL. */
@@ -180,8 +208,11 @@ function msg(id, t, ok) { var m = document.getElementById(id); m.textContent = t
 function verTab(cual) {
   document.getElementById('panelPend').classList.toggle('hidden', cual !== 'pend');
   document.getElementById('panelRev').classList.toggle('hidden', cual !== 'rev');
+  document.getElementById('panelOrig').classList.toggle('hidden', cual !== 'orig');
   document.getElementById('tabPend').classList.toggle('activa', cual === 'pend');
   document.getElementById('tabRev').classList.toggle('activa', cual === 'rev');
+  document.getElementById('tabOrig').classList.toggle('activa', cual === 'orig');
+  if (cual === 'orig') setTimeout(function () { document.getElementById('origBuscar').focus(); }, 50);
 }
 function recargar() {
   cargarPendientes();
@@ -393,6 +424,40 @@ function registrarFalla() {
     btn.disabled = false;
     msg('revMsg', e.message + ' Antes de reintentar, tocá Actualizar para ver si se descontó.', false);
   });
+}
+
+/* ===================== Buscar lote de origen (lee Supabase directo) ===================== */
+function fechaCorta(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0].slice(2) : esc(iso); }
+function buscarOrigen() {
+  var q = document.getElementById('origBuscar').value.trim();
+  var res = document.getElementById('origRes');
+  if (!q) { msg('origMsg', 'Escribí un lote o una medida.', false); return; }
+  msg('origMsg', 'Buscando…', true);
+  res.innerHTML = '';
+  BIOFIX.sesion.then(function () { return BIOFIX.supabase.rpc('deposito_origen_buscar', { p_texto: q }); })
+    .then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      var filas = r.data || [];
+      if (!filas.length) { msg('origMsg', 'No se encontró nada con "' + q + '".', false); return; }
+      var lotes = {}; filas.forEach(function (x) { lotes[x.lote_envasado || '—'] = 1; });
+      msg('origMsg', filas.length + ' fila(s) · ' + Object.keys(lotes).length + ' lote(s) de envasado' + (filas.length >= 500 ? ' (se muestran las 500 más recientes: afiná la búsqueda)' : ''), true);
+      var html = '', actual = null, tot = 0;
+      function cierre() { if (actual !== null) html += '<tr><td colspan="4" style="text-align:right;color:#64748b">Total ' + esc(actual) + '</td><td class="n"><b>' + tot + '</b></td><td colspan="2"></td></tr>'; }
+      filas.forEach(function (x) {
+        var k = x.lote_envasado || '—';
+        if (k !== actual) {
+          cierre(); actual = k; tot = 0;
+          html += '<tr class="grupo"><td colspan="7">Lote de envasado ' + esc(k) + ' · ' + esc(x.producto || '') + (x.teton ? ' · ' + esc(x.teton) : '') + ' · salió el ' + fechaCorta(x.fecha) + '</td></tr>';
+        }
+        tot += Number(x.cantidad) || 0;
+        var ref = x.ref ? '<span class="o-ref' + (x.ref_de_salida ? '' : ' inf') + '" title="' + (x.ref_de_salida ? 'REF guardada en la salida' : 'REF de cuando el lote entró a Sala Blanca') + '">' + esc(x.ref) + '</span>' : '<span class="gris">—</span>';
+        html += '<tr><td>' + esc(x.medida) + '</td><td><b>' + esc(x.lote_origen) + '</b></td><td>' + ref + '</td><td>' + esc(x.sistema || '') + '</td>' +
+          '<td class="n">' + esc(x.cantidad) + '</td><td>' + esc(x.responsable || '') + '</td><td>' + fechaCorta(x.fecha) + '</td></tr>';
+      });
+      cierre();
+      res.innerHTML = '<div class="o-wrap"><table class="o-tabla"><thead><tr><th>Medida</th><th>Lote original</th><th>REF</th><th>Sistema</th><th>Cant.</th><th>Responsable</th><th>Fecha salida</th></tr></thead><tbody>' + html + '</tbody></table></div>';
+    })
+    .catch(function (e) { msg('origMsg', e.message, false); });
 }
 
 /* ===================== Arranque (después del login) ===================== */
