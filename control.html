@@ -158,7 +158,20 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       });
     };
   }
+  /* Tolerancias (hoja "Tolerancias QC"): copia en Supabase, la carga Trazabilidad cada 1 hora.
+   * Si la copia está vacía o falla, se piden al Apps Script como antes. */
+  function toleranciasSupabase() {
+    return BIOFIX.supabase.rpc('ctl_tolerancias').then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      if (!Array.isArray(r.data) || !r.data.length) throw new Error('la copia de tolerancias está vacía');
+      return r.data;
+    }).catch(function (e) {
+      console.warn('ctlObtenerTolerancias desde Supabase falló, uso Apps Script:', e.message);
+      return BIOFIX.llamar('ctlObtenerTolerancias', []);
+    });
+  }
   window.BIOFIX_LOCAL = {
+    ctlObtenerTolerancias:      toleranciasSupabase,
     ctlObtenerLotesParaControl: conPlanB('ctlObtenerLotesParaControl', lotesParaControl),
     ctlListarEnControl:         conPlanB('ctlListarEnControl', function (d) { return aplicarPausaLocal(listarEnControl(d)); })
   };
@@ -418,6 +431,21 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return /^-?\d*\.?\d+$/.test(s) ? parseFloat(s) : NaN;
   }
   function specDe_(f, l) { return (SPECS[f] && SPECS[f][l]) || null; }
+  /* NUEVO: una cota que se MIDE no puede valer 0 (casi siempre es una muestra sin medir).
+   * Se acepta 0 solo si la tolerancia de esa cota lo permite (mínimo <= 0). */
+  function esCeroInvalido_(f, l, v) {
+    var s = specDe_(f, l);
+    if (s && s.tipo === 'ok') return false;
+    if (String(v == null ? '' : v).trim() === '' || num_(v) !== 0) return false;
+    return !(s && s.min != null && s.min <= 0);
+  }
+  function cerosDe_(f) {
+    var det = [];
+    Object.keys(MUESTRAS[f] || {}).forEach(function (l) {
+      (MUESTRAS[f][l] || []).forEach(function (m, i) { if (m && esCeroInvalido_(f, l, m.v)) det.push(l + ' N°' + (i + 1)); });
+    });
+    return det;
+  }
   function esOk_(f, l) { var s = specDe_(f, l); return !!(s && s.tipo === 'ok'); }
   function estadoValor_(s, v) {           // 'ok' | 'fuera' | ''
     if (v === '' || v === null || v === undefined || !s) return '';
@@ -459,7 +487,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     }
     var inp = document.getElementById('qval_'+l+'_'+f);
     if (inp) {
-      var e = estadoValor_(s, inp.value);
+      var e = esCeroInvalido_(f, l, inp.value) ? 'fuera' : estadoValor_(s, inp.value);
       inp.classList.remove('val-ok', 'val-fuera');
       if (e) inp.classList.add('val-' + e);
     }
@@ -990,7 +1018,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       if (vacia >= 0) irAMuestra_(f, l, vacia);
     }
   }
-  function blurMuestra(f, l) { MANUAL[f+'|'+l] = false; }
+  function blurMuestra(f, l) { MANUAL[f+'|'+l] = false; avisarCero_(f, l); }
 
   
   function cambioOk(f, l) {
@@ -1001,6 +1029,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   function teclaMuestra(e, f, l) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    avisarCero_(f, l);
     irASiguienteVacia_(f, l);
   }
   function irASiguienteVacia_(f, l) {
@@ -1033,6 +1062,13 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     marcarOpcion_(f, l, idx);
     actualizarContadorCota_(f, l);
     marcarSucio(f);
+  }
+  // NUEVO: el aviso de "0" sale al terminar de escribir (al salir del casillero o con Enter),
+  // no mientras se tipea (así "0,040" no avisa en el primer 0).
+  function avisarCero_(f, l) {
+    var sel = document.getElementById('qidx_'+l+'_'+f), inp = document.getElementById('qval_'+l+'_'+f);
+    if (!sel || !inp || inp.tagName === 'SELECT') return;
+    if (esCeroInvalido_(f, l, inp.value)) msg('Cota ' + l + ', muestra N°' + ((Number(sel.value) || 0) + 1) + ': cargaste 0. Una cota no puede medir 0, cargá el valor medido.', false);
   }
 
    
@@ -1156,6 +1192,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   
   function cerrarControl(f, btn) {
     if (CERRANDO[f]) return;
+    var ceros = cerosDe_(f);
+    if (ceros.length) { msg('No se puede cerrar: hay cotas cargadas en 0 (' + ceros.slice(0, 8).join(', ') + (ceros.length > 8 ? '…' : '') + '). Cargá el valor medido.', false); return; }
     var fuera = contarFuera_(f);
     if (fuera.n > 0 && !confirm('Hay ' + fuera.n + ' valor(es) fuera de tolerancia o NO OK (' + fuera.det.join(', ') + (fuera.n > fuera.det.length ? '…' : '') + ').\n¿Marcar el lote como Controlada igual?')) return;
     CERRANDO[f] = true;
