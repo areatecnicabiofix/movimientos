@@ -216,7 +216,7 @@ function verTab(cual) {
   if (cual === 'orig') setTimeout(function () { document.getElementById('origBuscar').focus(); }, 50);
 }
 function recargar() {
-  ORIG_STOCK = null;   // el buscador de origen vuelve a leer el stock
+  ORIG_STOCK = null; ORIG_EN_VIVO = true;   // el buscador de origen vuelve a leer el stock, en vivo
   cargarPendientes();
   if (document.getElementById('revTipo').value) cargarRevision();
 }
@@ -434,9 +434,24 @@ function registrarFalla() {
  *    página esté abierta (con "↻ Actualizar" se vuelve a leer).
  * 2) La REF de cada lote de origen + medida sale de Supabase (de cuando entró a Sala Blanca).
  * 3) Si no aparece en el stock (ej. ya se vendió todo), busca en las salidas de Sala Blanca. */
-var ORIG_STOCK = null;
+var ORIG_STOCK = null, ORIG_EN_VIVO = false, ORIG_ACTUALIZADO = null;
+var ORIG_MAX_MIN = 30;   // copia de Supabase de hasta 30 min se usa; más vieja, se lee en vivo
 function cargarStockTodo_() {
   if (ORIG_STOCK) return Promise.resolve(ORIG_STOCK);
+  if (ORIG_EN_VIVO) return cargarStockEnVivo_();
+  // 1º la copia en Supabase (la carga STOCK cada 10 min): instantáneo
+  return BIOFIX.sesion.then(function () { return BIOFIX.supabase.rpc('deposito_revision_snapshot'); }).then(function (r) {
+    var d = r && !r.error && r.data;
+    var edadMin = d && d.actualizado ? (Date.now() - new Date(d.actualizado).getTime()) / 60000 : 1e9;
+    if (!d || Number(d.tipos) < TIPOS.length || edadMin > ORIG_MAX_MIN) return cargarStockEnVivo_();
+    ORIG_ACTUALIZADO = d.actualizado;
+    ORIG_STOCK = d.items || [];
+    return ORIG_STOCK;
+  }, function () { return cargarStockEnVivo_(); });
+}
+// Plan B / "↻ Actualizar": pide los 9 tipos al Apps Script de STOCK (lento, pero al momento)
+function cargarStockEnVivo_() {
+  ORIG_ACTUALIZADO = null;
   return Promise.all(TIPOS.map(function (t) {
     return stockApi('obtenerDatosRevision', { tipo_imp: t }).then(function (r) {
       return (r && r.ok ? (r.items || []) : []).map(function (it) { it.tipo = it.tipo || t; return it; });
@@ -510,7 +525,12 @@ function buscarOrigen() {
 function pintarOrigenStock_(filas) {
   filas.sort(function (a, b) { return (a.tipo + a.loteDep).localeCompare(b.tipo + b.loteDep, 'es', { numeric: true }) || (a.manual ? 0 : String(a.medida).localeCompare(String(b.medida), 'es', { numeric: true })); });
   var grupos = {}; filas.forEach(function (f) { grupos[f.tipo + '|' + f.loteDep] = 1; });
-  msg('origMsg', filas.length + ' fila(s) · ' + Object.keys(grupos).length + ' lote(s) de Depósito (stock actual)', true);
+  var cuando = 'stock al momento';
+  if (ORIG_ACTUALIZADO) {
+    var min = Math.max(0, Math.round((Date.now() - new Date(ORIG_ACTUALIZADO).getTime()) / 60000));
+    cuando = 'stock de hace ' + (min < 1 ? 'menos de 1 min' : min + ' min') + ' · con "↻ Actualizar" se lee al momento';
+  }
+  msg('origMsg', filas.length + ' fila(s) · ' + Object.keys(grupos).length + ' lote(s) de Depósito (' + cuando + ')', true);
   var html = '', actual = null, tot = 0;
   function cierre() { if (actual !== null) html += '<tr><td colspan="3" style="text-align:right;color:#64748b">Total cargado</td><td class="n"><b>' + tot + '</b></td><td></td></tr>'; }
   filas.forEach(function (f) {
