@@ -75,19 +75,30 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
 
 
   <div class="card" style="border-color:#fbbf24; background:#fffbeb;">
-    <h2 style="color:#92400e;">0. Ingreso de Tapones desde Afuera (MP / HI / HE)</h2>
+    <h2 style="color:#92400e;">0. Ingreso desde Afuera: Tapones (MP / HI / HE) e Instrumental</h2>
     <p style="font-size:12px; color:var(--mut); margin:-6px 0 12px 0;">
-      Los tapones no se producen acá: registrá acá qué llegó (tipo, lote y cantidad) y quedan
+      Los tapones y el instrumental (llaves) no se producen acá: registrá acá qué llegó (tipo, lote y cantidad) y quedan
       directo en la cola "Esperando Lavado Primario" de abajo, como cualquier otra pieza.
+      Las llaves pasan por Abrillantado y Lavado Secundario y después llegan solas a Lavado Final.
     </p>
     <div class="grid-3">
       <div>
-        <label>Tipo de Tapón</label>
+        <label>Tapón / Instrumental</label>
         <select id="ingTipoTapon">
           <option value="">Elegir...</option>
-          <option value="Tapon Porta Implante MP">Tapón Porta Implante MP</option>
-          <option value="Tapon Porta Implante HI">Tapón Porta Implante HI</option>
-          <option value="Tapon Porta Implante HE">Tapón Porta Implante HE</option>
+          <optgroup label="Tapones">
+            <option value="Tapon Porta Implante MP">Tapón Porta Implante MP</option>
+            <option value="Tapon Porta Implante HI">Tapón Porta Implante HI</option>
+            <option value="Tapon Porta Implante HE">Tapón Porta Implante HE</option>
+          </optgroup>
+          <optgroup label="Instrumental">
+            <option value="Llave mediana cuadrada">Llave mediana cuadrada</option>
+            <option value="Llave mediana hexágonal">Llave mediana hexágonal</option>
+            <option value="Llave corta hexágonal">Llave corta hexágonal</option>
+            <option value="Llave corta cuadrada">Llave corta cuadrada</option>
+            <option value="Llave larga cuadrada">Llave larga cuadrada</option>
+            <option value="Llave larga hexágonal">Llave larga hexágonal</option>
+          </optgroup>
         </select>
       </div>
       <div>
@@ -741,7 +752,7 @@ function refrescarTodo(silencioso) {
     var lote = document.getElementById('ingLote').value;
     var cantidad = document.getElementById('ingCantidad').value;
 
-    if (!producto) { msg('Elegí el tipo de tapón.', false); return; }
+    if (!producto) { msg('Elegí el tapón o la llave.', false); return; }
     if (!lote) { msg('Ingresá el número de lote.', false); return; }
     if (!cantidad) { msg('Ingresá la cantidad.', false); return; }
 
@@ -761,7 +772,7 @@ function refrescarTodo(silencioso) {
         document.getElementById('btnIngreso').disabled = false;
         msg('Error al registrar ingreso: ' + e.message, false);
       })
-      .lavIngresoTapon(datos);
+      [/^llave\s/i.test(producto) ? 'lavIngresoInstrumental' : 'lavIngresoTapon'](datos);   // llaves: ingreso propio (ver LavadoFinalComponentes.gs)
   }
 
 
