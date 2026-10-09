@@ -450,6 +450,10 @@ function coincide_(q, qd, textos, lotes) {
   if (qd.length >= 3) return lotes.some(function (l) { var d = digitos_(l); return d && (d === qd || Number(d) === Number(qd) || d.indexOf(qd) >= 0); });
   return false;
 }
+// "Ø3.0 X 6mm" = "3.0 X 6mm" = "3 x 6,0mm": compara diámetro y largo (y la marca C3/C14… si la hay)
+function numsMedida_(m) { var t = String(m || '').replace(/,/g, '.'), x = t.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/), c = t.match(/C\s*(\d+)\s*$/i);
+  return x ? [parseFloat(x[1]), parseFloat(x[2]), c ? c[1] : ''] : null; }
+function mismaMedida_(a, b) { var x = numsMedida_(a), y = numsMedida_(b); return !!(x && y && Math.abs(x[0] - y[0]) < 0.001 && Math.abs(x[1] - y[1]) < 0.001 && x[2] === y[2]); }
 function fechaCorta(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0].slice(2) : esc(iso); }
 function buscarOrigen() {
   var q = document.getElementById('origBuscar').value.trim().toLowerCase(), qd = digitos_(q);
@@ -476,8 +480,13 @@ function buscarOrigen() {
       });
     });
     manual.forEach(function (x) {
+      // stock de HOY de esa medida en ese lote de Depósito (del stock que ya se leyó)
+      var st = stock.filter(function (it) {
+        return it.tipo === x.sistema && Number(digitos_(it.lote)) === Number(x.lote_dep_num) && mismaMedida_(it.medidaTxt || it.medida, x.medida);
+      });
       filas.push({ tipo: x.sistema, loteDep: x.lote_dep, medida: (x.medida || '') + (x.teton ? ' · ' + x.teton : ''), origen: x.lote_origen,
-                   cant: x.cantidad, stock: '', ref: x.ref, manual: true });
+                   cant: x.cantidad, stock: st.length ? st.reduce(function (a, it) { return a + (Number(it.stock) || 0); }, 0) : 0,
+                   ref: x.ref, manual: true });
     });
     if (!filas.length) return buscarEnSalidas_(q);
     var pares = filas.filter(function (f) { return f.origen && !f.manual; }).map(function (f) { return { lote: String(f.origen), medida: String(f.medidaRaw || f.medida) }; });
@@ -504,7 +513,7 @@ function pintarOrigenStock_(filas) {
     html += '<tr><td>' + esc(f.medida) + '</td><td><b>' + (f.origen ? esc(f.origen) : '<span class="gris">sin dato</span>') + '</b></td>' +
       '<td>' + (f.ref ? '<span class="o-ref">' + esc(f.ref) + '</span>' : '<span class="gris">—</span>') + '</td>' +
       '<td class="n">' + esc(f.cant) + (f.fallas ? ' <span class="gris">(' + esc(f.fallas) + ' con falla)</span>' : '') + '</td>' +
-      '<td class="n">' + (f.manual ? '<span class="gris">—</span>' : esc(f.stock)) + '</td></tr>';
+      '<td class="n">' + esc(f.stock) + '</td></tr>';
   });
   cierre();
   document.getElementById('origRes').innerHTML = '<div class="o-wrap"><table class="o-tabla"><thead><tr><th>Medida</th><th>Lote original</th><th>REF</th><th>Cargadas de ese lote</th><th>Stock hoy (medida)</th></tr></thead><tbody>' + html + '</tbody></table></div>';
