@@ -457,41 +457,54 @@ function buscarOrigen() {
   if (!q) { msg('origMsg', 'Escribí un lote o una medida.', false); return; }
   msg('origMsg', ORIG_STOCK ? 'Buscando…' : 'Leyendo el stock de Depósito (la primera vez tarda unos segundos)…', true);
   res.innerHTML = ''; btn.disabled = true;
-  cargarStockTodo_().then(function (stock) {
+  var manual = [];
+  BIOFIX.sesion.then(function () { return BIOFIX.supabase.rpc('deposito_origen_manual_buscar', { p_texto: q }); })
+    .then(function (r) { manual = (r && !r.error && r.data) || []; }, function () { manual = []; })
+    .then(function () { return cargarStockTodo_(); })
+    .then(function (stock) {
+    // Lotes de Depósito con composición corregida a mano: se muestran esas filas en vez de las del stock
+    var corregidos = {};
+    manual.forEach(function (x) { corregidos[x.sistema + '|' + Number(x.lote_dep_num)] = 1; });
     var filas = [];
     stock.forEach(function (it) {
       var origenes = (it.origenes && it.origenes.length) ? it.origenes : [{ lote: '', confirmado: '' }];
       var med = it.medidaTxt || it.medida;
+      if (corregidos[it.tipo + '|' + Number(digitos_(it.lote))]) return;
       origenes.forEach(function (o) {
         if (!coincide_(q, qd, [it.lote, med, it.medida, o.lote, it.tipo], [it.lote, o.lote])) return;
         filas.push({ tipo: it.tipo, loteDep: it.lote, medida: med, medidaRaw: it.medida, origen: o.lote, cant: o.confirmado, stock: it.stock, fallas: o.fallasPrevias });
       });
     });
+    manual.forEach(function (x) {
+      filas.push({ tipo: x.sistema, loteDep: x.lote_dep, medida: (x.medida || '') + (x.teton ? ' · ' + x.teton : ''), origen: x.lote_origen,
+                   cant: x.cantidad, stock: '', ref: x.ref, manual: true });
+    });
     if (!filas.length) return buscarEnSalidas_(q);
-    var pares = filas.filter(function (f) { return f.origen; }).map(function (f) { return { lote: String(f.origen), medida: String(f.medidaRaw || f.medida) }; });
+    var pares = filas.filter(function (f) { return f.origen && !f.manual; }).map(function (f) { return { lote: String(f.origen), medida: String(f.medidaRaw || f.medida) }; });
     return BIOFIX.supabase.rpc('refs_de_lotes', { p_pares: pares }).then(function (r) {
       var refs = {};
       (r && r.data || []).forEach(function (x) { refs[x.lote + '|' + x.medida] = x.ref; });
-      filas.forEach(function (f) { f.ref = refs[String(f.origen) + '|' + String(f.medidaRaw || f.medida)] || ''; });
+      filas.forEach(function (f) { if (!f.manual) f.ref = refs[String(f.origen) + '|' + String(f.medidaRaw || f.medida)] || ''; });
       pintarOrigenStock_(filas);
     });
   }).catch(function (e) { msg('origMsg', e.message, false); })
     .then(function () { btn.disabled = false; });
 }
 function pintarOrigenStock_(filas) {
-  filas.sort(function (a, b) { return (a.tipo + a.loteDep).localeCompare(b.tipo + b.loteDep, 'es', { numeric: true }) || String(a.medida).localeCompare(String(b.medida), 'es', { numeric: true }); });
+  filas.sort(function (a, b) { return (a.tipo + a.loteDep).localeCompare(b.tipo + b.loteDep, 'es', { numeric: true }) || (a.manual ? 0 : String(a.medida).localeCompare(String(b.medida), 'es', { numeric: true })); });
   var grupos = {}; filas.forEach(function (f) { grupos[f.tipo + '|' + f.loteDep] = 1; });
   msg('origMsg', filas.length + ' fila(s) · ' + Object.keys(grupos).length + ' lote(s) de Depósito (stock actual)', true);
   var html = '', actual = null, tot = 0;
   function cierre() { if (actual !== null) html += '<tr><td colspan="3" style="text-align:right;color:#64748b">Total cargado</td><td class="n"><b>' + tot + '</b></td><td></td></tr>'; }
   filas.forEach(function (f) {
     var k = f.tipo + '|' + f.loteDep;
-    if (k !== actual) { cierre(); actual = k; tot = 0; html += '<tr class="grupo"><td colspan="5">' + esc(f.tipo) + ' · Lote de Depósito ' + esc(f.loteDep) + '</td></tr>'; }
+    if (k !== actual) { cierre(); actual = k; tot = 0; html += '<tr class="grupo"><td colspan="5">' + esc(f.tipo) + ' · Lote de Depósito ' + esc(f.loteDep) +
+      (f.manual ? ' <span style="font-weight:600;color:#15803d;margin-left:6px">✓ composición verificada</span>' : '') + '</td></tr>'; }
     tot += Number(f.cant) || 0;
     html += '<tr><td>' + esc(f.medida) + '</td><td><b>' + (f.origen ? esc(f.origen) : '<span class="gris">sin dato</span>') + '</b></td>' +
       '<td>' + (f.ref ? '<span class="o-ref">' + esc(f.ref) + '</span>' : '<span class="gris">—</span>') + '</td>' +
       '<td class="n">' + esc(f.cant) + (f.fallas ? ' <span class="gris">(' + esc(f.fallas) + ' con falla)</span>' : '') + '</td>' +
-      '<td class="n">' + esc(f.stock) + '</td></tr>';
+      '<td class="n">' + (f.manual ? '<span class="gris">—</span>' : esc(f.stock)) + '</td></tr>';
   });
   cierre();
   document.getElementById('origRes').innerHTML = '<div class="o-wrap"><table class="o-tabla"><thead><tr><th>Medida</th><th>Lote original</th><th>REF</th><th>Cargadas de ese lote</th><th>Stock hoy (medida)</th></tr></thead><tbody>' + html + '</tbody></table></div>';
