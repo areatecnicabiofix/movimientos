@@ -1203,7 +1203,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
       google.script.run
         .withSuccessHandler(function(r){
-          msg(r.msg, true);
+          msg('Lote marcado como Controlada ✓', true);   // sin mostrar el tiempo: queda guardado y lo ve solo Supervisión
           olvidarLote_(f);
           delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
           actualizarInventarios();
