@@ -869,14 +869,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     'Porta implantes hexágono externo','Tornillo cuadrado hexágono externo','Pilar multifuncion hexágono interno 4,8'];
   // Instrumental (oct 2026): destornilladores (antes "llaves"). Se cargan igual que un componente
   // (tetón "-", sin pasos ni conductímetro). La medida va fija según el tipo:
-  // hexagonales 0.050 · cuadrados 0.048
+  // cuadrados 0.050 · hexagonales 0.048
   var F_INSTRUMENTAL_MED = {
-    'Destornillador largo hexagonal': '0.050',
-    'Destornillador mediano / standard hexagonal': '0.050',
-    'Destornillador corto hexagonal': '0.050',
-    'Destornillador largo cuadrado': '0.048',
-    'Destornillador mediano / standard cuadrado': '0.048',
-    'Destornillador corto cuadrado': '0.048'
+    'Destornillador largo hexagonal': '0.048',
+    'Destornillador mediano / standard hexagonal': '0.048',
+    'Destornillador corto hexagonal': '0.048',
+    'Destornillador largo cuadrado': '0.050',
+    'Destornillador mediano / standard cuadrado': '0.050',
+    'Destornillador corto cuadrado': '0.050'
   };
   var F_INSTRUMENTAL = Object.keys(F_INSTRUMENTAL_MED);
   // Nombres viejos (lotes ya cargados como "Llave ..."): se siguen reconociendo como instrumental
