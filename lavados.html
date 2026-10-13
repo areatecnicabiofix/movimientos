@@ -206,9 +206,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   <div id="tabFinal" class="hide">
     <div class="card" style="border-color:#86efac; background:#f0fdf4;">
       <h2 style="color:#15803d;">Ingreso de componentes e instrumental</h2>
-      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes, pilares y llaves (instrumental) no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
+      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes, pilares y destornilladores (instrumental) no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
       <div class="grid-3">
-        <div><label>Componente / Instrumental</label><select id="c_prod"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Componente / Instrumental</label><select id="c_prod" onchange="c_actualizarMedida_()"><option value="">— Seleccionar —</option></select></div>
         <div><label>Cantidad</label><input id="c_cant" type="number" min="1"></div>
         <div><label>Lote</label><input id="c_lote" placeholder="Ej: 1043"></div>
       </div>
@@ -217,7 +217,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
           <label>Responsable</label>
           <select id="c_resp"><option value="">— Seleccionar —</option><option>Lourdes Deasis</option><option>Gabriela Goritz</option></select>
         </div>
-        <div></div>
+        <div id="c_medWrap" style="display:none;"><label>Medida</label><input id="c_med" readonly style="background:#f1f5f9; font-weight:700;"></div>
         <div style="display:flex; align-items:flex-end; justify-content:flex-end;">
           <button class="btn" id="c_btn" style="background:#16a34a; margin:0;" onclick="c_ingresar()">Ingresar componente</button>
         </div>
@@ -867,10 +867,27 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   // Componentes de Lavado Final: igual que los tapones, sin pasos químicos ni conductímetro
   var F_COMPONENTES = ['Tapa de cierre hexágono interno','Tornillo cuadrado M1.72 hexágono interno','Tapa de cierre hexágono externo',
     'Porta implantes hexágono externo','Tornillo cuadrado hexágono externo','Pilar multifuncion hexágono interno 4,8'];
-  // Instrumental (oct 2026): se carga igual que un componente (tetón "-", sin pasos ni conductímetro)
-  var F_INSTRUMENTAL = ['Llave mediana cuadrada','Llave mediana hexágonal','Llave corta hexágonal',
+  // Instrumental (oct 2026): destornilladores (antes "llaves"). Se cargan igual que un componente
+  // (tetón "-", sin pasos ni conductímetro). La medida va fija según el tipo:
+  // hexagonales 0.050 · cuadrados 0.048
+  var F_INSTRUMENTAL_MED = {
+    'Destornillador largo hexagonal': '0.050',
+    'Destornillador mediano / standard hexagonal': '0.050',
+    'Destornillador corto hexagonal': '0.050',
+    'Destornillador largo cuadrado': '0.048',
+    'Destornillador mediano / standard cuadrado': '0.048',
+    'Destornillador corto cuadrado': '0.048'
+  };
+  var F_INSTRUMENTAL = Object.keys(F_INSTRUMENTAL_MED);
+  // Nombres viejos (lotes ya cargados como "Llave ..."): se siguen reconociendo como instrumental
+  var F_INSTRUMENTAL_VIEJO = ['Llave mediana cuadrada','Llave mediana hexágonal','Llave corta hexágonal',
     'Llave corta cuadrada','Llave larga cuadrada','Llave larga hexágonal'];
-  function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.concat(F_INSTRUMENTAL).some(function (p) { return f_norm_(p) === n; }); }
+  function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.concat(F_INSTRUMENTAL, F_INSTRUMENTAL_VIEJO).some(function (p) { return f_norm_(p) === n; }); }
+  function c_actualizarMedida_() {
+    var med = F_INSTRUMENTAL_MED[val_('c_prod')] || '';
+    setVal_('c_med', med);
+    document.getElementById('c_medWrap').style.display = med ? '' : 'none';
+  }
   function f_esTapon_(producto) { var n = f_norm_(producto); return f_esComponente_(producto) || F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
 
   function c_pintarCombo_() {
@@ -884,6 +901,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   }
   function c_ingresar() {
     var d = { producto: val_('c_prod'), cantidad: val_('c_cant'), lote: val_('c_lote').trim(), responsable: val_('c_resp') };
+    if (F_INSTRUMENTAL_MED[d.producto]) d.medida = F_INSTRUMENTAL_MED[d.producto];   // destornilladores: medida fija
     if (!d.producto) { msg('c_msg', 'Elegí el componente.', false); return; }
     if (!(Number(d.cantidad) > 0)) { msg('c_msg', 'Completá la cantidad.', false); return; }
     if (!d.lote) { msg('c_msg', 'Completá el lote.', false); return; }
