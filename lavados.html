@@ -135,10 +135,32 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     <div class="tab" id="tabBtnFinal" onclick="mostrar('final')">Lavado Final</div>
   </div>
 
-  
+
   <div id="tabGrueso">
+    <!-- NUEVO: los destornilladores (instrumental) entran acá, a Lavado Grueso -->
+    <div class="card" style="border-color:#86efac; background:#f0fdf4;">
+      <h2 style="color:#15803d;">Ingreso de destornilladores (instrumental)</h2>
+      <p class="empty" style="margin-bottom:8px;">Los destornilladores se lavan en Lavado Grueso (no en Lavado Final). Cargalos acá y aparecen en "Lotes disponibles". Después del Lavado Grueso pasan a Depósito Componente.</p>
+      <div class="grid-3">
+        <div><label>Destornillador</label><select id="gi_prod" onchange="gi_actualizarMedida_()"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Cantidad</label><input id="gi_cant" type="number" min="1"></div>
+        <div><label>Lote</label><input id="gi_lote" placeholder="Ej: 1043"></div>
+      </div>
+      <div class="grid-3" style="margin-top:12px;">
+        <div>
+          <label>Responsable</label>
+          <select id="gi_resp"><option value="">— Seleccionar —</option><option>Lourdes Deasis</option><option>Gabriela Goritz</option></select>
+        </div>
+        <div id="gi_medWrap" style="display:none;"><label>Medida</label><input id="gi_med" readonly style="background:#f1f5f9; font-weight:700;"></div>
+        <div style="display:flex; align-items:flex-end; justify-content:flex-end;">
+          <button class="btn" id="gi_btn" style="background:#16a34a; margin:0;" onclick="gi_ingresar()">Ingresar destornillador</button>
+        </div>
+      </div>
+      <div id="gi_msg" style="font-size:13px; margin-top:6px;"></div>
+    </div>
+
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
-      <h2>1. Seleccionar lote (desde Control de Calidad)</h2>
+      <h2>1. Seleccionar lote (desde Control de Calidad o destornillador ingresado)</h2>
       <div class="grid-3">
         <div><label>Lotes disponibles</label><select id="g_combo" onchange="g_sel()"><option value="">Cargando lotes...</option></select></div>
         <div><label>Cantidad disponible</label><div id="g_disp" class="badge-stock">0 u.</div></div>
@@ -202,13 +224,13 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     </div>
   </div>
 
-  
+
   <div id="tabFinal" class="hide">
     <div class="card" style="border-color:#86efac; background:#f0fdf4;">
-      <h2 style="color:#15803d;">Ingreso de componentes e instrumental</h2>
-      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes, pilares y destornilladores (instrumental) no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro.</p>
+      <h2 style="color:#15803d;">Ingreso de componentes</h2>
+      <p class="empty" style="margin-bottom:8px;">Tapas de cierre, tornillos, porta implantes y pilares no tienen un ingreso previo: cargalos acá y aparecen en "Lotes disponibles". No llevan pasos químicos ni conductímetro. Los destornilladores se ingresan en la pestaña Lavado Grueso.</p>
       <div class="grid-3">
-        <div><label>Componente / Instrumental</label><select id="c_prod" onchange="c_actualizarMedida_()"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Componente</label><select id="c_prod"><option value="">— Seleccionar —</option></select></div>
         <div><label>Cantidad</label><input id="c_cant" type="number" min="1"></div>
         <div><label>Lote</label><input id="c_lote" placeholder="Ej: 1043"></div>
       </div>
@@ -217,7 +239,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
           <label>Responsable</label>
           <select id="c_resp"><option value="">— Seleccionar —</option><option>Lourdes Deasis</option><option>Gabriela Goritz</option></select>
         </div>
-        <div id="c_medWrap" style="display:none;"><label>Medida</label><input id="c_med" readonly style="background:#f1f5f9; font-weight:700;"></div>
+        <div></div>
         <div style="display:flex; align-items:flex-end; justify-content:flex-end;">
           <button class="btn" id="c_btn" style="background:#16a34a; margin:0;" onclick="c_ingresar()">Ingresar componente</button>
         </div>
@@ -283,7 +305,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       </div>
     </div>
 
-    
+
     <div class="card" id="f_cardPasos" style="border-color:#c4b5fd; background:#faf5ff;">
       <h2 style="color:#6d28d9;">3. Proceso químico</h2>
       <div class="grid-3" style="margin-bottom:12px;">
@@ -334,7 +356,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
 </div>
 
 <script>
-   
+
   var DIAG_MSGS = {};
   function pintarDiag_() {
     var d = document.getElementById('diag');
@@ -357,9 +379,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   }
   window.onerror = function (m, src, linea) { mostrarDiag('Error en la página: ' + m + ' (línea ' + linea + ')'); return false; };
 
-   
-  var REFRESCO_MS = 60000;        
-  var PAUSA_SATURADO_MS = 120000; 
+
+  var REFRESCO_MS = 60000;
+  var PAUSA_SATURADO_MS = 120000;
   var PAUSA_HASTA = 0;
   var G_EN_CURSO = false, F_EN_CURSO = false;
   var G_ULTIMA = 0, F_ULTIMA = 0;
@@ -398,7 +420,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     document.getElementById('tabFinal').className  = esG ? 'hide' : '';
     document.getElementById('tabBtnGrueso').className = esG ? 'tab active' : 'tab';
     document.getElementById('tabBtnFinal').className  = esG ? 'tab' : 'tab active';
-    
+
     if (esG) { if (Date.now() - G_ULTIMA > 30000) g_cargar(); }
     else { if (Date.now() - F_ULTIMA > 30000) f_cargar(); }
   }
@@ -407,7 +429,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
     if (ok) setTimeout(function(){ if (m.textContent === t) m.textContent = ''; }, 4000);
   }
-  
+
   function avisoSiTarda_(idSelect, nombreFuncion) {
     return setTimeout(function () {
       var s = document.getElementById(idSelect);
@@ -418,7 +440,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     }, 60000);
   }
 
-   
+
   var LF_STORAGE_KEY = 'bioFixLavadoFinalEstado_v2';
   var GG_STORAGE_KEY = 'bioFixLavadoGruesoEstado_v2';
   var MIGRAR_TIEMPOS = false;
@@ -575,7 +597,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     }
   }
 
-   
+
   function f_revisarConductimetro(input, min, max) {
     var v = input.value;
     input.classList.toggle('cond-fuera', v !== '' && (Number(v) < min || Number(v) > max));
@@ -602,10 +624,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     lfGuardarEstado();
   }
 
-   
+
   function g_cargar(forzar) {
-    if (G_EN_CURSO && !forzar) return;                 
-    if (!forzar && Date.now() < PAUSA_HASTA) return;   
+    if (G_EN_CURSO && !forzar) return;
+    if (!forzar && Date.now() < PAUSA_HASTA) return;
     G_EN_CURSO = true;
     G_ULTIMA = Date.now();
     var mi = ++G_CARGA_SEQ;
@@ -777,7 +799,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .lgRegistrar(item);
   }
 
-   
+
   function f_cargar(forzar) {
     if (F_EN_CURSO && !forzar) return;
     if (!forzar && Date.now() < PAUSA_HASTA) return;
@@ -861,15 +883,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     };
   }
 
-   
+
   var F_TAPON_PRODUCTOS = ['Tapon Porta Implante MP','Tapon Porta Implante HI','Tapon Porta Implante HE','Tapon Porta Implante Generico'];
   function f_norm_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
   // Componentes de Lavado Final: igual que los tapones, sin pasos químicos ni conductímetro
   var F_COMPONENTES = ['Tapa de cierre hexágono interno','Tornillo cuadrado M1.72 hexágono interno','Tapa de cierre hexágono externo',
     'Porta implantes hexágono externo','Tornillo cuadrado hexágono externo','Pilar multifuncion hexágono interno 4,8'];
-  // Instrumental (oct 2026): destornilladores (antes "llaves"). Se cargan igual que un componente
-  // (tetón "-", sin pasos ni conductímetro). La medida va fija según el tipo:
-  // cuadrados 0.050 · hexagonales 0.048
+  // Instrumental: destornilladores (antes "llaves"). Desde el 15/10/2026 se ingresan y se lavan en
+  // LAVADO GRUESO (tarjeta de la pestaña Lavado Grueso). Medida fija: cuadrados 0.050 · hexagonales 0.048
   var F_INSTRUMENTAL_MED = {
     'Destornillador largo hexagonal': '0.048',
     'Destornillador mediano / standard hexagonal': '0.048',
@@ -882,26 +903,18 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   // Nombres viejos (lotes ya cargados como "Llave ..."): se siguen reconociendo como instrumental
   var F_INSTRUMENTAL_VIEJO = ['Llave mediana cuadrada','Llave mediana hexágonal','Llave corta hexágonal',
     'Llave corta cuadrada','Llave larga cuadrada','Llave larga hexágonal'];
+  // (Se sigue reconociendo el instrumental acá por si quedó alguno viejo esperando en Lavado Final)
   function f_esComponente_(producto) { var n = f_norm_(producto); return F_COMPONENTES.concat(F_INSTRUMENTAL, F_INSTRUMENTAL_VIEJO).some(function (p) { return f_norm_(p) === n; }); }
-  function c_actualizarMedida_() {
-    var med = F_INSTRUMENTAL_MED[val_('c_prod')] || '';
-    setVal_('c_med', med);
-    document.getElementById('c_medWrap').style.display = med ? '' : 'none';
-  }
   function f_esTapon_(producto) { var n = f_norm_(producto); return f_esComponente_(producto) || F_TAPON_PRODUCTOS.some(function (p) { return f_norm_(p) === n; }); }
 
+  /* ---- Ingreso de componentes (pestaña Lavado Final) ---- */
   function c_pintarCombo_() {
     var s = document.getElementById('c_prod');
     if (!s || s.options.length > 1) return;
-    [['Componentes', F_COMPONENTES], ['Instrumental', F_INSTRUMENTAL]].forEach(function (g) {
-      var og = document.createElement('optgroup'); og.label = g[0];
-      g[1].forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; og.appendChild(o); });
-      s.appendChild(og);
-    });
+    F_COMPONENTES.forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; s.appendChild(o); });
   }
   function c_ingresar() {
     var d = { producto: val_('c_prod'), cantidad: val_('c_cant'), lote: val_('c_lote').trim(), responsable: val_('c_resp') };
-    if (F_INSTRUMENTAL_MED[d.producto]) d.medida = F_INSTRUMENTAL_MED[d.producto];   // destornilladores: medida fija
     if (!d.producto) { msg('c_msg', 'Elegí el componente.', false); return; }
     if (!(Number(d.cantidad) > 0)) { msg('c_msg', 'Completá la cantidad.', false); return; }
     if (!d.lote) { msg('c_msg', 'Completá el lote.', false); return; }
@@ -918,6 +931,40 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .withFailureHandler(function (e) { btn.disabled = false; msg('c_msg', textoError_(e), false); })
       .lfIngresoComponente(d);
   }
+
+  /* ---- NUEVO: ingreso de destornilladores (pestaña Lavado Grueso) ----
+   * Usa la misma función del servidor (lfIngresoComponente), que para el instrumental
+   * lo deja en "LAVADO GRUESO - PARA LAVADO GRUESO". */
+  function gi_pintarCombo_() {
+    var s = document.getElementById('gi_prod');
+    if (!s || s.options.length > 1) return;
+    F_INSTRUMENTAL.forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; s.appendChild(o); });
+  }
+  function gi_actualizarMedida_() {
+    var med = F_INSTRUMENTAL_MED[val_('gi_prod')] || '';
+    setVal_('gi_med', med);
+    document.getElementById('gi_medWrap').style.display = med ? '' : 'none';
+  }
+  function gi_ingresar() {
+    var d = { producto: val_('gi_prod'), cantidad: val_('gi_cant'), lote: val_('gi_lote').trim(), responsable: val_('gi_resp') };
+    if (F_INSTRUMENTAL_MED[d.producto]) d.medida = F_INSTRUMENTAL_MED[d.producto];
+    if (!d.producto) { msg('gi_msg', 'Elegí el destornillador.', false); return; }
+    if (!(Number(d.cantidad) > 0)) { msg('gi_msg', 'Completá la cantidad.', false); return; }
+    if (!d.lote) { msg('gi_msg', 'Completá el lote.', false); return; }
+    if (!d.responsable) { msg('gi_msg', 'Elegí el responsable.', false); return; }
+    var btn = document.getElementById('gi_btn');
+    btn.disabled = true; msg('gi_msg', 'Registrando…', true);
+    google.script.run
+      .withSuccessHandler(function (r) {
+        btn.disabled = false;
+        msg('gi_msg', (r && r.msg) || 'Ingreso registrado.', true);
+        setVal_('gi_cant', ''); setVal_('gi_lote', '');
+        g_cargar(true);
+      })
+      .withFailureHandler(function (e) { btn.disabled = false; msg('gi_msg', textoError_(e), false); })
+      .lfIngresoComponente(d);
+  }
+
   function f_actualizarModoTapon_() {
     var esTapon = f_esTapon_(val_('f_prod'));
     document.getElementById('f_cardPasos').style.display = esTapon ? 'none' : '';
@@ -926,7 +973,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     document.getElementById('f_btnTapon').style.display = esTapon ? '' : 'none';
   }
 
-   
+
   function f_idTiempo(p) { return 't_' + p.replace(/\s+/g, '_'); }
   function f_renderPasos() {
     document.getElementById('f_pasos').innerHTML = F_PASOS.map(function (p) {
@@ -983,7 +1030,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     f_actualizarAvisoConductimetro_();
   }
 
-   
+
   function f_agregarAlGrupo() {
     var d = f_datosActuales();
     if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
@@ -1015,7 +1062,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function f_quitarDelGrupo(idx) { F_AGRUPADOS.splice(idx, 1); f_renderGrupo(); f_pintarOpciones_(); lfGuardarEstado(); }
   function f_limpiarGrupo() { F_AGRUPADOS = []; f_renderGrupo(); f_pintarOpciones_(); lfGuardarEstado(); msg('f_msg','Grupo vaciado.', true); }
 
-   
+
   function f_trabajoSet_(id, html, tipo) {
     var cont = document.getElementById('f_trabajos');
     var el = document.getElementById('f_trab_' + id);
@@ -1067,7 +1114,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         var t = textoError_(e);
         if (esSaturado_(t)) {
           marcarSaturado_();
-          
+
           items.forEach(function (it) { if (!F_AGRUPADOS.some(function (x) { return f_mismoLote_(x, it); })) F_AGRUPADOS.push(it); });
           f_renderGrupo(); lfGuardarEstado();
           f_trabajoSet_(id, '✗ Google estaba saturado y no se registró ' + nombres + '. Los lotes volvieron al grupo: esperá un par de minutos y registrá de nuevo (revisá los tiempos del proceso).', 'err');
@@ -1127,9 +1174,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     f_enviarEnSegundoPlano_(items, comunes);
   }
 
-   
-  
-  
+
+
+
   function refrescarTodo() {
     if (document.hidden) return;
     if (Date.now() < PAUSA_HASTA) return;
@@ -1148,6 +1195,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       setVal_('f_fecha', hoy());
       f_renderPasos();
       c_pintarCombo_();
+      gi_pintarCombo_();
       f_actualizarModoTapon_();
       ggRestaurarEstado();
       lfRestaurarEstado();
@@ -1155,7 +1203,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       mostrarDiag('Error al iniciar la pantalla: ' + textoError_(e));
     }
     g_cargar();
-    setTimeout(function () { f_cargar(); }, 1500); 
+    setTimeout(function () { f_cargar(); }, 1500);
     setInterval(refrescarTodo, REFRESCO_MS);
   };
 </script>
