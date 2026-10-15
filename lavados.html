@@ -137,12 +137,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
 
 
   <div id="tabGrueso">
-    <!-- NUEVO: componentes y destornilladores entran acá, a Lavado Grueso -->
+    <!-- Ingreso de destornilladores a Lavado Grueso (los componentes NO entran acá) -->
     <div class="card" style="border-color:#86efac; background:#f0fdf4;">
-      <h2 style="color:#15803d;">Ingreso de componentes e instrumental</h2>
-      <p class="empty" style="margin-bottom:8px;">Cargalos acá y aparecen en "Lotes disponibles" para hacerles el Lavado Grueso. Después del Lavado Grueso: los <b>componentes</b> (tapas, tornillos, porta implantes, pilares) pasan a Lavado Final; los <b>destornilladores</b> terminan acá (pasan a Depósito Componente).</p>
+      <h2 style="color:#15803d;">Ingreso de destornilladores</h2>
       <div class="grid-3">
-        <div><label>Componente / Destornillador</label><select id="gi_prod" onchange="gi_actualizarMedida_()"><option value="">— Seleccionar —</option></select></div>
+        <div><label>Destornillador</label><select id="gi_prod" onchange="gi_actualizarMedida_()"><option value="">— Seleccionar —</option></select></div>
         <div><label>Cantidad</label><input id="gi_cant" type="number" min="1"></div>
         <div><label>Lote</label><input id="gi_lote" placeholder="Ej: 1043"></div>
       </div>
@@ -904,22 +903,19 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function gi_pintarCombo_() {
     var s = document.getElementById('gi_prod');
     if (!s || s.options.length > 1) return;
-    [['Componentes (después pasan a Lavado Final)', F_COMPONENTES], ['Destornilladores (solo Lavado Grueso)', F_INSTRUMENTAL]].forEach(function (g) {
-      var og = document.createElement('optgroup'); og.label = g[0];
-      g[1].forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; og.appendChild(o); });
-      s.appendChild(og);
-    });
+    // Solo destornilladores: los componentes se ingresan en Lavado Primario
+    F_INSTRUMENTAL.forEach(function (c) { var o = document.createElement('option'); o.value = c; o.textContent = c; s.appendChild(o); });
   }
   function gi_actualizarMedida_() {
     var p = val_('gi_prod');
-    var med = F_INSTRUMENTAL_MED[p] || ((F_COMPONENTES_QC_MED[p] && F_COMPONENTES_QC_MED[p] !== '-') ? F_COMPONENTES_QC_MED[p] : '');
+    var med = F_INSTRUMENTAL_MED[p] || '';
     setVal_('gi_med', med);
     document.getElementById('gi_medWrap').style.display = med ? '' : 'none';
   }
   function gi_ingresar() {
     var d = { producto: val_('gi_prod'), cantidad: val_('gi_cant'), lote: val_('gi_lote').trim(), responsable: val_('gi_resp') };
     if (F_INSTRUMENTAL_MED[d.producto]) d.medida = F_INSTRUMENTAL_MED[d.producto];
-    if (!d.producto) { msg('gi_msg', 'Elegí el componente o destornillador.', false); return; }
+    if (!d.producto) { msg('gi_msg', 'Elegí el destornillador.', false); return; }
     if (!(Number(d.cantidad) > 0)) { msg('gi_msg', 'Completá la cantidad.', false); return; }
     if (!d.lote) { msg('gi_msg', 'Completá el lote.', false); return; }
     if (!d.responsable) { msg('gi_msg', 'Elegí el responsable.', false); return; }
