@@ -105,6 +105,49 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
   </div>
 
 
+  <div class="card" style="border-color:#86efac; background:#f0fdf4;">
+    <h2 style="color:#166534;">0b. Ingreso de Componentes e Instrumental</h2>
+    <p style="font-size:12px; color:var(--mut); margin:-6px 0 12px 0;">
+      Fresas, destornilladores, tornillos, pilares, tapas de cierre y llaves. El tetón queda en "-" y la medida
+      se pone sola. Recorrido: Lavado Primario → Abrillantado → Lavado Secundario → Control de Calidad → Lavado Grueso
+      (las <b>fresas lanza</b> saltean Abrillantado; los <b>destornilladores</b> terminan en Depósito Componente, el resto va a Lavado Final).
+    </p>
+    <div class="grid-3">
+      <div>
+        <label>Producto</label>
+        <select id="ingCompProd" onchange="ingCompMostrarMedida()">
+          <option value="">Elegir...</option>
+        </select>
+      </div>
+      <div>
+        <label>Número de Lote</label>
+        <input id="ingCompLote" type="text" placeholder="Ej: 9001">
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input id="ingCompCantidad" type="number" min="1" placeholder="Ej: 50">
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:8px;">
+      <div>
+        <label>Tetón</label>
+        <input type="text" value="-" readonly style="background:#f1f5f9;">
+      </div>
+      <div>
+        <label>Medida</label>
+        <input id="ingCompMedida" type="text" value="" readonly style="background:#f1f5f9;" placeholder="(según producto)">
+      </div>
+      <div>
+        <label>Recorrido</label>
+        <input id="ingCompRecorrido" type="text" value="" readonly style="background:#f1f5f9;">
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+      <button class="btn-submit" id="btnIngresoComp" style="background:#16a34a;" onclick="registrarIngresoComponente()">Registrar Ingreso</button>
+    </div>
+  </div>
+
+
   <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
     <h2>1. Seleccionar Lote Disponible de Cola de Espera</h2>
     <div class="grid-3">
@@ -765,6 +808,94 @@ function refrescarTodo(silencioso) {
   }
 
 
+  /* ===== Ingreso de componentes e instrumental (catálogo = ComponentesQC.gs) ===== */
+  var COMP_CATALOGO = [
+    { grupo: 'Fresas lanza (saltean Abrillantado)', items: [
+      ['Fresa Lanza corta Ø1.3', '1.3', 1], ['Fresa Lanza Ø2 largo 20', '2', 1], ['Fresa Lanza Ø2 largo 30', '2', 1],
+      ['Fresa Lanza corta Ø2', '2', 1], ['Fresa Lanza larga Ø2', '2', 1] ] },
+    { grupo: 'Destornilladores', items: [
+      ['Destornillador corto hexagonal', '0.048'], ['Destornillador mediano / standard hexagonal', '0.048'], ['Destornillador largo hexagonal', '0.048'],
+      ['Destornillador corto cuadrado', '0.050'], ['Destornillador mediano / standard cuadrado', '0.050'], ['Destornillador largo cuadrado', '0.050'] ] },
+    { grupo: 'Tornillos HE', items: [ ['Tornillo cuadrado (HE)', '-'], ['Tornillo hexágonal (HE)', '-'] ] },
+    { grupo: 'Pilares HE', items: [
+      ['Pilar base HE NO ROTACIONAL (3.4)', '3.4'], ['Pilar base HE ROTACIONAL (3.4)', '3.4'],
+      ['Pilar base HE NO ROTACIONAL (4.1)', '4.1'], ['Pilar base HE ROTACIONAL (4.1)', '4.1'] ] },
+    { grupo: 'Tapas de cierre', items: [
+      ['Tapa de cierre HI', '-'], ['Tapa de cierre HE 3.4', '3.4'], ['Tapa de cierre HE 4.1', '4.1'], ['Tapa de cierre HE 5.0', '5.0'] ] },
+    { grupo: 'Llaves', items: [
+      ['Llave MP larga', '-'], ['Llave MP corta', '-'], ['Llave colocadora CMU corta', '-'], ['Llave colocadora CMU larga', '-'] ] }
+  ];
+
+  function ingCompBuscar_(nombre) {
+    for (var g = 0; g < COMP_CATALOGO.length; g++) {
+      var its = COMP_CATALOGO[g].items;
+      for (var i = 0; i < its.length; i++) if (its[i][0] === nombre) return { medida: its[i][1], saltaAbr: !!its[i][2], grupo: COMP_CATALOGO[g].grupo };
+    }
+    return null;
+  }
+
+  function ingCompPintarCombo_() {
+    var sel = document.getElementById('ingCompProd');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Elegir...</option>';
+    COMP_CATALOGO.forEach(function(g) {
+      var og = document.createElement('optgroup');
+      og.label = g.grupo;
+      g.items.forEach(function(it) {
+        var o = document.createElement('option');
+        o.value = it[0];
+        o.textContent = it[0] + (it[1] !== '-' ? '  (' + it[1] + ')' : '');
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+  }
+
+  function ingCompMostrarMedida() {
+    var info = ingCompBuscar_(document.getElementById('ingCompProd').value);
+    document.getElementById('ingCompMedida').value = info ? info.medida : '';
+    var rec = '';
+    if (info) {
+      rec = 'LP → ' + (info.saltaAbr ? '' : 'Abrill. → ') + 'Lav. Sec. → Control → L. Grueso → ' +
+            (/^Destornillador/.test(document.getElementById('ingCompProd').value) ? 'Depósito' : 'L. Final');
+    }
+    document.getElementById('ingCompRecorrido').value = rec;
+  }
+
+  function registrarIngresoComponente() {
+    var producto = document.getElementById('ingCompProd').value;
+    var lote = document.getElementById('ingCompLote').value.trim();
+    var cantidad = document.getElementById('ingCompCantidad').value;
+
+    if (!producto) { msg('Elegí el producto.', false); return; }
+    if (!lote) { msg('Ingresá el número de lote.', false); return; }
+    if (!cantidad || Number(cantidad) <= 0) { msg('Ingresá la cantidad.', false); return; }
+
+    /* Se manda por lavIngresoTapon (ya habilitada en gas.js); el servidor detecta que es un componente
+       del catálogo y lo deriva a lavIngresoComponente (tetón "-", medida del catálogo). */
+    var datos = { producto: producto, lote: lote, cantidad: cantidad, responsable: 'Javier' };
+
+    var btn = document.getElementById('btnIngresoComp');
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function(r) {
+        btn.disabled = false;
+        if (r && r.ok === false) { msg(r.msg || 'No se pudo registrar.', false); return; }
+        msg((r && r.msg) || 'Ingreso registrado.', true);
+        document.getElementById('ingCompProd').value = '';
+        document.getElementById('ingCompLote').value = '';
+        document.getElementById('ingCompCantidad').value = '';
+        ingCompMostrarMedida();
+        actualizarInventarios();
+      })
+      .withFailureHandler(function(e) {
+        btn.disabled = false;
+        msg('Error al registrar ingreso: ' + e.message, false);
+      })
+      .lavIngresoTapon(datos);
+  }
+
+
   function msg(t, ok){
     var m = document.getElementById('msg');
     m.textContent = t;
@@ -1203,6 +1334,7 @@ function finalizarBorrador(f){
 }
 
 window.onload = function() {
+  ingCompPintarCombo_();
   cargarInicial();
   setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
 };
