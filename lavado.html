@@ -800,19 +800,20 @@ function refrescarTodo(silencioso) {
 
 
   /* ===== Ingreso de componentes e instrumental (catálogo = ComponentesQC.gs) ===== */
+  // [nombre, medida, salteaAbrillantado]  — en la lista se ve solo el nombre
   var COMP_CATALOGO = [
     { grupo: 'Fresas lanza', items: [
-      ['Fresa Lanza corta Ø1.3', 1], ['Fresa Lanza Ø2 largo 20', 1], ['Fresa Lanza Ø2 largo 30', 1],
-      ['Fresa Lanza corta Ø2', 1], ['Fresa Lanza larga Ø2', 1] ] },
+      ['Fresa Lanza corta Ø1.3', '1.3', 1], ['Fresa Lanza Ø2 largo 20', '2', 1], ['Fresa Lanza Ø2 largo 30', '2', 1],
+      ['Fresa Lanza corta Ø2', '2', 1], ['Fresa Lanza larga Ø2', '2', 1] ] },
     { grupo: 'Destornilladores', items: [
       ['Destornillador corto hexagonal', '0.048'], ['Destornillador mediano / standard hexagonal', '0.048'], ['Destornillador largo hexagonal', '0.048'],
       ['Destornillador corto cuadrado', '0.050'], ['Destornillador mediano / standard cuadrado', '0.050'], ['Destornillador largo cuadrado', '0.050'] ] },
     { grupo: 'Tornillos HE', items: [ ['Tornillo cuadrado (HE)', '-'], ['Tornillo hexágonal (HE)', '-'] ] },
     { grupo: 'Pilares HE', items: [
-      ['Pilar base HE NO ROTACIONAL 3.4'], ['Pilar base HE ROTACIONAL 3.4'],
-      ['Pilar base HE NO ROTACIONAL 4.1'], ['Pilar base HE ROTACIONAL 4.1'] ] },
+      ['Pilar base HE NO ROTACIONAL 3.4', '3.4'], ['Pilar base HE ROTACIONAL 3.4', '3.4'],
+      ['Pilar base HE NO ROTACIONAL 4.1', '4.1'], ['Pilar base HE ROTACIONAL 4.1', '4.1'] ] },
     { grupo: 'Tapas de cierre', items: [
-      ['Tapa de cierre HI'], ['Tapa de cierre HE 3.4'], ['Tapa de cierre HE 4.1'], ['Tapa de cierre HE 5.0'] ] },
+      ['Tapa de cierre HI', '-'], ['Tapa de cierre HE 3.4', '3.4'], ['Tapa de cierre HE 4.1', '4.1'], ['Tapa de cierre HE 5.0', '5.0'] ] },
     { grupo: 'Llaves', items: [
       ['Llave MP larga', '-'], ['Llave MP corta', '-'], ['Llave colocadora CMU corta', '-'], ['Llave colocadora CMU larga', '-'] ] }
   ];
@@ -835,7 +836,7 @@ function refrescarTodo(silencioso) {
       g.items.forEach(function(it) {
         var o = document.createElement('option');
         o.value = it[0];
-        o.textContent = it[0] + (it[1] !== '-' ? '  (' + it[1] + ')' : '');
+        o.textContent = it[0];
         og.appendChild(o);
       });
       sel.appendChild(og);
@@ -844,7 +845,7 @@ function refrescarTodo(silencioso) {
 
   function ingCompMostrarMedida() {
     var info = ingCompBuscar_(document.getElementById('ingCompProd').value);
-    document.getElementById('ingCompMedida').value = info ? info.medida : '';
+    document.getElementById('ingCompMedida').value = (info && info.medida) ? info.medida : '';
   }
 
   function registrarIngresoComponente() {
