@@ -345,6 +345,10 @@
       // tenga una medida elegida. Se le manda al servidor la lista de medidas
       // TAL CUAL figura acá, así la respuesta viene con los mismos nombres
       // que el desplegable (antes en IBT no coincidían y nunca mostraba stock).
+      function claveMedida_(s) {
+        return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9.,]/g, '');
+      }
+
       function cargarDisponibilidadSistema(sistema) {
         disponibilidadActual = {};
         var est = document.getElementById('estadoStock');
@@ -354,7 +358,16 @@
           google.script.run
             .withSuccessHandler(function (mapa) {
               if (document.getElementById('sistema').value !== sistema) return; // cambió el sistema mientras cargaba
-              disponibilidadActual = mapa || {};
+              // Se empareja por la medida "limpia" (solo letras, números, punto y coma):
+              // en el viaje a GitHub el "Ø" puede llegar cambiado (ej. "Ã˜") y entonces
+              // los nombres no coincidían letra por letra aunque fueran la misma medida.
+              var porClave = {};
+              Object.keys(mapa || {}).forEach(function (k) { porClave[claveMedida_(k)] = mapa[k]; });
+              disponibilidadActual = {};
+              (listaMedidasPorSistema[sistema] || []).forEach(function (m) {
+                var v = porClave[claveMedida_(m)];
+                if (v) disponibilidadActual[m] = v;
+              });
               var conStock = Object.keys(disponibilidadActual).filter(function (k) { return (disponibilidadActual[k] || []).length; });
               est.style.color = conStock.length ? '#15803d' : '#92400e';
               est.textContent = conStock.length
