@@ -1,15 +1,8 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8">
+    <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Envasado — Paso 1</title>
-    <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
-    <script>window.BIOFIX_PANTALLA = 'envasado'; window.BIOFIX_SOLO_ADMIN = true;   // solo técnica</script>
-    <script src="envasados-config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
-    <script src="gas.js"></script>
     <style>
   body {
     font-family: Arial, sans-serif;
@@ -125,12 +118,6 @@
 </style>
   </head>
   <body>
-<div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
-  <b style="color:#0369a1">Envasados:</b>
-  <a class="bf-solo-admin" href="envasado.html">Paso 1 (carga)</a>
-  <a href="envasado-primsec.html">Primario / Secundario</a>
-  <a class="bf-solo-admin" href="envasado-anexo.html">Anexo · Orden Fab. · Registro Histórico</a>
-</div>
     <div class="container">
       <h2>Tabla de Envasados</h2>
       <fieldset>
@@ -193,7 +180,7 @@
           "IMPLANTE MONOPIEZA Ø5.5 X 6mm", "IMPLANTE MONOPIEZA Ø5.5 X 8mm", "IMPLANTE MONOPIEZA Ø5.5 X 10mm", "IMPLANTE MONOPIEZA Ø5.5 X 11,5mm", "IMPLANTE MONOPIEZA Ø5.5 X 13mm"
         ],
         "IBT": [
-          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm",
           "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm C18",
           "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm",
           "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm C18",
@@ -270,16 +257,22 @@
 
       // Disponibilidad real de Sala Blanca para el sistema elegido en este
       // momento: { "<medida>": [{lote, referencia, disponible}, ...], ... }
+      // Se recarga cada vez que cambia el Sistema (obtenerDisponibilidadSalaBlanca
+      // del lado del servidor).
       var disponibilidadActual = {};
-      var pedidoDisp = 0;   // si se cambia de sistema rápido, solo vale la última respuesta
 
-      // Sala Blanca ya guarda el lote como "Lote 0932" (con el prefijo puesto).
+      // Sala Blanca ya guarda el lote como "Lote 0932" (con el prefijo puesto),
+      // así que si acá le volvíamos a agregar "Lote " a mano quedaba
+      // "Lote Lote 0932". Esta función arma el texto una sola vez, tenga o
+      // no el prefijo puesto el dato que vino del servidor.
       function etiquetaLote_(lote) {
         var s = String(lote == null ? '' : lote).trim();
         if (!s) return '';
         return /^lote\b/i.test(s) ? s : ('Lote ' + s);
       }
 
+      // Cuando SÍ hay disponibilidad en Sala Blanca, el campo "Cant." se
+      // completa solo sumando lo que se toma de cada lote.
       function bloquearCantidadAuto_(inputCantidad) {
         inputCantidad.value = '';
         inputCantidad.readOnly = true;
@@ -287,6 +280,8 @@
         inputCantidad.style.backgroundColor = '#e9ecef';
       }
 
+      // Cuando NO hay disponibilidad registrada (o todavía no se eligió
+      // medida), el campo "Cant." vuelve a ser editable para cargarlo a mano.
       function habilitarCantidadManual_(inputCantidad) {
         inputCantidad.readOnly = false;
         inputCantidad.placeholder = 'Cant.';
@@ -329,17 +324,13 @@
 
       // Trae de Sala Blanca (Trazabilidad) lo disponible para este sistema y
       // vuelve a pintar el panel de disponibilidad de cualquier fila que ya
-      // tenga una medida elegida.
+      // tenga una medida elegida. Se le manda al servidor la lista de medidas
+      // TAL CUAL figura acá, así la respuesta viene con los mismos nombres
+      // que el desplegable (antes en IBT no coincidían y nunca mostraba stock).
       function cargarDisponibilidadSistema(sistema) {
         disponibilidadActual = {};
-        var n = ++pedidoDisp;
-        var msg = document.getElementById('mensaje');
-        var avisar = !msg.innerText || /^(Buscando|No se pudo cargar)/.test(msg.innerText);  // no tapar "Carga registrada…"
-        if (avisar) { msg.style.color = '#64748b'; msg.innerText = 'Buscando lo disponible en Sala Blanca…'; }
         google.script.run
           .withSuccessHandler(function (mapa) {
-            if (n !== pedidoDisp) return;
-            if (msg.innerText.indexOf('Buscando') === 0) msg.innerText = '';
             disponibilidadActual = mapa || {};
             document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
               var sel = grupo.querySelector('.medida');
@@ -347,11 +338,9 @@
             });
           })
           .withFailureHandler(function (err) {
-            if (n !== pedidoDisp) return;
-            msg.style.color = 'red';
-            msg.innerText = 'No se pudo cargar lo disponible en Sala Blanca: ' + (err.message || err);
+            console.error('No se pudo cargar la disponibilidad de Sala Blanca: ' + (err.message || err));
           })
-          .obtenerDisponibilidadSalaBlanca(sistema);
+          .obtenerDisponibilidadSalaBlanca(sistema, listaMedidasPorSistema[sistema] || []);
       }
 
       function onMedidaChange(selectEl) {
@@ -380,6 +369,8 @@
           return;
         }
 
+        // Hay stock: la cantidad se arma sola con lo que se tome de cada
+        // lote más abajo, no se escribe a mano en este cuadro.
         bloquearCantidadAuto_(inputCantidad);
 
         var html = '<div class="aviso-disp"><b>Disponible en Sala Blanca</b> (elegí cuánto tomar de cada lote):</div>';
@@ -426,7 +417,6 @@
         var nuevoSelect = nuevaFilaMedida.querySelector('.medida');
         nuevoSelect.selectedIndex = 0;
         habilitarCantidadManual_(nuevaFilaMedida.querySelector('.cantidad'));
-        nuevaFilaMedida.querySelector('.cantidad').value = '';
         nuevoGrupo.querySelector('.panel-disponibilidad').innerHTML = '';
         nuevoGrupo.querySelector('.panel-disponibilidad').style.display = 'none';
 
@@ -457,7 +447,8 @@
           select.innerHTML += '<option value="' + c + '">' + c + '</option>';
         });
 
-        // Cantidad propia de este componente (ej. Pilar 3.4 = 80). Vacío = total de implantes.
+        // Cantidad propia de este componente (ej. Pilar 3.4 = 80).
+        // Vacío = se usa el total de implantes del lote.
         var inputCant = document.createElement('input');
         inputCant.type = 'number';
         inputCant.min = '1';
@@ -477,6 +468,7 @@
         contenedor.appendChild(div);
       }
 
+
       function resetFormulario() {
         document.getElementById('loteMp').value = '';
 
@@ -489,7 +481,6 @@
         var primeraFilaMedida = primerGrupo.querySelector('.fila-medida');
         primeraFilaMedida.dataset.origen = '';
         habilitarCantidadManual_(primeraFilaMedida.querySelector('.cantidad'));
-        primeraFilaMedida.querySelector('.cantidad').value = '';
         var panel = primerGrupo.querySelector('.panel-disponibilidad');
         panel.innerHTML = '';
         panel.style.display = 'none';
@@ -512,7 +503,8 @@
         var detalles = [];
         var incompleto = false;
 
-        // Si la medida tomó stock de más de un lote de Sala Blanca, se manda UNA fila por lote.
+        // Si la medida tomó stock de más de un lote de Sala Blanca, se manda
+        // UNA fila por lote (no una sola fila combinada).
         filas.forEach(function (fila) {
           var med = fila.querySelector('.medida').value;
           var cantInput = fila.querySelector('.cantidad');
