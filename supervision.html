@@ -59,6 +59,11 @@
   .etapa .s{ font-size:11px; color:var(--mut); margin-top:2px; }
   .barra{ height:6px; border-radius:3px; background:#e2e8f0; overflow:hidden; margin-top:6px; display:flex; }
   .barra i{ display:block; height:100%; }
+  /* Filtro general de familia (implantes / componentes / instrumental) */
+  .famfila{ background:#fff; border:1px solid var(--bx); border-radius:10px; padding:8px 12px; }
+  .famfila b{ font-size:13px; color:#334155; }
+  .fambtn{ padding:7px 12px; font-size:13px; font-weight:700; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#475569; cursor:pointer; }
+  .fambtn.act{ background:#0f172a; color:#fff; border-color:#0f172a; }
   @media print{ .tabs, .fila, #bfChip, .noprint{ display:none !important; } body{ padding:0; background:#fff; } .card{ break-inside:avoid; } }
 </style>
 </head>
@@ -80,6 +85,16 @@
     <div class="tab" id="tb_ws" onclick="ver('ws')">Workshop</div>
     <div class="tab" id="tb_qp" onclick="ver('qp')">Qué producir</div>
     <div class="tab" id="tb_cotas" onclick="ver('cotas')">Cotas (estadística)</div>
+  </div>
+
+  <!-- ================= FAMILIA (aplica a todas las pestañas) ================= -->
+  <div class="fila famfila">
+    <b>Mostrar:</b>
+    <input type="hidden" id="fFam" value="">
+    <button class="fambtn act" data-fam="" onclick="cambiarFam('')">Todo</button>
+    <button class="fambtn" data-fam="Implante" onclick="cambiarFam('Implante')">Implantes</button>
+    <button class="fambtn" data-fam="Componente" onclick="cambiarFam('Componente')">Componentes</button>
+    <button class="fambtn" data-fam="Instrumental" onclick="cambiarFam('Instrumental')">Instrumental</button>
   </div>
 
   <!-- ================= AUDITORÍA ================= -->
@@ -130,18 +145,13 @@
     </div>
     <div class="fila">
       <span class="mut">o buscá por</span>
-      <select id="bProd">
-        <option value="">Tipo de implante…</option>
-        <option>Monopieza</option><option>Monopieza Basal</option><option>Monopieza Basal Tratado</option>
-        <option>Hexágono Interno</option><option>Hexágono Externo</option>
-        <option>Compresivo Multi-Unit</option><option>Compresivo Multi-Unit Cuello Largo</option><option>Cono Morse</option>
-      </select>
+      <select id="bProd"><option value="">Producto…</option></select>
       <input id="bMed" placeholder="Medida (ej: 3.5x13 o 3.5)" onkeydown="if(event.key==='Enter') buscarLotes()">
       <select id="bTet"><option value="">Con y sin tetón</option><option value="con teton">Con tetón</option><option value="sin teton">Sin tetón</option></select>
       <button class="btn" onclick="buscarLotes()">Buscar lotes</button>
     </div>
     <div id="loteBusq"></div>
-    <div id="loteRes"><p class="mut">Ingresá un número de lote, o buscá por tipo de implante y/o medida.</p></div>
+    <div id="loteRes"><p class="mut">Ingresá un número de lote, o buscá por producto (implante, componente o instrumental) y/o medida.</p></div>
   </div>
 
   <!-- ================= TIEMPOS POR ETAPA ================= -->
@@ -276,6 +286,59 @@ function ver(t){
   if (t === 'ws' && !WS) cargarWs();
 }
 
+/* ---------------- Familia: Implantes / Componentes / Instrumental ----------------
+   La clasificación viene de Supabase (productos_familia): usa la columna Sistema del Ledger.
+   Si algún producto nuevo todavía no está, se clasifica por el nombre. */
+var FAM = {}, PRODS = {};
+var FAM_NOM = { Implante: 'Implantes', Componente: 'Componentes', Instrumental: 'Instrumental', Otros: 'Otros' };
+function famDe(p){
+  p = String(p || '').trim();
+  if (!p || p.charAt(0) === '(') return '';
+  if (FAM[p]) return FAM[p];
+  if (/^(monopieza|hex[aá]gono|compresivo|cono morse)/i.test(p)) return 'Implante';
+  if (/^destornillador/i.test(p)) return 'Instrumental';
+  return 'Componente';
+}
+function famSel(){ return $('fFam').value; }
+function famOk(p){ var f = famSel(); return !f || famDe(p) === f; }          // filas sin producto quedan afuera si se filtra
+function famOkSi(p){ return !String(p || '').trim() || famOk(p); }           // alertas/auditoría generales (sin producto) se ven siempre
+function cargarFam(){
+  return rpc('productos_familia').then(function(d){
+    (d || []).forEach(function(x){ FAM[String(x.producto).trim()] = x.familia; });
+    opcProd('bProd', Object.keys(FAM), 'Producto…');
+  }).catch(function(){ opcProd('bProd', [], 'Producto…'); });
+}
+// Llena un select de productos agrupado por familia (respeta el filtro de arriba y mantiene la elección)
+function opcProd(id, prods, primera){ PRODS[id] = { prods: prods || [], primera: primera }; pintarProd(id); }
+function pintarProd(id){
+  var cfg = PRODS[id], sel = $(id); if (!cfg || !sel) return;
+  var act = sel.value, g = {}, orden = ['Implante', 'Componente', 'Instrumental', 'Otros'];
+  cfg.prods.forEach(function(p){ if (!p || !famOk(p)) return; var f = famDe(p) || 'Otros'; (g[f] = g[f] || []).push(p); });
+  var usados = orden.filter(function(k){ return g[k] && g[k].length; }), esta = false;
+  var opt = function(p){ if (p === act) esta = true; return '<option value="'+esc(p)+'"'+(p===act?' selected':'')+'>'+esc(p)+'</option>'; };
+  var html = usados.map(function(k){
+    var l = g[k].sort(function(a, b){ return a.localeCompare(b, 'es', { numeric: true }); }).map(opt).join('');
+    return usados.length > 1 ? '<optgroup label="'+FAM_NOM[k]+'">'+l+'</optgroup>' : l;
+  }).join('');
+  sel.innerHTML = '<option value="">'+cfg.primera+'</option>' + html;
+  if (!esta) sel.value = '';
+}
+function cambiarFam(f){
+  $('fFam').value = f;
+  [].forEach.call(document.querySelectorAll('.fambtn'), function(b){ b.classList.toggle('act', b.getAttribute('data-fam') === f); });
+  Object.keys(PRODS).forEach(pintarProd);
+  renderAle();
+  if (AUD_OK) renderAud();
+  if (WIP) renderWip();
+  if (LT) renderLt();
+  if (REND) renderRend();
+  if (PROD) renderProd();
+  if (RP) renderRp();
+  if (WS) renderWs();
+  if (QP) renderQp();
+  if (COTAS.length) renderCotas();
+}
+
 /* ---------------- Auditoría ---------------- */
 function cargarAud(){
   $('audLista').innerHTML = '<p class="mut">Cargando…</p>';
@@ -285,16 +348,17 @@ function cargarAud(){
     var sel = $('audTipo'), act = sel.value;
     sel.innerHTML = '<option value="">Todos los tipos (' + AUD.length + ')</option>' +
       Object.keys(tipos).map(function(t){ return '<option'+(t===act?' selected':'')+' value="'+esc(t)+'">'+esc(t)+' ('+tipos[t]+')</option>'; }).join('');
-    $('audKpis').innerHTML = ['alta','media','baja'].map(function(g){
-      var n = AUD.filter(function(a){ return a.gravedad === g && !a.revisado; }).length;
-      return '<div class="kpi"><div class="l">Gravedad '+g+'</div><div class="v">'+n+'</div></div>';
-    }).join('');
     renderAud();
   }).catch(function(e){ $('audLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 function renderAud(){
   var t = $('audTipo').value, q = $('audBuscar').value.toLowerCase().trim();
-  var lista = AUD.filter(function(a){
+  var base = AUD.filter(function(a){ return famOkSi(a.producto); });
+  $('audKpis').innerHTML = ['alta','media','baja'].map(function(g){
+    var n = base.filter(function(a){ return a.gravedad === g && !a.revisado; }).length;
+    return '<div class="kpi"><div class="l">Gravedad '+g+'</div><div class="v">'+n+'</div></div>';
+  }).join('');
+  var lista = base.filter(function(a){
     return (!t || a.tipo === t) && (!q || ((a.lote||'')+' '+(a.producto||'')+' '+(a.detalle||'')).toLowerCase().indexOf(q) >= 0);
   });
   if (!lista.length){ $('audLista').innerHTML = '<p class="mut">Sin observaciones 🎉</p>'; return; }
@@ -321,15 +385,14 @@ function cargarWip(){
   rpc('wip_etapas').then(function(d){
     WIP = d || [];
     var prods = {}; WIP.forEach(function(w){ prods[w.producto] = 1; });
-    var sel = $('wProd'), act = sel.value;
-    sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
+    opcProd('wProd', Object.keys(prods), 'Todos los productos');
     renderWip();
   }).catch(function(e){ $('wLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 function filtroWip(conEtapa){
   var p = $('wProd').value, q = $('wBuscar').value.toLowerCase().trim(), dmin = Number($('wDias').value) || 0, ini = $('wIni').checked;
   return (WIP || []).filter(function(w){
-    return (!p || w.producto === p) && (ini || !w.inicial) && (Number(w.dias) || 0) >= dmin &&
+    return famOk(w.producto) && (!p || w.producto === p) && (ini || !w.inicial) && (Number(w.dias) || 0) >= dmin &&
       (!q || (w.lote + ' ' + w.medida + ' ' + w.producto).toLowerCase().indexOf(q) >= 0) &&
       (!conEtapa || !WETAPA || w.etapa === WETAPA);
   });
@@ -385,9 +448,10 @@ function irAlerta(i){
 }
 function renderAle(){
   var g = $('aleGrupo').value;
-  var lista = ALE.filter(function(a){ return !g || a.grupo === g; });
+  var base = ALE.filter(function(a){ return famOkSi(a.producto); });
+  var lista = base.filter(function(a){ return !g || a.grupo === g; });
   $('aleKpis').innerHTML = ['alta','media','baja'].map(function(k){
-    return '<div class="kpi"><div class="l">'+(k==='alta'?'Urgentes':k==='media'?'Para revisar':'Informativas')+'</div><div class="v">'+ALE.filter(function(a){ return a.gravedad===k; }).length+'</div></div>'; }).join('');
+    return '<div class="kpi"><div class="l">'+(k==='alta'?'Urgentes':k==='media'?'Para revisar':'Informativas')+'</div><div class="v">'+base.filter(function(a){ return a.gravedad===k; }).length+'</div></div>'; }).join('');
   if (!lista.length){ $('aleLista').innerHTML = '<div class="card"><p class="mut">Sin alertas 🎉</p></div>'; return; }
   window._AL = lista;
   var grupos = {}, orden = [];
@@ -423,7 +487,7 @@ function cargarLt(){
   rpc('lead_times').then(function(d){
     LT = d || [];
     var prods = {}; LT.forEach(function(l){ prods[l.producto] = 1; });
-    $('ltProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+    opcProd('ltProd', Object.keys(prods), 'Todos los productos');
     renderLt();
   }).catch(function(e){ $('ltLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
@@ -433,7 +497,7 @@ function fmtMin(m){ m = Math.round(m); if (m < 60) return m + ' min'; var h = Ma
 function fmtD(x){ return x == null ? '<span class="mut">—</span>' : dh(x); }
 function renderLt(){
   var p = $('ltProd').value, lim = Date.now() - Number($('ltDesde').value) * 86400000;
-  var lista = (LT || []).filter(function(l){ return (!p || l.producto === p) && new Date(l.maq).getTime() >= lim; });
+  var lista = (LT || []).filter(function(l){ return famOk(l.producto) && (!p || l.producto === p) && new Date(l.maq).getTime() >= lim; });
   var term = lista.filter(function(l){ return l.sala; });
   var tots = term.map(function(l){ return diasEntre(l.maq, l.sala); }).filter(function(x){ return x != null; }).sort(function(a,b){ return a-b; });
   var med = tots.length ? tots[Math.floor(tots.length / 2)] : null, prom = tots.length ? tots.reduce(function(s,x){ return s+x; },0)/tots.length : null;
@@ -474,13 +538,12 @@ function cargarRend(){
   rpc('rendimiento', { p_desde: desdeISO(Number($('rDesde').value)) }).then(function(d){
     REND = d || [];
     var prods = {}; REND.forEach(function(r){ prods[r.producto] = 1; });
-    var sel = $('rProd'), act = sel.value;
-    sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
+    opcProd('rProd', Object.keys(prods), 'Todos los productos');
     renderRend();
   }).catch(function(e){ $('rEtapas').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 function renderRend(){
-  var p = $('rProd').value, lista = (REND || []).filter(function(r){ return !p || r.producto === p; });
+  var p = $('rProd').value, lista = (REND || []).filter(function(r){ return famOk(r.producto) && (!p || r.producto === p); });
   var E = {}, tot = { proc: 0, rech: 0, sx: 0, reb: 0, blast: 0 };
   lista.forEach(function(r){
     var g = r.grupo; if (!E[g]) E[g] = { buenas: 0, rech: 0, setup: 0, exc: 0, prueba: 0, reb: 0 };
@@ -501,7 +564,7 @@ function renderRend(){
   // matriz producto x etapa
   var P = {}; (REND || []).forEach(function(r){ if (!P[r.producto]) P[r.producto] = {}; P[r.producto][r.grupo] = r; });
   $('rMatriz').innerHTML = '<table><thead><tr><th>Producto</th>' + gs.map(function(g){ return '<th>'+esc(g.slice(2))+'</th>'; }).join('') + '</tr></thead><tbody>' +
-    Object.keys(P).sort().filter(function(k){ return !p || k === p; }).map(function(k){
+    Object.keys(P).sort().filter(function(k){ return famOk(k) && (!p || k === p); }).map(function(k){
       return '<tr><td>'+esc(k)+'</td>' + gs.map(function(g){ var r = P[k][g]; if (!r) return '<td></td>';
         var proc = (+r.buenas) + (+r.rechazo) + (+r.setup) + (+r.excedente), x = pct(+r.rechazo, proc);
         return '<td class="r" title="'+num(r.rechazo,0)+' de '+num(proc,0)+'">'+(+r.rechazo ? '<span class="pill '+claseP(x)+'">'+fmtP(x)+'</span>' : '<span class="mut">0</span>')+'</td>'; }).join('') + '</tr>';
@@ -519,7 +582,7 @@ function cargarProd(){
     var ind = PROD.ind || { h: [], filas: [] }, ix = function(n){ return (ind.h || []).indexOf(n); };
     (ind.filas || []).forEach(function(f){ var v = f.v || []; if (v[ix('producto')]) prods[v[ix('producto')]] = 1; });
     (PROD.cc || []).concat(PROD.pz || []).forEach(function(r){ if (r.producto) prods[r.producto] = 1; });
-    $('pProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+    opcProd('pProd', Object.keys(prods), 'Todos los productos');
     renderProd();
   }).catch(function(e){ $('pBand').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
@@ -530,6 +593,7 @@ function renderMecOp(){
     var R = {};
     (lista || []).forEach(function(r){
       if (pf && r.producto !== pf) return;
+      if (!famOk(r.producto)) return;
       var o = R[r.responsable] = R[r.responsable] || { cierres: 0, dias: 0, buenas: 0, rech: 0, setup: 0, exc: 0, bt: 0, mt: 0 };
       o.cierres += +r.cierres; o.dias = Math.max(o.dias, +r.dias); o.buenas += +r.buenas; o.rech += +r.rechazo; o.setup += +r.setup; o.exc += +r.excedente;
       if (r.min_pieza != null && +r.buenas_con_tiempo > 0){ o.bt += +r.buenas_con_tiempo; o.mt += (+r.min_pieza) * (+r.buenas_con_tiempo); }
@@ -560,7 +624,7 @@ function cargarRp(){
       RP.dia.forEach(function(x){ et[x.grupo] = 1; if (x.producto) pr[x.producto] = 1; });
       RP.lista.forEach(function(x){ if (x.etapa) et[x.etapa] = 1; if (x.producto) pr[x.producto] = 1; });
       $('rpEtapa').innerHTML = '<option value="">Todas las etapas</option>' + Object.keys(et).sort().map(function(e){ return '<option value="'+esc(e)+'">'+esc(e.slice(2))+'</option>'; }).join('');
-      $('rpProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(pr).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+      opcProd('rpProd', Object.keys(pr), 'Todos los productos');
       renderRp();
     }).catch(function(e){ $('rpEtapas').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
@@ -568,7 +632,7 @@ function renderRp(){
   if (!RP) return;
   var dias = Number($('rpDesde').value), lim = new Date(Date.now() - dias * 86400000), limDia = lim.toISOString().slice(0, 10);
   var fe = $('rpEtapa').value, fp = $('rpProd').value;
-  var ok = function(etapa, prod){ return (!fe || etapa === fe) && (!fp || prod === fp); };
+  var ok = function(etapa, prod){ return (!fe || etapa === fe) && (!fp || prod === fp) && famOk(prod); };
   var lista = RP.lista.filter(function(x){ return String(x.dia) >= limDia && ok(x.etapa, x.producto); });
   var dia = RP.dia.filter(function(x){ return String(x.dia) >= limDia && ok(x.grupo, x.producto); });
   // --- por etapa
@@ -619,8 +683,7 @@ function cargarQp(){
   rpc('que_producir', { p_dias: 365 }).then(function(d){
     QP = d || [];
     var prods = {}; QP.forEach(function(r){ prods[r.producto] = 1; });
-    var sel = $('qpProd'), act = sel.value;
-    sel.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===act?' selected':'')+' value="'+esc(p)+'">'+esc(p)+'</option>'; }).join('');
+    opcProd('qpProd', Object.keys(prods), 'Todos los productos');
     renderQp();
   }).catch(function(e){ $('qpLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
@@ -638,7 +701,7 @@ function qpPorMedida(a, b){
 }
 function renderQp(){
   var pf = $('qpProd').value, juntar = $('qpJuntar').checked, ceros = $('qpCeros').checked;
-  var base = QP || [];
+  var base = (QP || []).filter(function(r){ return famOk(r.producto); });
   if ($('qpBasal').checked) base = base.map(function(r){ return Object.assign({}, r, { producto: String(r.producto).replace(/^Monopieza Basal (Tratado|Pulido)$/i, 'Monopieza Basal') }); });
   var J = {}, orden = [];   // se suma por producto + medida (+ tetón si no se juntan)
   base.forEach(function(r){ var k = r.producto + '|' + r.medida + (juntar ? '' : '|' + r.teton);
@@ -666,6 +729,7 @@ function tablaSimple(cols, filas){
     filas.map(function(f){ return '<tr>' + f.map(function(x, i){ return '<td'+(i>0?' class="r"':'')+'>'+x+'</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
 }
 function renderProd(){
+  if (!PROD) return;
   var lim = new Date(Date.now() - Number($('pDesde').value) * 86400000), pf = $('pProd').value;
   var ind = PROD.ind || { h: [], filas: [] }, h = ind.h || [], ix = function(n){ return h.indexOf(n); };
   var cT = ix('tipo'), cF = ix('fecha'), cO = ix('operario'), cP = ix('producto'), cC = ix('cant. implantes'), cA = ix('tiempo armado (min)'),
@@ -676,6 +740,7 @@ function renderProd(){
   (ind.filas || []).forEach(function(f){
     var v = f.v || [], fe = fechaDMY(v[cF]); if (!fe || fe < lim) return;
     if (pf && v[cP] !== pf) return;
+    if (!famOk(v[cP])) return;
     var tipo = String(v[cT] || '').toLowerCase(), est = String(v[cE] || '').toLowerCase(), cant = Number(v[cC]) || 0;
     if (tipo === 'control'){
       if (est.indexOf('registrado') < 0) return;
@@ -697,7 +762,7 @@ function renderProd(){
   // Control de piezas: el trabajo de cada control se reparte según cuántas mediciones cargó cada uno
   var pz = {}, totTipo = {};
   (PROD.pz || []).forEach(function(r){
-    if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf)) return;
+    if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf) || !famOk(r.producto)) return;
     var resp = r.resp || {}, tot = 0, tipo = r.tipo || '';
     Object.keys(resp).forEach(function(k){ tot += Number(resp[k]) || 0; });
     if (!tot) return;
@@ -719,7 +784,7 @@ function renderProd(){
     })).replace(/<tr><td>([^<]*)<\/td><td class="r">([^<]*)<\/td>/g, '<tr><td>$1</td><td>$2</td>');
   var cc = {};
   (PROD.cc || []).forEach(function(r){
-    if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf)) return;
+    if (!r.inicio || new Date(r.inicio) < lim || (pf && r.producto !== pf) || !famOk(r.producto)) return;
     var k = r.responsable || '(sin responsable)'; if (!cc[k]) cc[k] = { n: 0, pz: 0, min: 0, rech: 0, pausa: 0 };
     cc[k].n++; cc[k].pz += +r.cantidad || 0; cc[k].min += +r.tiempo || 0; cc[k].rech += +r.rechazadas || 0; cc[k].pausa += +r.pausa || 0;
     motivos(r.motivos, 'Control de Calidad');
@@ -730,13 +795,13 @@ function renderProd(){
 }
 
 
-/* ---------------- Buscar lotes por tipo de implante / medida ---------------- */
+/* ---------------- Buscar lotes por producto / medida ---------------- */
 function buscarLotes(){
   var p = $('bProd').value, m = $('bMed').value.trim(), t = $('bTet').value;
-  if (!p && !m){ $('loteBusq').innerHTML = '<p class="mut">Elegí un tipo de implante o escribí una medida.</p>'; return; }
+  if (!p && !m){ $('loteBusq').innerHTML = '<p class="mut">Elegí un producto o escribí una medida.</p>'; return; }
   $('loteBusq').innerHTML = '<p class="mut">Buscando…</p>';
   rpc('lotes_buscar', { p_producto: p || null, p_medida: m || null, p_teton: t || null }).then(function(L){
-    L = L || [];
+    L = (L || []).filter(function(x){ return famOk(x.producto); });
     if (!L.length){ $('loteBusq').innerHTML = '<div class="card"><p class="mut">No hay lotes con ese filtro.</p></div>'; return; }
     var tot = L.reduce(function(a, x){ a.i += Number(x.ingresado)||0; a.s += Number(x.sala_blanca)||0; a.d += Number(x.descartado)||0; return a; }, {i:0,s:0,d:0});
     $('loteBusq').innerHTML = '<div class="card"><h2>'+L.length+' lote(s)'+(p?' · '+esc(p):'')+(m?' · medida '+esc(m):'')+(t?' · '+esc(t):'')+'</h2>' +
@@ -765,8 +830,8 @@ function cargarWs(){
     WS = (d || []).map(function(x){ x.motivo = wsMotivo_(x); return x; });
     var prods = {}, mot = {};
     WS.forEach(function(x){ prods[x.producto] = 1; mot[x.motivo] = 1; });
-    var sp = $('wsProd'), ap = sp.value, sm = $('wsTipo'), am = sm.value;
-    sp.innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option'+(p===ap?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
+    var sm = $('wsTipo'), am = sm.value;
+    opcProd('wsProd', Object.keys(prods), 'Todos los productos');
     sm.innerHTML = '<option value="">Todos los motivos</option>' + Object.keys(mot).sort().map(function(p){ return '<option'+(p===am?' selected':'')+'>'+esc(p)+'</option>'; }).join('');
     renderWs();
   }).catch(function(e){ $('wsResumen').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
@@ -775,7 +840,7 @@ function renderWs(){
   if (!WS) return;
   var p = $('wsProd').value, mo = $('wsTipo').value, q = $('wsBuscar').value.toLowerCase().trim();
   var L = WS.filter(function(x){
-    return (!p || x.producto === p) && (!mo || x.motivo === mo) &&
+    return famOk(x.producto) && (!p || x.producto === p) && (!mo || x.motivo === mo) &&
       (!q || (x.lote + ' ' + x.medida + ' ' + x.producto).toLowerCase().indexOf(q) >= 0);
   });
   var tot = 0, porMot = {}, lotes = {};
@@ -829,7 +894,7 @@ function cargarLote(){
   rpc('lote_historia', { p_lote: l }).then(function(h){
     var r = h.resumen || {};
     if (!r.movimientos){ $('loteRes').innerHTML = '<p class="mut">No hay movimientos para '+esc(h.lote)+'.</p>'; return; }
-    var prods = (h.productos||[]).map(function(p){ return esc(p.producto)+' · '+esc(p.medida)+' · '+esc(p.teton); }).join('<br>');
+    var prods = (h.productos||[]).map(function(p){ var f = famDe(p.producto); return esc(p.producto)+' · '+esc(p.medida)+' · '+esc(p.teton)+(f && f !== 'Implante' ? ' <span class="pill baja">'+esc(f)+'</span>' : ''); }).join('<br>');
     var html = '<div class="card"><h2>'+esc(h.lote)+'</h2><div class="mut">'+prods+'</div>' +
       '<div class="mut" style="margin-top:6px">Primer movimiento '+fecha(r.primero)+' · último '+fecha(r.ultimo)+' · '+r.movimientos+' movimientos</div></div>';
     html += '<div class="kpis">' + [['Ingresado', r.ingresado], ['Workshop (calidad)', r.descarte_calidad], ['Workshop (setup / excedente)', r.descarte_setup_excedente],
@@ -883,14 +948,14 @@ function cargarCotas(){
   rpc('cotas_estadistica').then(function(d){
     COTAS = d || [];
     var prods = {}; COTAS.forEach(function(c){ if (c.producto) prods[c.producto] = 1; });
-    $('cProd').innerHTML = '<option value="">Todos los productos</option>' + Object.keys(prods).sort().map(function(p){ return '<option>'+esc(p)+'</option>'; }).join('');
+    opcProd('cProd', Object.keys(prods), 'Todos los productos');
     renderCotas();
   }).catch(function(e){ $('cLista').innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 function renderCotas(){
   var o = $('cOrigen').value, p = $('cProd').value, m = $('cMedida').value.toLowerCase().trim(), min = $('cMin').checked;
   var lista = COTAS.filter(function(c){
-    return (!o || c.origen === o) && (!p || c.producto === p) && (!m || String(c.medida||'').toLowerCase().indexOf(m) >= 0) && (!min || c.numericas >= 10);
+    return famOk(c.producto) && (!o || c.origen === o) && (!p || c.producto === p) && (!m || String(c.medida||'').toLowerCase().indexOf(m) >= 0) && (!min || c.numericas >= 10);
   });
   if (!lista.length){ $('cLista').innerHTML = '<p class="mut">Sin cotas para ese filtro.</p>'; return; }
   window._CL = lista;
@@ -942,13 +1007,12 @@ function grafico(i){
   }).catch(function(e){ box.innerHTML = '<p style="color:#b91c1c">'+esc(e.message)+'</p>'; });
 }
 
-cargarAle();
+cargarFam().then(cargarAle);
 </script>
   <!-- =====================================================================
      IMPRIMIR "EN PROCESO (WIP)" — Supervisión
-     Pegar TODO este bloque justo antes de </body> en Supervision.html.
-     No hace falta tocar nada más: agrega solo el filtro "Medida" y el
-     botón "🖨️ Imprimir" al lado de los filtros de la pestaña En proceso.
+     Agrega el filtro "Medida" y el botón "🖨️ Imprimir" al lado de los
+     filtros de la pestaña En proceso. Respeta también el filtro de familia.
      ===================================================================== -->
 <style>
   #wPrint{ display:none; }
@@ -989,6 +1053,7 @@ cargarAle();
   function e(s) { return (typeof esc === 'function') ? esc(s) : String(s == null ? '' : s); }
   function n0(v) { return (typeof num === 'function') ? num(v, 0) : String(Number(v) || 0); }
   function f(v) { return (typeof fecha === 'function') ? fecha(v) : (v || ''); }
+  function fOk(p) { return (typeof famOk === 'function') ? famOk(p) : true; }
 
   // ---------- Agrega el filtro "Medida" y el botón "Imprimir" ----------
   function armarControles() {
@@ -1009,7 +1074,7 @@ cargarAle();
     fila.appendChild(btn);
   }
 
-  // Opciones de medida según el producto elegido (mantiene la elegida si sigue existiendo)
+  // Opciones de medida según el producto y la familia elegidos (mantiene la elegida si sigue existiendo)
   function llenarMedidas() {
     var sel = document.getElementById('wMed');
     if (!sel) return;
@@ -1017,6 +1082,7 @@ cargarAle();
     var ini = document.getElementById('wIni').checked;
     var act = sel.value, set = {};
     (WIP || []).forEach(function (w) {
+      if (!fOk(w.producto)) return;
       if (p && w.producto !== p) return;
       if (!ini && w.inicial) return;
       if (w.medida) set[w.medida] = 1;
@@ -1029,7 +1095,7 @@ cargarAle();
     sel.value = act;
   }
 
-  // ---------- filtroWip con el filtro de Medida agregado ----------
+  // ---------- filtroWip con los filtros de Medida y Familia ----------
   window.filtroWip = function (conEtapa) {
     var p = document.getElementById('wProd').value;
     var mSel = document.getElementById('wMed') ? document.getElementById('wMed').value : '';
@@ -1037,7 +1103,7 @@ cargarAle();
     var dmin = Number(document.getElementById('wDias').value) || 0;
     var ini = document.getElementById('wIni').checked;
     return (WIP || []).filter(function (w) {
-      return (!p || w.producto === p) && (!mSel || w.medida === mSel) &&
+      return fOk(w.producto) && (!p || w.producto === p) && (!mSel || w.medida === mSel) &&
         (ini || !w.inicial) && (Number(w.dias) || 0) >= dmin &&
         (!q || (w.lote + ' ' + w.medida + ' ' + w.producto).toLowerCase().indexOf(q) >= 0) &&
         (!conEtapa || !WETAPA || w.etapa === WETAPA);
@@ -1071,7 +1137,9 @@ cargarAle();
     var m = document.getElementById('wMed').value;
     var q = document.getElementById('wBuscar').value.trim();
     var dSel = document.getElementById('wDias');
+    var fam = document.getElementById('fFam') ? document.getElementById('fFam').value : '';
     var filtros = [
+      '<b>Familia:</b> ' + (fam ? e(FAM_NOM[fam] || fam) : 'Todas'),
       '<b>Producto:</b> ' + (p ? e(p) : 'Todos'),
       '<b>Medida:</b> ' + (m ? e(m) : 'Todas'),
       '<b>Etapa:</b> ' + (WETAPA ? e(WETAPA) : 'Todas')
