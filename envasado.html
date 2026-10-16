@@ -160,6 +160,9 @@
         <input type="text" id="producto" value="Monopieza" required readonly style="background-color: #e9ecef;">
 
         <label>Medidas y Cantidades:</label>
+        <div id="estadoStock" style="font-size:13px;margin-top:6px;color:#555">
+        </div>
+        <button type="button" class="btn-add" style="background:#64748b;padding:8px 12px;font-size:13px" onclick="cargarDisponibilidadSistema(document.getElementById('sistema').value)">↻ Recargar stock</button>
         <div id="contenedorMedidas">
           <div class="grupo-medida">
             <div class="fila-medida">
@@ -344,18 +347,33 @@
       // que el desplegable (antes en IBT no coincidían y nunca mostraba stock).
       function cargarDisponibilidadSistema(sistema) {
         disponibilidadActual = {};
-        google.script.run
-          .withSuccessHandler(function (mapa) {
-            disponibilidadActual = mapa || {};
-            document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
-              var sel = grupo.querySelector('.medida');
-              if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
-            });
-          })
-          .withFailureHandler(function (err) {
-            console.error('No se pudo cargar la disponibilidad de Sala Blanca: ' + (err.message || err));
-          })
-          .obtenerDisponibilidadSalaBlanca(sistema, listaMedidasPorSistema[sistema] || []);
+        var est = document.getElementById('estadoStock');
+        est.style.color = '#555';
+        est.textContent = 'Cargando stock de Sala Blanca para ' + sistema + '…';
+        try {
+          google.script.run
+            .withSuccessHandler(function (mapa) {
+              if (document.getElementById('sistema').value !== sistema) return; // cambió el sistema mientras cargaba
+              disponibilidadActual = mapa || {};
+              var conStock = Object.keys(disponibilidadActual).filter(function (k) { return (disponibilidadActual[k] || []).length; });
+              est.style.color = conStock.length ? '#15803d' : '#92400e';
+              est.textContent = conStock.length
+                ? 'Stock de Sala Blanca cargado: ' + conStock.length + ' medida(s) de ' + sistema + ' con stock.'
+                : 'El servidor respondió, pero no hay stock en Sala Blanca para ' + sistema + '.';
+              document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
+                var sel = grupo.querySelector('.medida');
+                if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
+              });
+            })
+            .withFailureHandler(function (err) {
+              est.style.color = '#b91c1c';
+              est.textContent = 'No se pudo leer el stock de Sala Blanca: ' + ((err && err.message) || err);
+            })
+            .obtenerDisponibilidadSalaBlanca(sistema, listaMedidasPorSistema[sistema] || []);
+        } catch (e) {
+          est.style.color = '#b91c1c';
+          est.textContent = 'No se pudo conectar con el servidor: ' + e.message;
+        }
       }
 
       function onMedidaChange(selectEl) {
