@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base target="_top">
+    <meta charset="utf-8">
+    <title>Envasado - Paso 1 (carga)</title>
+    <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
+    <script>window.BIOFIX_PANTALLA = 'envasado';</script>
+    <script src="envasados-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
+    <script src="config.js"></script>
+    <script src="gas.js"></script>
+    <!-- La URL del Apps Script de ENVASADOS sale SOLO de envasados-config.js. Se vuelve a cargar acá, DESPUÉS de config.js y gas.js, para que ningún otro archivo la pise. -->
+    <script src="envasados-config.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
   body {
@@ -118,6 +127,12 @@
 </style>
   </head>
   <body>
+    <div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
+      <b>Envasados:</b>
+      <a href="envasado.html" class="bf-solo-admin">Paso 1 (carga)</a>
+      <a href="envasado-primsec.html">Primario / Secundario</a>
+      <a href="envasado-anexo.html" class="bf-solo-admin">Anexo · Orden Fab. · Registro Histórico</a>
+    </div>
     <div class="container">
       <h2>Tabla de Envasados</h2>
       <fieldset>
