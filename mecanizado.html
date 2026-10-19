@@ -2,210 +2,6 @@
 <html>
 <head>
 <base target="_top"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mecanizado — Bio-Fix</title>
-<!-- GitHub: login del puesto + puente a Apps Script (reemplaza google.script.run) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
-<script>window.BIOFIX_PANTALLA = 'mecanizado'; window.BIOFIX_FONDO = ['prcActualizar'];  /* 'Guardar avance' responde al instante y se manda por detrás (ver gas.js) */</script>
-<script>window.BIOFIX_CACHE = ['mecCatalogo']; // catálogo: se muestra al instante y se actualiza por detrás</script>
-<script src="config.js"></script>
-<script src="gas.js"></script>
-<script>
-/* ===== Lecturas rápidas desde Supabase (Mecanizado) =====
- * Estas lecturas salen de UNA consulta a Supabase (función mecanizado_datos) en vez de ir al Apps Script,
- * con la misma lógica que el .gs. Si algo falla (o la hoja todavía no está copiada), cae solo al Apps Script.
- * ?modo=hoja en la dirección -> siempre Apps Script (plan B).
- * ?comparar=1 -> compara Supabase contra Apps Script y muestra el resultado abajo a la izquierda. */
-(function () {
-  var RPC = 'mecanizado_datos';
-  var cache = null, cacheT = 0;
-  function datos() {
-    var ahora = Date.now();
-    if (cache && ahora - cacheT < 3000) return cache;   // las lecturas de un mismo refresco comparten la consulta
-    cacheT = ahora;
-    cache = BIOFIX.supabase.rpc(RPC).then(function (r) {
-      if (r.error) throw new Error(r.error.message);
-      return r.data || {};
-    });
-    cache.catch(function () { cache = null; });
-    return cache;
-  }
-  function falta() { throw new Error('la copia de la hoja todavía no está en Supabase'); }
-  /* ---- ayudantes comunes (mismas reglas que Codigo.gs) ---- */
-  function N(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
-  function T(v) { return String(v == null ? '' : v).trim(); }
-  // Valor "como lo devuelve getValues": los números vuelven a ser números.
-  function V(x) { if (x == null) return ''; var s = String(x).trim(); return /^-?\d+([.,]\d+)?$/.test(s) ? Number(s.replace(',', '.')) : String(x); }
-  function num(x) { var v = V(x); return typeof v === 'number' ? v : (Number(v) || 0); }
-  function pad2(n) { return ('0' + n).slice(-2); }
-  function hora(x) { var s = T(x), m = s.match(/^(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : s; }          // HH:mm
-  function fecha(x) { var s = T(x), m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] : s; }
-  // Columna como mecCol_ (primer encabezado que coincide, en el orden de los nombres)
-  function colPri(h, nombres) { for (var i = 0; i < nombres.length; i++) { var j = h.indexOf(N(nombres[i])); if (j >= 0) return j; } return -1; }
-  // Columna como bndMap_ (si el encabezado se repite, gana el último)
-  function colUlt(h, nombre) { var k = N(nombre), j = -1; for (var i = 0; i < h.length; i++) if (h[i] === k) j = i; return j; }
-  function celda(v, c) { return c >= 0 ? v[c] : ''; }
-  var LET = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-  function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
-    var p = N(producto), conTeton = N(teton).indexOf('con') >= 0;
-    if (p.indexOf('hexagono interno') >= 0) return 'O';
-    if (p.indexOf('cono morse') >= 0) return 'M';
-    if (p.indexOf('compresivo multi') >= 0 || p.indexOf('cmu3') >= 0) return 'M';
-    if (p.indexOf('basal') >= 0) {
-      if (conTeton) return 'M';
-      var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
-      var dd = mm ? parseFloat(mm[1].replace(',', '.')) : null;
-      return (dd != null && dd >= 5.5) ? 'K' : 'J';
-    }
-    if (p.indexOf('monopieza') >= 0) return 'M';
-    if (p.indexOf('tapon porta implante') >= 0) return 'F';
-    return 'O';
-  }
-  function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
-  function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
-
-  /* ---- Mecanizado: mecPendientes, mecHistorialLote, prcListarEnControl (= Codigo.gs / ControlPiezasMaquina.gs) ---- */
-  function H(x) { if (!x || !Array.isArray(x.h)) falta(); return x; }
-  var TAPONES = ['tapon porta implante mp', 'tapon porta implante hi', 'tapon porta implante he', 'tapon porta implante generico'];
-  function esTapon(p) { return TAPONES.indexOf(N(p)) >= 0; }
-  function sumasHist(d) {   // = histSumasPorLote_ (columnas FIJAS de HIST_COLS)
-    var out = {};
-    (H(d.hist).filas || []).forEach(function (f) {
-      var r = f.v || [], lote = T(r[1]); if (!lote) return;
-      if (!out[lote]) out[lote] = { buenas: 0, rechazadas: 0, perdidas: 0, setup: 0, excedente: 0 };
-      out[lote].buenas += num(r[8]); out[lote].rechazadas += num(r[9]); out[lote].perdidas += num(r[10]);
-      out[lote].setup += num(r[11]); out[lote].excedente += num(r[12]);
-    });
-    return out;
-  }
-  function hhmm(s) { var m = T(s).match(/(\d{1,2}):(\d{2})/); return m ? pad2(m[1]) + ':' + m[2] : ''; }   // = abrHHMM_
-  function listarPz(x, soloEnControl) {   // = pzListar_(esPrueba, ['en control'] | null)
-    var h = H(x).h, c = function (n) { return colPri(h, [n]); };
-    var C = { sub: c('Subestado'), id: c('ID Control'), prod: c('Producto'), tet: c('Teton'), med: c('Medida'), lote: c('Lote'),
-      co: c('Cantidad Original'), ok: c('Cantidad OK'), rech: c('Rechazadas'), resp: c('Responsable General'),
-      obs: c('Observaciones'), ini: c('Inicio'), fin: c('Fin'), tmin: c('Tiempo (min)'), pmin: c('Pausa (min)'),
-      pdesde: c('Pausa desde'), mot: c('Motivos Pausa'), cota: c('Cota'), val: c('Valor'), nm: c('N° Muestra'), rm: c('Responsable') };
-    var porId = {}, orden = [];
-    (x.filas || []).forEach(function (f) {
-      var v = f.v || [], gg = function (k) { return celda(v, C[k]); };
-      var subRaw = gg('sub');
-      if (soloEnControl && N(subRaw) !== 'en control') return;
-      var id = T(gg('id')); if (!id) return;
-      if (!porId[id]) {
-        var producto = V(gg('prod')), teton = V(gg('tet')), medida = V(gg('med'));
-        var tRaw = V(gg('tmin')), pd = T(gg('pdesde'));
-        porId[id] = { fila: id, producto: producto, teton: teton, medida: medida, lote: V(gg('lote')), subestado: V(subRaw),
-          cantidadOriginal: num(gg('co')), cantidad: num(gg('ok')), rechazadas: num(gg('rech')),
-          responsable: V(gg('resp')) || '', observaciones: V(gg('obs')) || '', inicio: T(gg('ini')), fin: T(gg('fin')),
-          tiempo: (tRaw === '' || tRaw == null) ? '' : Number(tRaw), pausaMin: num(gg('pmin')),
-          pausaDesde: pd, enPausa: !!pd, motivos: String(gg('mot') || ''),
-          letrasCota: letrasHasta(limiteCota(producto, teton, medida)), coas: {} };
-        orden.push(id);
-      }
-      var letra = T(gg('cota')), valor = gg('val');
-      if (letra && valor !== '' && valor != null) {
-        var numM = num(gg('nm')), respM = gg('rm') || '';
-        if (!porId[id].coas[letra]) porId[id].coas[letra] = { muestras: [] };
-        var arr = porId[id].coas[letra].muestras;
-        arr[numM > 0 ? numM - 1 : arr.length] = { v: valor, r: respM };
-      }
-    });
-    return orden.map(function (id) {
-      var s = porId[id];
-      s.tiempoTxt = (s.tiempo === '' || s.tiempo == null) ? '' : fmtMin(s.tiempo);
-      Object.keys(s.coas).forEach(function (l) { s.coas[l].muestras = s.coas[l].muestras.filter(function (m) { return m !== undefined; }); });
-      return s;
-    });
-  }
-  var SACAR = {
-    mecPendientes: function (d) {
-      var mq = H(d.maq), h = mq.h, c = function (a) { return colPri(h, a); };
-      var cSub = c(['Subestado']), cPend = c(['Pendiente']), cProd = c(['Producto']), cTet = c(['Teton', 'Tetón']),
-          cMed = c(['Medida']), cLote = c(['Lote']), cCant = c(['Cantidad']), cResp = c(['Responsable']),
-          cHi = c(['Hora Inicio', 'Hora inicio']), cCI = c(['Contador Inicial']), cCO = c(['Cantidad Objetivo']), cPP = c(['Piezas de Prueba']);
-      var sumas = sumasHist(d), vacio = { buenas: 0, rechazadas: 0, perdidas: 0, setup: 0, excedente: 0 };
-      // subestado de la PRIMERA sesión de prueba de cada lote (igual que pzListar_(true, null))
-      var subPrueba = {}, vistos = {}, ph = H(d.prueba).h, pId = colPri(ph, ['ID Control']), pLote = colPri(ph, ['Lote']), pSub = colPri(ph, ['Subestado']);
-      (d.prueba.filas || []).forEach(function (f) {
-        var v = f.v || [], id = T(celda(v, pId)); if (!id || vistos[id]) return; vistos[id] = 1;
-        var l = T(celda(v, pLote)); if (!(l in subPrueba)) subPrueba[l] = V(celda(v, pSub));
-      });
-      var out = [];
-      (mq.filas || []).forEach(function (f) {
-        var r = f.v || [];
-        if (!((cSub >= 0 && N(r[cSub]) === 'pendiente') || (cPend >= 0 && N(r[cPend]) === 'si'))) return;
-        var loteVal = cLote >= 0 ? V(r[cLote]) : '', loteKey = T(loteVal);
-        var producto = cProd >= 0 ? V(r[cProd]) : '', pp = cPP >= 0 ? num(r[cPP]) : 0, hs = sumas[loteKey] || vacio;
-        out.push({ fila: f.fila, producto: producto, teton: cTet >= 0 ? V(r[cTet]) : '', medida: cMed >= 0 ? V(r[cMed]) : '',
-          lote: loteVal, cantidad: cCant >= 0 ? num(r[cCant]) : 0, cantidadObjetivo: cCO >= 0 ? num(r[cCO]) : 0,
-          responsable: cResp >= 0 ? V(r[cResp]) : '', horaInicio: cHi >= 0 ? hhmm(r[cHi]) : '',
-          contadorInicial: cCI >= 0 ? V(r[cCI]) : '',
-          producidoAcumulado: hs.buenas, descartesAcumulado: hs.rechazadas + hs.perdidas, setupAcumulado: hs.setup,
-          excedenteAcumulado: hs.excedente, piezasPrueba: pp,
-          cantidadRealAcumulada: pp + hs.buenas + hs.rechazadas + hs.perdidas + hs.setup + hs.excedente,
-          controlPruebaOk: esTapon(producto) ? true : N(subPrueba[loteKey] || '') === 'controlada' });
-      });
-      return out;
-    },
-    mecHistorialLote: function (d, a) {
-      var lote = T(a[0]), out = [];
-      (H(d.hist).filas || []).forEach(function (f) {
-        var r = f.v || []; if (T(r[1]) !== lote) return;
-        var fe = T(r[0]), m = fe.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
-        out.push({ fecha: m ? pad2(m[1]) + '/' + pad2(m[2]) + '/' + m[3] + ' ' + pad2(m[4]) + ':' + m[5] : fe,
-          tipoCierre: V(r[5]), contadorInicio: V(r[6]), contadorFin: V(r[7]), buenas: V(r[8]), rechazadas: V(r[9]),
-          perdidas: V(r[10]), setup: V(r[11]), excedente: V(r[12]), responsable: V(r[13]) });
-      });
-      return out.reverse();
-    },
-    prcListarEnControl: function (d, a) { return listarPz(a[0] ? d.prueba : d.prod, true); }
-  };
-  var COMPARAR = [['mecPendientes'], ['prcListarEnControl'], ['prcListarEnControl', [true]]];
-
-  function planB(fn) {
-    return function () {
-      var args = Array.prototype.slice.call(arguments);
-      return datos().then(function (d) { return SACAR[fn](d, args); }).catch(function (e) {
-        console.warn(fn + ' desde Supabase falló, uso Apps Script:', e.message);
-        return BIOFIX.llamar(fn, args);
-      });
-    };
-  }
-  window.BIOFIX_LOCAL = {};
-  Object.keys(SACAR).forEach(function (fn) { window.BIOFIX_LOCAL[fn] = planB(fn); });
-
-  if (/[?&]comparar=1\b/.test(location.search)) {
-    window.addEventListener('load', function () {
-      function clave(x) {
-        if (x == null || typeof x !== 'object') return String(x == null ? '' : x);
-        return Object.keys(x).sort().map(function (k) {
-          var v = x[k];
-          return k + ':' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v == null ? '' : v).trim());
-        }).join('|');
-      }
-      function lista(r) { var a = Array.isArray(r) ? r : (r == null ? [] : [r]); return a.map(clave).sort(); }
-      BIOFIX.sesion.then(function () {
-        return Promise.all(COMPARAR.map(function (c) {
-          var fn = c[0], args = c[1] || [], nombre = fn + '(' + args.map(function (a) { return JSON.stringify(a); }).join(', ') + ')';
-          return Promise.all([datos().then(function (d) { return SACAR[fn](d, args); }), BIOFIX.llamar(fn, args)]).then(function (p) {
-            var a = lista(p[0]), b = lista(p[1]);
-            var dif = a.filter(function (x) { return b.indexOf(x) < 0; }).map(function (x) { return 'SB: ' + x; })
-              .concat(b.filter(function (x) { return a.indexOf(x) < 0; }).map(function (x) { return 'AS: ' + x; }));
-            console.log(nombre, { supabase: p[0], appsScript: p[1], diferencias: dif });
-            return nombre + ': ' + (dif.length ? 'DISTINTOS ✗' : 'IGUALES ✓') + ' (' + a.length + ' / ' + b.length + ')' +
-                   (dif.length ? '\n   ' + dif.slice(0, 4).map(function (x) { return x.slice(0, 300); }).join('\n   ') : '');
-          }, function (e) { return nombre + ': ERROR ' + e.message; });
-        }));
-      }).then(function (lineas) {
-        var box = document.createElement('pre');
-        box.setAttribute('style', 'position:fixed;left:10px;bottom:50px;z-index:99999;background:#fff;border:2px solid #0284c7;border-radius:8px;padding:10px;font-size:11px;max-width:90vw;max-height:60vh;overflow:auto;white-space:pre-wrap;');
-        box.textContent = 'COMPARACIÓN Supabase vs Apps Script\n' + lineas.join('\n');
-        document.body.appendChild(box);
-      }).catch(function (e) { alert('No se pudo comparar: ' + e.message); });
-    });
-  }
-})();
-</script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#2563eb; --warn:#b45309; --warnbg:#fef3c7; --okbg:#dcfce7; --ok:#15803d; }
   *{ box-sizing:border-box; }
@@ -260,7 +56,7 @@
     <div class="tab" id="tabBtnPrc" onclick="verTabMec('prc')">Control de Piezas</div>
   </div>
 
-  
+  <!-- ===================== PESTAÑA MECANIZADO ===================== -->
   <div id="paneMec">
     <div class="card">
       <h2>En Máquina — Carga Inicial / Apertura de Lote</h2>
@@ -271,9 +67,15 @@
         <div><label>N° de lote</label><input id="lote" placeholder="Lote 0000"></div>
         <div><label>Hora Inicio</label><input id="horaInicio" type="time"></div>
         <div><label>Cantidad Objetivo</label><input id="cantidad" type="number" placeholder="Ej: 200" oninput="mecMostrarConPrueba()"><div id="mecAvisoPrueba" style="font-size:11px;color:#64748b;margin-top:3px;"></div></div>
+        <div><label>Minutos por pieza <span style="font-weight:400;color:#94a3b8;">(queda fijo para todo el lote)</span></label><input id="minPieza" type="number" step="0.1" placeholder="Ej: 2.5"><div style="font-size:11px;color:#64748b;margin-top:3px;">Si todavía no lo sabés, dejalo vacío: se pide en el primer cierre y queda fijo.</div></div>
         <div><label>Contador de maquina inicial</label><input id="contador" placeholder="0000"></div>
         <div><label>Responsable</label><select id="responsable"></select></div>
       </div>
+        <div class="pendbar">
+      <span style="font-weight:600;">¿Queda pendiente en máquina?</span>
+      <label><input type="radio" name="pend" value="no" checked onchange="togglePend()"> No (Hacer todo)</label>
+      <label><input type="radio" name="pend" value="si" onchange="togglePend()"> Sí (Lote abierto / fraccionado)</label>
+    </div>
 
     <div style="margin-top:12px;"><label>Observaciones</label><textarea id="observaciones" rows="2"></textarea></div>
     <div class="row-actions"><button class="primary" id="btnGuardar" onclick="guardarCarga()">Abrir / Guardar carga</button></div>
@@ -286,7 +88,7 @@
   </div>
  </div>
 
-  
+  <!-- ===================== PESTAÑA CONTROL DE PIEZAS ===================== -->
   <div id="panePrc" class="hide">
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
       <h2>1. Poner un lote en Control de Piezas</h2>
@@ -345,7 +147,7 @@
   </div>
 </div>
 
-
+<!-- Cartel de confirmación propio del sistema, en vez del diálogo feo del navegador -->
 <div id="modalConfirmar" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); z-index:9999; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; padding:20px 24px; max-width:360px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
     <p id="modalConfirmarTexto" style="font-size:14px; color:#0f172a; margin:0 0 18px;"></p>
@@ -399,7 +201,7 @@
     return out;
   }
   function togglePend() {
-    
+    // sin acción por ahora
   }
   function msg(t, ok){ var m = document.getElementById('msg'); if (m) { m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); } }
 
@@ -499,26 +301,15 @@
     elHint.textContent = 'Esperado en el contador: ' + esperado;
   }
   function horaAhoraMec_(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
-  // Un solo toque por botón: mientras el servidor no responde, otro toque no hace nada.
-  // Después de pausar/reanudar se vuelve a leer la lista, así el botón muestra el estado real.
-  var MEC_OCUPADO = {};
-  function mecOcupado_(k){ if (MEC_OCUPADO[k]) return true; MEC_OCUPADO[k] = setTimeout(function(){ delete MEC_OCUPADO[k]; }, 60000); return false; }
-  function mecLibre_(k){ clearTimeout(MEC_OCUPADO[k]); delete MEC_OCUPADO[k]; }
   function mecPausarProd(f){
-    if (mecOcupado_('prod'+f)) return;
     var mot = document.getElementById('pmot_'+f) ? document.getElementById('pmot_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prod'+f); refrescarPendientes(); alert(r.msg); })
-      .withFailureHandler(function(e){ mecLibre_('prod'+f); refrescarPendientes(); alert(e.message); })
-      .mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
+    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
   }
   function mecReanudarProd(f){
-    if (mecOcupado_('prod'+f)) return;
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prod'+f); refrescarPendientes(); alert(r.msg); })
-      .withFailureHandler(function(e){ mecLibre_('prod'+f); refrescarPendientes(); alert(e.message); })
-      .mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
+    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
   }
 
-   
+  /* ============ HISTORIAL DE CONTADORES POR LOTE ============ */
 function toggleHistorialGenerico_(idPrefix, f, lote) {
   var cont = document.getElementById(idPrefix + f);
   if (!cont) return;
@@ -530,7 +321,7 @@ function toggleHistorialGenerico_(idPrefix, f, lote) {
     .withFailureHandler(function (e) { cont.innerHTML = '<p style="color:#b91c1c;font-size:12px;">Error: ' + e.message + '</p>'; })
     .mecHistorialLote(lote);
 }
-function mecToggleHistorial(f, lote) { toggleHistorialGenerico_('hist_', f, lote); } 
+function mecToggleHistorial(f, lote) { toggleHistorialGenerico_('hist_', f, lote); } // se mantiene para no romper la lista principal
 
 function mecRenderHistorial_(idPrefix, f, lista) {
   var cont = document.getElementById(idPrefix + f);
@@ -581,6 +372,16 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     c.innerHTML = list.map(function(p){
       var f = p.fila;
       var d = mecCargarDraft_(f);
+      var mpFijo = Number(p.minutosPorPieza) > 0;
+
+      // Minutos por pieza: se carga UNA sola vez por lote. Si ya está fijado, se muestra bloqueado.
+      var bloqueMinutos = mpFijo
+        ? '<div><label>Minutos por pieza <span style="font-weight:400;color:#15803d;">(fijo para todo el lote)</span></label>' +
+            '<input id="mp_'+f+'" type="number" value="'+p.minutosPorPieza+'" readonly style="background:#f1f5f9; color:#334155; font-weight:700;">' +
+            '<input type="hidden" id="mpfijo_'+f+'" value="1"></div>'
+        : '<div><label>Minutos por pieza <span style="font-weight:400;color:#b45309;">(se carga una sola vez: queda fijo para todo el lote)</span></label>' +
+            '<input id="mp_'+f+'" type="number" step="0.1" placeholder="Ej: 2.5" style="border-color:#fbbf24; background:#fffbeb;" value="'+(d.mp||'')+'" oninput="mecGuardarDraft_('+f+')">' +
+            '<input type="hidden" id="mpfijo_'+f+'" value="0"></div>';
 
       var bloqueCierre;
       if (!p.controlPruebaOk) {
@@ -596,7 +397,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
             '<div><label>Hora Inicio Parcial <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label><input id="hi_'+f+'" type="time" value="'+(d.hi||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
             '<div><label>Hora Fin Parcial <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label><input id="hf_'+f+'" type="time" value="'+(d.hf||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
             '<div><label>Cantidad Terminada Hoy <span style="font-weight:400;color:#94a3b8;">(producción real, sin contar las 3 de prueba)</span></label><input id="cf_'+f+'" type="number" placeholder="Ej: 30" style="border-color:#93c5fd; background:#f0f9ff;" value="'+(d.cf||'')+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
-            '<div><label>Minutos por pieza <span style="font-weight:400;color:#94a3b8;">(cuánto tardó c/u)</span></label><input id="mp_'+f+'" type="number" step="0.1" placeholder="Ej: 2.5" style="border-color:#93c5fd; background:#f0f9ff;" value="'+(d.mp||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
+            bloqueMinutos +
             '<div><label>Rechazadas Hoy</label><input id="rj_'+f+'" type="number" value="'+(d.rj!==undefined && d.rj!==''?d.rj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
             '<div><label>Perdidas Hoy</label><input id="pj_'+f+'" type="number" value="'+(d.pj!==undefined && d.pj!==''?d.pj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
             '<div><label>Piezas de Setup Hoy <span style="font-weight:400;color:#94a3b8;">(calibración, no van a lavado)</span></label><input id="su_'+f+'" type="number" value="'+(d.su!==undefined && d.su!==''?d.su:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
@@ -613,7 +414,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
           '<div style="margin-top:10px;"><label>Observaciones <span style="font-weight:400; color:#64748b;">(obligatorio si hay rechazadas o perdidas)</span></label><input id="obs_'+f+'" type="text" placeholder="Motivo del descarte..." value="'+(d.obs||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
 
           '<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">' +
-            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla de máquina</option><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>' +
+            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla de máquina</option><option>Otra prioridad</option></select>' +
             '<button style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecPausarProd('+f+')">⏸ Pausa de producción</button>' +
             '<button style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecReanudarProd('+f+')">▶ Reanudar</button>' +
           '</div>' +
@@ -639,7 +440,8 @@ function mecRenderHistorial_(idPrefix, f, lista) {
 
       return '<div class="pend">' +
         '<div class="ttl">' + p.producto + ' · ' + (p.teton || '') + ' · ' + p.medida +
-         ' <span style="color:var(--acc);">[Objetivo: ' + p.cantidadObjetivo + ' u. · Producido real: ' + p.cantidadRealAcumulada + ' u.]</span><br>' +
+         ' <span style="color:var(--acc);">[Objetivo: ' + p.cantidadObjetivo + ' u. · Producido real: ' + p.cantidadRealAcumulada + ' u.' +
+         (mpFijo ? ' · ' + p.minutosPorPieza + ' min/pieza' : '') + ']</span><br>' +
         '<span style="font-weight:400; font-size:12px; color:#64748b;">Lote de origen: ' + p.lote +
         ' | Contador Inicial: <strong id="ci_' + f + '">' + (p.contadorInicial || 0) + '</strong></span></div>' +
 
@@ -672,6 +474,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
         horaInicio: document.getElementById("horaInicio").value,
         cantidadObjetivo: cantidadObjetivo,
         cantidad: cantidadObjetivo + 3,
+        minutosPorPieza: Number(document.getElementById("minPieza").value) || 0,
         responsable: document.getElementById("responsable").value,
         contadorInicial: document.getElementById("contador").value,
         observaciones: document.getElementById("observaciones").value
@@ -701,7 +504,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
   }
 
   function limpiarFormularioPrincipal() {
-    document.getElementById('lote').value = ''; document.getElementById('cantidad').value = ''; document.getElementById('observaciones').value = ''; document.getElementById('horaInicio').value = ''; document.getElementById('contador').value = ''; document.getElementById('producto').selectedIndex = 0; document.getElementById('teton').selectedIndex = 0; document.getElementById('responsable').selectedIndex = 0; cargarMedidas();
+    document.getElementById('lote').value = ''; document.getElementById('cantidad').value = ''; document.getElementById('observaciones').value = ''; document.getElementById('horaInicio').value = ''; document.getElementById('contador').value = ''; document.getElementById('minPieza').value = ''; document.getElementById('producto').selectedIndex = 0; document.getElementById('teton').selectedIndex = 0; document.getElementById('responsable').selectedIndex = 0; cargarMedidas();
     var av = document.getElementById('mecAvisoPrueba'); if (av) av.textContent = '';
     setTimeout(function() { var m = document.getElementById('msg'); if (m) m.textContent = ''; }, 4000);
   }
@@ -724,7 +527,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
       alert("Ingresá cuántas piezas terminó en este turno."); return;
     }
     if (!minutosPorPieza || Number(minutosPorPieza) <= 0) {
-      alert("Ingresá cuántos minutos tardó por pieza."); return;
+      alert("Ingresá cuántos minutos tarda por pieza (se carga una sola vez y queda fijo para todo el lote)."); return;
     }
     if ((Number(rechazadas) > 0 || Number(perdidas) > 0) && !observaciones.trim()) {
       alert("Hay rechazadas y/o perdidas cargadas: hay que anotar el motivo en Observaciones.");
@@ -742,6 +545,9 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador);
   }
   function enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador) {
+    var elFijo = document.getElementById('mpfijo_' + fila);
+    var yaFijo = elFijo && elFijo.value === '1';
+
     var datos = {
       fila: fila,
       tipoCierre: tipo,
@@ -760,30 +566,46 @@ function mecRenderHistorial_(idPrefix, f, lista) {
 
     document.getElementById('listaPend').innerHTML = '<p class="empty">Procesando movimiento en base de datos...</p>';
 
+    function cerrar() {
+      google.script.run
+        .withSuccessHandler(function(r) {
+           mecLimpiarDraft_(fila);
+           alert(r.msg);
+           refrescarPendientes();
+        })
+        .withFailureHandler(function(e) {
+           alert("Error: " + e.message);
+           refrescarPendientes();
+        }).mecProcesarCierre(datos);
+    }
+
+    if (yaFijo) { cerrar(); return; }
+
+    // Primer cierre de un lote sin minutos fijados: se fija en el lote y recién después se cierra.
     google.script.run
       .withSuccessHandler(function(r) {
-         mecLimpiarDraft_(fila);
-         alert(r.msg);
-         refrescarPendientes();
+         datos.minutosPorPieza = r.minutosPorPieza;
+         cerrar();
       })
       .withFailureHandler(function(e) {
-         alert("Error: " + e.message);
+         alert("Error al fijar los minutos por pieza: " + e.message);
          refrescarPendientes();
-      }).mecProcesarCierre(datos);
+      }).mecFijarMinutosPorPieza({ fila: fila, minutosPorPieza: minutosPorPieza });
   }
 
-   
+  /* ================= Compartido: cotas con muestras múltiples (hasta 20) ================= */
   var LETRAS_COA = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
   var RESP_QC = ['Matias','Javier','Gabriela'];
 
-  
-
+  /* -- Colapsar/desplegar cada cota (A, B, C...) para que la lista no quede tan larga.
+     Por defecto arrancan colapsadas; el estado se guarda en memoria por lote+letra,
+     así se mantiene aunque se vuelva a pintar la lista (pausa/reanudar/etc). -- */
   var COTA_COLAPSADA = {};
   function cotaKey_(prefix, f, l){ return prefix + '_' + f + '_' + l; }
   function cotaBodyId_(prefix, f, l){ return 'cotaBody_' + prefix + '_' + l + '_' + f; }
   function cotaEstaColapsada_(prefix, f, l){
     var k = cotaKey_(prefix, f, l);
-    if (!(k in COTA_COLAPSADA)) COTA_COLAPSADA[k] = true; 
+    if (!(k in COTA_COLAPSADA)) COTA_COLAPSADA[k] = true; // colapsada por defecto
     return COTA_COLAPSADA[k];
   }
   function aplicarEstadoCota_(prefix, f, l){
@@ -835,10 +657,10 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     '</div>';
   }
 
-  var PRC_MAX_MUESTRAS = 50; 
+  var PRC_MAX_MUESTRAS = 50; // tope real por cota
   function renderCotaBloque_(prefix, f, l, muestras){
     muestras = (muestras && muestras.length) ? muestras.slice() : [{v:'', r:''}];
-    
+    // Por si ya había más de 20 guardadas de antes, no las mostramos todas (tope real):
     if (muestras.length > PRC_MAX_MUESTRAS) muestras = muestras.slice(0, PRC_MAX_MUESTRAS);
     var color = (prefix === 'q') ? '#92400e' : '#0369a1';
     var filas = muestras.map(function(mu, idx){ return renderMuestraFila_(prefix, f, l, idx, mu.v, mu.r); }).join('');
@@ -883,7 +705,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     if (contEl) contEl.value = count + 1;
   }
 
-   
+  /* ================= CONTROL DE PIEZAS (PRODUCCIÓN) ================= */
   var PRC_DATA = [];
 
   function prcHoraAhora(){
@@ -1020,33 +842,18 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     };
   }
   function prcGuardarAvance(f){
-    if (mecOcupado_('prc'+f)) { prcMsg('Todavía se está guardando, esperá un momento…', true); return; }
-    prcMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); })
-      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); })
-      .prcActualizar(prcDatosCard(f));
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcActualizar(prcDatosCard(f));
   }
   function prcPausar(f){
-    if (mecOcupado_('prc'+f)) return;
     var mot = document.getElementById('pmotivo_'+f) ? document.getElementById('pmotivo_'+f).value : '';
-    prcMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcRefrescarEnControl(); })
-      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); prcRefrescarEnControl(); })
-      .prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
   }
   function prcReanudar(f){
-    if (mecOcupado_('prc'+f)) return;
-    prcMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcRefrescarEnControl(); })
-      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); prcRefrescarEnControl(); })
-      .prcReanudar({ fila:f, hora:prcHoraAhora() });
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora() });
   }
   function prcCerrarControl(f){
-    if (mecOcupado_('prc'+f)) { prcMsg('Todavía se está guardando, esperá un momento…', true); return; }
     var d = prcDatosCard(f); d.hora = prcHoraAhora();
-    prcMsg('Cerrando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('prc'+f); prcMsg(r.msg, true); prcActualizar(); })
-      .withFailureHandler(function(e){ mecLibre_('prc'+f); prcMsg(e.message, false); }).prcCerrar(d);
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcCerrar(d);
   }
   function prcEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control? El lote vuelve a la lista de espera.', function(ok){
@@ -1055,7 +862,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     });
   }
 
-   
+  /* ================= CONTROL DE PIEZAS DE PRUEBA (esPrueba:true) ================= */
   var PCP_DATA = [];
 
   function pcpMsg(t, ok){ var m=document.getElementById('pcpMsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
@@ -1198,33 +1005,18 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   };
 }
   function pcpGuardarAvance(f){
-    if (mecOcupado_('pcp'+f)) { pcpMsg('Todavía se está guardando, esperá un momento…', true); return; }
-    pcpMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); })
-      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); })
-      .prcActualizar(pcpDatosCard(f));
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcActualizar(pcpDatosCard(f));
   }
   function pcpPausar(f){
-    if (mecOcupado_('pcp'+f)) return;
     var mot = document.getElementById('qmotivo_'+f) ? document.getElementById('qmotivo_'+f).value : '';
-    pcpMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpRefrescarEnControl(); })
-      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); pcpRefrescarEnControl(); })
-      .prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
   }
   function pcpReanudar(f){
-    if (mecOcupado_('pcp'+f)) return;
-    pcpMsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpRefrescarEnControl(); })
-      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); pcpRefrescarEnControl(); })
-      .prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
   }
   function pcpCerrarControl(f){
-    if (mecOcupado_('pcp'+f)) { pcpMsg('Todavía se está guardando, esperá un momento…', true); return; }
     var d = pcpDatosCard(f); d.hora = prcHoraAhora();
-    pcpMsg('Cerrando…', true);
-    google.script.run.withSuccessHandler(function(r){ mecLibre_('pcp'+f); pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); })
-      .withFailureHandler(function(e){ mecLibre_('pcp'+f); pcpMsg(e.message, false); }).prcCerrar(d);
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcCerrar(d);
   }
   function pcpEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control de prueba? Vuelve a la lista de espera.', function(ok){
