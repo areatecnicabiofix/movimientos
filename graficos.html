@@ -280,10 +280,10 @@ function movF(){ return (DATA.mov||[]).filter(r=>prodOk(r.producto)); }
 function vGeneral(v){
   const mov=movF(), wip=(DATA.wip||[]).filter(r=>prodOk(r.producto));
   const ok=sum(mov,r=>r.buenas), re=sum(mov,r=>r.rechazo);
-  v.innerHTML = kpis([['Piezas producidas (suma de etapas)',fmt(ok)],['Rechazadas',fmt(re)],['% rechazo total',fmt(pct(re,ok+re),1)+' %'],['Piezas en proceso hoy',fmt(sum(wip,r=>r.cantidad))]])
+  v.innerHTML = kpis([['Piezas producidas (suma de etapas)',fmt(ok)],['Rechazadas',fmt(re)],['% rechazo total',fmt(pct(re,ok+re),1)+' %'],['Stock hoy (esperando + en proceso)',fmt(sum(wip,r=>r.cantidad))]])
     + grid(card('g1','c12','Piezas producidas por día (todas las etapas)','Piezas terminadas en cada etapa y rechazadas. Una pieza suma una vez por cada etapa que termina.'))
     + grid(card('g2','c6','Piezas producidas por etapa','Total del período.'), card('g3','c6','% de rechazo por etapa','Rechazadas sobre (producidas + rechazadas).'))
-    + grid(card('g4','c6','Piezas producidas por producto','Suma de etapas.'), card('g5','c6','Piezas en proceso por etapa','Foto de hoy (no depende del período).'));
+    + grid(card('g4','c6','Piezas producidas por producto','Suma de etapas.'), card('g5','c6','Stock por etapa','Foto de hoy (no depende del período).'));
   chColumnas($('g1'), porBucket(mov,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Producidas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
   chBarrasH($('g2'), ranking(mov,etapaDe,r=>r.buenas).sort(porOrdenEtapa), {l:190});
   chBarrasH($('g3'), rankingPctRechazo(mov,etapaDe,r=>r.buenas,r=>r.rechazo,20).sort(porOrdenEtapa), {color:'var(--series-2)',dec:1,suf:'%',l:190});
@@ -412,7 +412,7 @@ function vWip(v){
   const orden=new Map(); w.forEach(r=>orden.set(r.etapa,r.orden));
   const viejos=w.filter(r=>num(r.dias)>=7);
   const cola=w.filter(r=>r.grupo!=='En trabajo'), trab=w.filter(r=>r.grupo==='En trabajo');
-  v.innerHTML = kpis([['Piezas en proceso (total)',fmt(sum(w,r=>r.cantidad))],['En cola (esperando etapa)',fmt(sum(cola,r=>r.cantidad))],['En trabajo (máquina y sectores)',fmt(sum(trab,r=>r.cantidad))],['Lotes con 7+ días quietos',fmt(viejos.length)]])
+  v.innerHTML = kpis([['Stock hoy (total)',fmt(sum(w,r=>r.cantidad))],['En stock (esperando)',fmt(sum(cola,r=>r.cantidad))],['En proceso',fmt(sum(trab,r=>r.cantidad))],['Lotes con 7+ días quietos',fmt(viejos.length)]])
     + grid(card('w1a','c6','En cola, por etapa','Piezas esperando entrar a la etapa.'), card('w1b','c6','En trabajo, por etapa','Piezas dentro de máquina o de cada sector. En Máquina = lo que falta producir de los lotes abiertos.'))
     + grid(card('w2','c12','Días promedio en cada etapa','Cuánto hace que los lotes están en esa etapa.'))
     + grid(card('w3','c12','Lotes más demorados','Ordenados por días en la etapa actual.'));
