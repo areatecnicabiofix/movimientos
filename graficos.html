@@ -257,7 +257,7 @@ const GRUPOS = {
 };
 const TABS = [
   ['general','Todos los sectores'], ['mec','Mecanizado'], ['qc','Control de Calidad'], ['blast','Blasting'],
-  ['lp','Lavado primario'], ['lg','Lavado Grueso'], ['lf','Lavado Final'], ['pausas','Pausas'], ['wip','En proceso']
+  ['lp','Lavado primario'], ['lg','Lavado Grueso'], ['lf','Lavado Final'], ['wip','En proceso']
 ];
 
 function movF(){ return (DATA.mov||[]).filter(r=>prodOk(r.producto)); }
@@ -382,20 +382,6 @@ function vLavado(v, sectores, titulo, grupoMov){
     l.slice().reverse().slice(0,80));
 }
 
-/* --- Pausas --- */
-function vPausas(v){
-  const p=(DATA.pausas||[]).filter(r=>prodOk(r.producto));
-  const motivos=[]; p.forEach(r=>String(r.motivos||'').split(/[;,\n|]+/).map(s=>s.trim()).filter(Boolean).forEach(mo=>motivos.push({motivo:mo.replace(/\s*\(.*?\)\s*$/,'').toLowerCase().replace(/^./,c=>c.toUpperCase()), min:num(r.minutos)})));
-  v.innerHTML = kpis([['Registros con pausa',fmt(p.length)],['Minutos de pausa',fmt(sum(p,r=>r.minutos))],['Horas de pausa',fmt(sum(p,r=>r.minutos)/60,1)],['Abiertos ahora',fmt(p.filter(r=>r.abierto).length)]])
-    + grid(card('p1','c6','Minutos de pausa por sector',''), card('p2','c6','Motivos más frecuentes','Cantidad de veces que aparece cada motivo.'))
-    + grid(card('p3','c12','Minutos de pausa por día',''))
-    + grid(card('p4','c12','Detalle',''));
-  chBarrasH($('p1'), ranking(p,r=>r.sector,r=>r.minutos).map(x=>({...x,tip:`<br><span class="k">Minutos:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})), {l:200,suf:' min'});
-  chBarrasH($('p2'), ranking(motivos,r=>r.motivo,()=>1).map(x=>({...x,tip:`<br><span class="k">Veces:</span> ${x.value}<br><span class="k">Minutos asociados:</span> ${fmt(sum(x.rows,r=>r.min))}`})), {l:200, color:'var(--series-2)'});
-  chColumnas($('p3'), porBucket(p,r=>r.dia,[r=>r.minutos]), ['Minutos'], ['var(--series-2)']);
-  tabla($('p4'), [{t:'Fecha',k:r=>ddmm(r.dia)},{t:'Sector',k:'sector'},{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Motivos',k:'motivos'},{t:'Minutos',k:'minutos',n:1},{t:'Estado',k:r=>r.abierto?'Abierto':'Cerrado'}], p.slice(0,120));
-}
-
 /* --- En proceso (WIP) --- */
 function vWip(v){
   const w=(DATA.wip||[]).filter(r=>prodOk(r.producto));
@@ -423,7 +409,7 @@ function render(){
      lp: x=>vLavado(x,['Lavado Primario','Abrillantado','Vaporeado','Lavado Secundario'],'Lavado primario / abrillantado / vaporeado / secundario'),
      lg: x=>vLavado(x,['Lavado Grueso'],'Lavado Grueso'),
      lf: x=>vLavado(x,['Lavado Final'],'Lavado Final'),
-     pausas:vPausas, wip:vWip })[TAB](v);
+     wip:vWip })[TAB](v);
 }
 $('tabs').addEventListener('click', ev=>{ const b=ev.target.closest('button[data-k]'); if(!b) return; TAB=b.dataset.k; try{localStorage.setItem('bfGrafTab',TAB);}catch(e){} render(); });
 $('fProducto').addEventListener('change', render);
