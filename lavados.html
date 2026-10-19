@@ -259,7 +259,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
           </select>
         </div>
         <div><label>Cantidad</label><input id="f_cant" type="number" min="1" oninput="lfGuardarEstado()"></div>
-        <div></div>
+        <!-- Rechazadas: solo para tapones / componentes (registro como Final) -->
+        <div id="f_rechWrap" style="display:none;"><label>Rechazadas</label><input id="f_rech" type="number" value="0" min="0" oninput="lfGuardarEstado()"></div>
       </div>
       <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
         <button class="btn" id="f_btnAgregarGrupo" style="background:#64748b;" onclick="f_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
@@ -502,7 +503,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         campos: {
           fila: val_('f_fila'), prod: val_('f_prod'), med: val_('f_med'), loteReal: val_('f_loteReal'),
           teton: val_('f_teton'), disp: document.getElementById('f_disp').textContent, ref: val_('f_refControl'),
-          lotelav: val_('f_lotelav'), resp: val_('f_resp'), cant: val_('f_cant')
+          lotelav: val_('f_lotelav'), resp: val_('f_resp'), cant: val_('f_cant'), rech: val_('f_rech')
         },
         grupo: F_AGRUPADOS,
         tiempos: tiempos,
@@ -535,6 +536,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         setVal_('f_teton', c.teton); document.getElementById('f_disp').textContent = c.disp || '0 u.';
         setVal_('f_refControl', c.ref); setVal_('f_ref', c.ref);
         setVal_('f_lotelav', c.lotelav); setVal_('f_resp', c.resp); setVal_('f_cant', c.cant);
+        setVal_('f_rech', (c.rech != null && c.rech !== '') ? c.rech : 0);
       }
       f_actualizarModoTapon_();
     } catch (err) {
@@ -825,7 +827,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var c = document.getElementById('f_combo');
     var yaSeleccionado = val_('f_loteReal') !== '';
     var ae = document.activeElement;
-    var editando = ae && ae.id && /^f_(resp|cant|lotelav|obs|ref|horaIni|horaFin|cond)/.test(ae.id);
+    var editando = ae && ae.id && /^f_(resp|cant|rech|lotelav|obs|ref|horaIni|horaFin|cond)/.test(ae.id);
     if (!forzar && (yaSeleccionado || editando)) {
       if (c.dataset.pintado !== '1') f_pintarOpciones_();
       return;
@@ -843,6 +845,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     setVal_('f_lote', it.lote ? (it.lote + (it.refControl ? (' - ' + it.refControl) : '')) : '');
     setVal_('f_teton', it.teton || '');
     setVal_('f_cant', it.disponible || '');
+    setVal_('f_rech', 0);
     document.getElementById('f_disp').textContent = (it.disponible || 0) + ' u.';
     setVal_('f_refControl', it.refControl || '');
     setVal_('f_ref', it.refControl || '');
@@ -851,6 +854,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   }
   function f_limpiar() {
     ['f_fila','f_loteReal','f_prod','f_med','f_lote','f_teton','f_cant','f_lotelav','f_refControl','f_ref'].forEach(function(id){ setVal_(id, ''); });
+    setVal_('f_rech', 0);
     document.getElementById('f_disp').textContent = '0 u.';
     f_actualizarModoTapon_();
   }
@@ -932,12 +936,18 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .lfIngresoComponente(d);
   }
 
+  /* Tapones / componentes: se registran SOLOS como Final (sin pasos, sin conductímetro
+   * y SIN grupo). Se muestra el campo Rechazadas y se ocultan el grupo y "Registrar Grupo Completo". */
   function f_actualizarModoTapon_() {
     var esTapon = f_esTapon_(val_('f_prod'));
     document.getElementById('f_cardPasos').style.display = esTapon ? 'none' : '';
     document.getElementById('f_cardCond').style.display = esTapon ? 'none' : '';
     document.getElementById('f_btnAgregarGrupo').style.display = esTapon ? 'none' : '';
     document.getElementById('f_btnTapon').style.display = esTapon ? '' : 'none';
+    document.getElementById('f_btnGrupo').style.display = esTapon ? 'none' : '';
+    document.getElementById('f_rechWrap').style.display = esTapon ? '' : 'none';
+    if (esTapon) document.getElementById('f_seccionGrupo').style.display = 'none';
+    else f_renderGrupo();
   }
 
 
@@ -1001,6 +1011,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function f_agregarAlGrupo() {
     var d = f_datosActuales();
     if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
+    if (f_esTapon_(d.producto)) { msg('f_msg','Los tapones y componentes se registran solos con "Registrar como Final".', false); return; }
     if (!d.cantidad || Number(d.cantidad) <= 0) { msg('f_msg','Completá la cantidad.', false); return; }
     if (!d.responsable) { msg('f_msg','Elegí el Responsable antes de agregar al grupo.', false); return; }
     if (F_AGRUPADOS.some(function(x){ return x.lote === d.lote && x.producto === d.producto; })) { msg('f_msg','Este lote ya está en el grupo.', false); return; }
@@ -1093,12 +1104,22 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .lfRegistrarGrupo({ items: items, comunes: comunes });
   }
 
+  // Tapones / componentes: se registran SOLOS como Final, con rechazadas.
+  // Cantidad = total procesado; Rechazadas = cuántas de esas se descartan.
+  // El servidor registra las buenas (Cantidad - Rechazadas) y manda las rechazadas a DESCARTE CALIDAD.
   function f_registrarTapon() {
     var d = f_datosActuales();
+    var cant = Number(d.cantidad) || 0;
+    var rech = Number(val_('f_rech')) || 0;
+    var disp = Number(String(document.getElementById('f_disp').textContent).replace(/[^\d.]/g, '')) || 0;
     if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
-    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('f_msg','Completá la cantidad.', false); return; }
+    if (!(cant > 0)) { msg('f_msg','Completá la cantidad.', false); return; }
+    if (rech < 0) { msg('f_msg','Las rechazadas no pueden ser negativas.', false); return; }
+    if (rech > cant) { msg('f_msg','Las rechazadas (' + rech + ') no pueden superar la cantidad (' + cant + ').', false); return; }
+    if (disp && cant > disp) { msg('f_msg','La cantidad (' + cant + ') supera lo disponible (' + disp + ').', false); return; }
     if (!d.responsable) { msg('f_msg','Elegí el Responsable.', false); return; }
     if (!d.loteLavado) { msg('f_msg','Completá el Lote de lavado.', false); return; }
+    d.rechazadasTapon = rech;
     f_limpiar(); lfGuardarEstado();
     f_enviarEnSegundoPlano_([d], {});
   }
