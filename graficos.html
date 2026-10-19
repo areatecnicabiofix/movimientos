@@ -53,7 +53,7 @@
   .card { background:var(--surface-1); border:1px solid var(--border); border-radius:12px; padding:14px 16px; min-width:0; }
   .c3{grid-column:span 3} .c4{grid-column:span 4} .c6{grid-column:span 6} .c8{grid-column:span 8} .c12{grid-column:span 12}
   @media (max-width:900px){ .c3{grid-column:span 6} .c4,.c6,.c8{grid-column:span 12} }
-  @media (max-width:520px){ .kpi-val{font-size:24px} }
+  @media (max-width:520px){ .kpi-val{font-size:22px; overflow-wrap:anywhere} .c3{grid-column:span 12} }
   .title { font-weight:650; font-size:15px; margin:0 0 2px; }
   .desc { color:var(--text-secondary); font-size:12.5px; margin:0 0 10px; }
   .kpi-val { font-size:30px; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
@@ -150,11 +150,12 @@ function ddmm(iso){ if(!iso) return '—'; const [y,m,d]=String(iso).slice(0,10)
 function prodOk(p){ const f=$('fProducto').value; return !f || String(p||'')===f; }
 function isoLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function rango(){ return { desde:$('fDesde').value, hasta:$('fHasta').value }; }
-function dias(){ const r=rango(); if(!r.desde||!r.hasta) return 30; return Math.round((new Date(r.hasta+'T12:00:00')-new Date(r.desde+'T12:00:00'))/86400000)+1; }
+let RANGO_CARGADO=null;   // el rango de los datos que se están mostrando (no el que se está tipeando)
+function dias(){ const r=RANGO_CARGADO||rango(); if(!r.desde||!r.hasta) return 30; return Math.round((new Date(r.hasta+'T12:00:00')-new Date(r.desde+'T12:00:00'))/86400000)+1; }
 /* Período rápido: completa Desde/Hasta (hasta = hoy) */
 function aplicarPeriodo(){
   const p=$('fPeriodo').value; if(p==='custom') return;
-  const h=new Date(), d=new Date(); d.setDate(d.getDate()-Number(p));
+  const h=new Date(), d=new Date(); d.setDate(d.getDate()-(Number(p)-1));   // "últimos 30 días" = hoy y los 29 anteriores
   $('fDesde').value=isoLocal(d); $('fHasta').value=isoLocal(h);
 }
 /* Días distintos con producción (igual que "Promedio diario" de Power BI) */
@@ -166,11 +167,21 @@ function bucketDe(iso){
   iso = String(iso).slice(0,10);
   if(dias() <= 45) return iso;
   const d = new Date(iso+'T12:00:00'); const dow = (d.getDay()+6)%7; d.setDate(d.getDate()-dow);
-  return d.toISOString().slice(0,10);
+  return isoLocal(d);
 }
-function bucketLabel(iso){ return (dias()<=45 ? '' : 'sem ') + ddmm(iso); }
+function bucketLabel(iso){
+  if(dias()<=45) return ddmm(iso);
+  const r0=RANGO_CARGADO||rango(), fin=new Date(iso+'T12:00:00'); fin.setDate(fin.getDate()+6);
+  const parcial = (r0.desde && iso<r0.desde) || (r0.hasta && isoLocal(fin)>r0.hasta);
+  return 'sem ' + ddmm(iso) + (parcial ? '*' : '');   // * = semana incompleta (el período empieza o termina a mitad de semana)
+}
 function porBucket(rows, fechaFn, series){
   const m = new Map();
+  const r0 = RANGO_CARGADO||rango();
+  if(r0.desde && r0.hasta){   // todos los días/semanas del período, aunque no haya registros
+    const d=new Date(r0.desde+'T12:00:00'), fin=new Date(r0.hasta+'T12:00:00');
+    for(let i=0; d<=fin && i<800; i++){ const b=bucketDe(isoLocal(d)); if(!m.has(b)) m.set(b, series.map(()=>0)); d.setDate(d.getDate()+1); }
+  }
   rows.forEach(r=>{ const b=bucketDe(fechaFn(r)); if(!b) return; if(!m.has(b)) m.set(b, series.map(()=>0)); const a=m.get(b); series.forEach((s,i)=>a[i]+=num(s(r))); });
   return [...m.entries()].sort((a,b)=>a[0]<b[0]?-1:1).map(([k,v])=>({label:bucketLabel(k), key:k, values:v}));
 }
@@ -178,8 +189,11 @@ function porBucket(rows, fechaFn, series){
 /* ---------- tooltip ---------- */
 const tip = $('tip');
 function showTip(ev,html){ tip.innerHTML=html; tip.style.display='block'; const x=Math.min(ev.clientX+14, innerWidth-tip.offsetWidth-8); const y=Math.min(ev.clientY+14, innerHeight-tip.offsetHeight-8); tip.style.left=x+'px'; tip.style.top=y+'px'; }
-function hideTip(){ tip.style.display='none'; }
-function bindTip(node, html){ node.addEventListener('mousemove',ev=>showTip(ev,html)); node.addEventListener('mouseleave',hideTip); node.addEventListener('touchstart',ev=>{const t=ev.touches[0]; showTip(t,html);},{passive:true}); }
+let TIP_T=null;
+function hideTip(){ tip.style.display='none'; clearTimeout(TIP_T); }
+document.addEventListener('touchstart', ev=>{ if(!(ev.target.closest && ev.target.closest('svg'))) hideTip(); }, {passive:true});
+window.addEventListener('scroll', hideTip, {passive:true});
+function bindTip(node, html){ node.addEventListener('mousemove',ev=>showTip(ev,html)); node.addEventListener('mouseleave',hideTip); node.addEventListener('touchstart',ev=>{const t=ev.touches[0]; showTip(t,html); clearTimeout(TIP_T); TIP_T=setTimeout(hideTip,4000);},{passive:true}); }
 
 /* ---------- SVG ---------- */
 const NS='http://www.w3.org/2000/svg';
@@ -191,7 +205,7 @@ function barPathH(x,y,w,h,r=4){ if(w<=0) return ''; r=Math.min(r,h/2,w); return 
 /* Columnas apiladas: data=[{label,values:[a,b]}], names=['OK','Rech'], colors */
 function chColumnas(host, data, names, colors, opts={}){
   if(!data.length){ host.innerHTML='<div class="empty">Sin datos en el período</div>'; return; }
-  const W=opts.w||1100, H=opts.h||240, m={l:44,r:10,t:16,b:28};
+  const W=opts.w||Math.max(300, Math.min(1100, host.clientWidth||1100)), H=opts.h||(W<600?200:240), m={l:44,r:10,t:16,b:28};
   if(names.length>1) host.insertAdjacentHTML('beforeend','<div class="legend">'+names.map((n,i)=>`<span><i class="sw" style="background:${colors[i]}"></i>${esc(n)}</span>`).join('')+'</div>');
   const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'},host);
   const max=niceMax(Math.max(...data.map(d=>d.values.reduce((a,b)=>a+b,0))));
@@ -218,12 +232,13 @@ function chColumnas(host, data, names, colors, opts={}){
 function chBarrasH(host, rows, opts={}){
   if(!rows.length){ host.innerHTML='<div class="empty">Sin datos en el período</div>'; return; }
   rows = rows.slice(0, opts.top||15);
-  const rowH=24, W=560, m={l:opts.l||160,r:58,t:4,b:4}, H=m.t+m.b+rowH*rows.length;
+  const W=Math.max(280, Math.min(560, host.clientWidth||560)), rowH=24, m={l:Math.min(opts.l||160, Math.round(W*0.42)),r:58,t:4,b:4}, H=m.t+m.b+rowH*rows.length;
+  const maxCh=Math.max(10, Math.floor((m.l-10)/6.2));
   const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,role:'img'},host);
   const max=opts.max || niceMax(Math.max(...rows.map(r=>r.value||0))), iw=W-m.l-m.r;
   rows.forEach((r,i)=>{
     const y=m.t+rowH*i, w=iw*(r.value||0)/max;
-    let lab=String(r.label); if(lab.length>26) lab=lab.slice(0,25)+'…';
+    let lab=String(r.label); if(lab.length>maxCh) lab=lab.slice(0,maxCh-1)+'…';
     el('text',{x:m.l-8,y:y+rowH/2+4,'text-anchor':'end'},svg).textContent=lab;
     if(w>0) el('path',{d:barPathH(m.l,y+5,w,rowH-10),fill:opts.color||'var(--series-1)'},svg);
     el('text',{x:m.l+w+6,y:y+rowH/2+4,style:'fill:var(--text-primary);font-weight:600'},svg).textContent=fmt(r.value,opts.dec||0)+(opts.suf||'');
@@ -321,41 +336,44 @@ function vQC(v){
   // Igual que Power BI (pbi.control_calidad): Controladas = cantidad original; % rechazo = rechazadas / controladas
   const piezas=sum(qc,r=>r.cantidad), rech=sum(qc,r=>r.rechazadas);
   const lotes=new Set(qc.map(r=>r.lote)).size;
-  const tMin=sum(qc,r=>r.tiempo_min);
+  const qcT=qc.filter(r=>num(r.tiempo_min)>0);   // solo controles con tiempo cargado
+  const tMin=sum(qcT,r=>r.tiempo_min), piezasT=sum(qcT,r=>r.cantidad);
   const wipQ=(DATA.wip||[]).filter(r=>r.etapa==='Para Control'&&prodOk(r.producto));
   v.innerHTML = kpis([['Piezas controladas',fmt(piezas)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,piezas),2)+' %'],['Lotes controlados',fmt(lotes)]])
-    + kpis([['Minutos por pieza',fmt(piezas?tMin/piezas:null,2)],['Esperando control (hoy)',fmt(sum(wipQ,r=>r.cantidad))]])
+    + kpis([['Minutos por pieza',fmt(piezasT?tMin/piezasT:null,2)+(qcT.length<qc.length?' <span style="font-size:12px;font-weight:400;color:var(--text-secondary)">('+(qc.length-qcT.length)+' controles sin tiempo, no cuentan)</span>':'')],['Esperando control (hoy)',fmt(sum(wipQ,r=>r.cantidad))]])
     + grid(card('q1','c12','Controladas y rechazadas por día',''))
-    + grid(card('q2','c6','Piezas controladas por responsable',''), card('q3','c6','Minutos por pieza por responsable','Tiempo neto total / piezas controladas.'))
+    + grid(card('q2','c6','Piezas controladas por responsable',''), card('q3','c6','Minutos por pieza por responsable','Tiempo neto / piezas, solo controles con tiempo cargado.'))
     + grid(card('q4','c6','% de rechazo por producto y medida','Solo combinaciones con 50 piezas o más.'), card('q5','c6','Rechazo por producto y medida','Tabla con mapa de calor.'))
     + grid(card('q6','c12','Últimos lotes controlados','Los min/pieza fuera de lo normal quedan marcados.'))
     + grid(`<div class="card c12"><p class="title">Resumen de cotas</p><p class="desc">Promedio, mínimo y máximo de cada cota medida, separado por tetón.</p><div class="row-sel"><select id="cP"></select><select id="cT"></select><select id="cM"></select></div><div id="q7"></div></div>`);
   chColumnas($('q1'), porBucket(qc,r=>r.fecha,[r=>r.cantidad,r=>r.rechazadas]), ['Controladas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
   chBarrasH($('q2'), ranking(qc,r=>r.responsable,r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Controles:</span> ${x.n}`})));
-  const mpp=[...groupBy(qc,r=>r.responsable).entries()].map(([k,a])=>{ const p=sum(a,r=>r.cantidad), t=sum(a,r=>r.tiempo_min); return {label:k,value:p?t/p:0,tip:`<br><span class="k">Min/pieza:</span> ${fmt(p?t/p:null,2)}<br><span class="k">Controles:</span> ${a.length}`}; }).filter(r=>r.value>0).sort((a,b)=>b.value-a.value);
+  const mpp=[...groupBy(qc,r=>r.responsable).entries()].map(([k,a])=>{ const aT=a.filter(r=>num(r.tiempo_min)>0), p=sum(aT,r=>r.cantidad), t=sum(aT,r=>r.tiempo_min); return {label:k,value:p?t/p:0,tip:`<br><span class="k">Min/pieza:</span> ${fmt(p?t/p:null,2)}<br><span class="k">Controles:</span> ${a.length}`}; }).filter(r=>r.value>0).sort((a,b)=>b.value-a.value);
   chBarrasH($('q3'), mpp, {dec:2});
   const pmF = min => [...groupBy(qc, r=>(r.producto||'—')+' '+(r.medida||'')).entries()].map(([k,a])=>{ const t=sum(a,r=>r.cantidad), r2=sum(a,r=>r.rechazadas); return {label:k, t, r:r2, value:pct(r2,t)||0, tip:`<br><span class="k">Controladas:</span> ${fmt(t)}<br><span class="k">Rechazadas:</span> ${fmt(r2)}<br><span class="k">% rechazo:</span> ${fmt(pct(r2,t),1)}%`}; }).filter(x=>x.t>=min).sort((a,b)=>b.value-a.value);
   chBarrasH($('q4'), pmF(50), {color:'var(--series-2)',dec:1,suf:'%',l:190});
   tabla($('q5'), [{t:'Producto y medida',k:'label'},{t:'Controladas',k:'t',n:1},{t:'Rech.',k:'r',n:1},{t:'% rechazo',k:'value',n:1,dec:1,suf:'%',heat:heatPct}], pmF(1));
   const heatM = x => x==null?'':x>=12?'var(--heat-3)':x>=6?'var(--heat-2)':x>=4?'var(--heat-1)':'';
   tabla($('q6'), [{t:'Fecha',k:r=>ddmm(r.fecha)},{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Medida',k:'medida'},{t:'Responsable',k:'responsable'},{t:'Cantidad',k:'cantidad',n:1},{t:'Rech.',k:'rechazadas',n:1},{t:'Tiempo neto (min)',k:'tiempo_min',n:1},{t:'Pausa (min)',k:'pausa_min',n:1},{t:'Min/pieza',k:'min_pieza',n:1,dec:2,heat:heatM}],
-    qc.slice().reverse().slice(0,60));
+    qc.slice().sort((a,b)=>String(b.fecha||'')<String(a.fecha||'')?-1:1).slice(0,60));
   cotasUI();
 }
+let COTAS_ERR='', COTAS_SEL={p:'',t:'',m:''};
 function cotasUI(){
   const rows = COTAS.filter(r=>prodOk(r.producto));
   const cP=$('cP'), cT=$('cT'), cM=$('cM');
   const opts=(sel,vals,cur)=>{ sel.innerHTML=vals.map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join(''); };
   const prods=[...new Set(rows.map(r=>r.producto))].sort();
+  if(COTAS_ERR){ $('q7').innerHTML='<div class="msg">No se pudieron cargar las cotas: '+esc(COTAS_ERR)+'</div>'; [cP,cT,cM].forEach(s=>s.classList.add('hidden')); return; }
   if(!prods.length){ $('q7').innerHTML='<div class="empty">Sin mediciones en el período</div>'; [cP,cT,cM].forEach(s=>s.classList.add('hidden')); return; }
   const refrescar=()=>{
-    const p=cP.value||prods[0];
-    const t1=[...new Set(rows.filter(r=>r.producto===p).map(r=>teton(r.teton)))].sort(); opts(cT,t1,t1.includes(cT.value)?cT.value:t1[0]);
-    const m1=[...new Set(rows.filter(r=>r.producto===p&&teton(r.teton)===cT.value).map(r=>r.medida))].sort(); opts(cM,m1,m1.includes(cM.value)?cM.value:m1[0]);
+    const p=cP.value||prods[0]; COTAS_SEL.p=p;
+    const t1=[...new Set(rows.filter(r=>r.producto===p).map(r=>teton(r.teton)))].sort(); opts(cT,t1,t1.includes(cT.value)?cT.value:(t1.includes(COTAS_SEL.t)?COTAS_SEL.t:t1[0])); COTAS_SEL.t=cT.value;
+    const m1=[...new Set(rows.filter(r=>r.producto===p&&teton(r.teton)===cT.value).map(r=>r.medida))].sort(); opts(cM,m1,m1.includes(cM.value)?cM.value:(m1.includes(COTAS_SEL.m)?COTAS_SEL.m:m1[0])); COTAS_SEL.m=cM.value;
     const sel=rows.filter(r=>r.producto===p&&teton(r.teton)===cT.value&&r.medida===cM.value);
     tabla($('q7'), [{t:'Cota',k:'cota'},{t:'Promedio',k:'prom',n:1,dec:3},{t:'Mín.',k:'min',n:1,dec:3},{t:'Máx.',k:'max',n:1,dec:3},{t:'Mediciones',k:'n',n:1},{t:'Lotes',k:'lotes',n:1}], sel);
   };
-  opts(cP,prods,prods[0]); cP.onchange=refrescar; cT.onchange=refrescar; cM.onchange=refrescar; refrescar();
+  opts(cP,prods,prods.includes(COTAS_SEL.p)?COTAS_SEL.p:prods[0]); cP.onchange=refrescar; cT.onchange=refrescar; cM.onchange=refrescar; refrescar();
 }
 
 /* --- Blasting --- */
@@ -378,7 +396,7 @@ function vBlast(v){
   chBarrasH($('b2'), ranking(band,r=>r.operario,r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Implantes:</span> ${fmt(x.value)}<br><span class="k">Bandejas:</span> ${x.n}`})));
   chBarrasH($('b3'), [['Armado',r=>num(r.t_armado)],['Blastinado',r=>num(r.t_blastinado)],['Control',r=>num(r.t_control)]].map(([l,f])=>({label:l,value:prom(l==='Control'?b:band,f)||0})).filter(r=>r.value>0), {dec:1,suf:' min'});
   tabla($('b6'), [{t:'Fecha',k:r=>ddmm(r.dia)},{t:'Tipo',k:'tipo'},{t:'Estado',k:'estado'},{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Operario',k:'operario'},{t:'Implantes',k:'cantidad',n:1},{t:'Rech.',k:'rechazadas',n:1},{t:'Armado',k:'t_armado',n:1},{t:'Blastinado',k:'t_blastinado',n:1},{t:'Control',k:'t_control',n:1},{t:'Ciclo neto',k:'ciclo_neto',n:1}],
-    b.slice().reverse().slice(0,80));
+    b.slice().sort((x,y)=>String(y.dia||'')<String(x.dia||'')?-1:1).slice(0,80));
 }
 
 /* --- Lavados (genérico) --- */
@@ -395,15 +413,15 @@ function vLavado(v, sectores, titulo){
   v.innerHTML = kpis(kp) + (kp2.length?kpis(kp2):'')
     + grid(card('l1','c12',`Piezas por día — ${titulo}`, varios?'Piezas terminadas en cada sub-etapa (una pieza suma en cada sub-etapa que pasa) y rechazadas.':'Piezas terminadas y rechazadas.'))
     + grid(varios ? card('l2','c6','Piezas por sub-etapa','') : card('l2','c6','Piezas por producto',''), card('l3','c6','Piezas por responsable',''))
-    + grid(card('l4','c6','Piezas por medida','Top 15.'), card('l5','c6','% de rechazo por producto',''))
+    + grid(card('l4','c6','Piezas por medida','Top 15.'), card('l5','c6','% de rechazo por producto','Solo productos con 20 piezas o más.'))
     + grid(card('l6','c12','Últimos registros',''));
   chColumnas($('l1'), porBucket(l,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Producidas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
   chBarrasH($('l2'), ranking(l, varios?(r=>r.sector):(r=>r.producto), r=>r.buenas).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
   chBarrasH($('l3'), ranking(l,r=>r.responsable,r=>r.buenas).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
   chBarrasH($('l4'), ranking(l,r=>(r.producto||'')+' '+(r.medida||''),r=>r.buenas), {l:190});
-  chBarrasH($('l5'), rankingPctRechazo(l,r=>r.producto,r=>r.buenas,r=>r.rechazo,1), {color:'var(--series-2)',dec:1,suf:'%'});
+  chBarrasH($('l5'), rankingPctRechazo(l,r=>r.producto,r=>r.buenas,r=>r.rechazo,20), {color:'var(--series-2)',dec:1,suf:'%'});
   tabla($('l6'), [{t:'Fecha',k:r=>ddmm(r.dia)}].concat(varios?[{t:'Etapa',k:'sector'}]:[]).concat([{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Responsable',k:'responsable'},{t:'Producidas',k:'buenas',n:1},{t:'Rech.',k:'rechazo',n:1}]),
-    l.slice().reverse().slice(0,80));
+    l.slice().sort((x,y)=>String(y.dia||'')<String(x.dia||'')?-1:1).slice(0,80));
 }
 
 /* --- En proceso (WIP) --- */
@@ -442,7 +460,10 @@ function render(){
 $('tabs').addEventListener('click', ev=>{ const b=ev.target.closest('button[data-k]'); if(!b) return; TAB=b.dataset.k; try{localStorage.setItem('bfGrafTab',TAB);}catch(e){} render(); });
 $('fProducto').addEventListener('change', render);
 $('fPeriodo').addEventListener('change', ()=>{ aplicarPeriodo(); cargar(); });
-['fDesde','fHasta'].forEach(id=>$(id).addEventListener('change', ()=>{ $('fPeriodo').value='custom'; cargar(); }));
+let T_FECHA=null;
+['fDesde','fHasta'].forEach(id=>$(id).addEventListener('change', ()=>{ $('fPeriodo').value='custom'; clearTimeout(T_FECHA); T_FECHA=setTimeout(()=>cargar(), 700); }));   // espera a que termine de escribir la fecha
+let T_RESIZE=null, ANCHO=innerWidth;
+window.addEventListener('resize', ()=>{ if(Math.abs(innerWidth-ANCHO)<40) return; ANCHO=innerWidth; clearTimeout(T_RESIZE); T_RESIZE=setTimeout(()=>{ const y=scrollY; render(); scrollTo(0,y); }, 250); });
 aplicarPeriodo();
 $('btnAct').addEventListener('click', ()=>cargar());
 
@@ -453,10 +474,14 @@ function llenarProductos(){
   sel.innerHTML='<option value="">Todos</option>'+[...set].sort().map(p=>`<option${p===cur?' selected':''}>${esc(p)}</option>`).join('');
 }
 
-let CARGANDO=false, ULTIMA_CARGA=0;
+let CARGANDO=false, ULTIMA_CARGA=0, PENDIENTE=false;
 async function cargar(silencioso){
-  if(CARGANDO) return; CARGANDO=true;
-  try{ await cargarDatos_(silencioso===true); } finally { CARGANDO=false; ULTIMA_CARGA=Date.now(); }
+  if(CARGANDO){ if(silencioso!==true) PENDIENTE=true; return; }
+  CARGANDO=true;
+  try{ await cargarDatos_(silencioso===true); } finally {
+    CARGANDO=false; ULTIMA_CARGA=Date.now();
+    if(PENDIENTE){ PENDIENTE=false; cargar(); }   // cambiaron las fechas mientras cargaba: se carga lo último elegido
+  }
 }
 async function cargarDatos_(silencioso){
   if(!silencioso){ $('err').innerHTML=''; $('subInfo').textContent='Cargando…'; }
@@ -465,7 +490,8 @@ async function cargarDatos_(silencioso){
   try{
     const [a,b] = await Promise.all([ sb.rpc('graficos_datos_rango',{p_desde:desde, p_hasta:hasta}), sb.rpc('graficos_cotas_rango',{p_desde:desde, p_hasta:hasta}) ]);
     if(a.error) throw a.error;
-    DATA=a.data||{}; COTAS=(b && !b.error && b.data) || [];
+    DATA=a.data||{}; COTAS=(b && !b.error && b.data) || []; COTAS_ERR=(b && b.error) ? String(b.error.message||b.error) : '';
+    RANGO_CARGADO={desde, hasta};
     llenarProductos();
     $('subInfo').textContent='Del '+ddmm(desde)+'/'+desde.slice(0,4)+' al '+ddmm(hasta)+'/'+hasta.slice(0,4)+' · actualizado '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+' (se actualiza solo cada 5 min)';
     render();
