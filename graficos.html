@@ -287,7 +287,7 @@ function vMec(v){
   // pz/hora y min/pieza ponderados por operario
   const porOp=[...groupBy(mec,r=>r.responsable).entries()].map(([k,a])=>{ const bt=sum(a,r=>r.buenas_con_tiempo), min=sum(a,r=>num(r.min_pieza)*num(r.buenas_con_tiempo));
       return {label:k, mpp: bt>0?min/bt:null, buenas:sum(a,r=>r.buenas)}; });
-  v.innerHTML = kpis([['Piezas buenas',fmt(ok)],['Rechazo calidad',fmt(re)],['Descarte setup',fmt(su)],['% rechazo',fmt(pct(re,ok+re),1)+' %']])
+  v.innerHTML = kpis([['Piezas buenas',fmt(ok)],['Rechazado',fmt(re)],['Descarte setup',fmt(su)],['% rechazo',fmt(pct(re,ok+re),1)+' %']])
     + grid(card('m1','c12','Piezas mecanizadas por día','Cierres de máquina: buenas y rechazadas.'))
     + grid(card('m2','c6','Piezas buenas por operario',''), card('m3','c6','Minutos por pieza por operario','Promedio ponderado por piezas (menos es más rápido).'))
     + grid(card('m4','c6','% de rechazo por producto',''), card('m5','c6','Descartes por tipo','Rechazo de calidad, setup y excedente.'))
@@ -296,7 +296,7 @@ function vMec(v){
   chBarrasH($('m2'), ranking(mov,r=>r.responsable,r=>r.buenas));
   chBarrasH($('m3'), porOp.filter(r=>r.mpp).sort((a,b)=>b.mpp-a.mpp).map(r=>({label:r.label,value:r.mpp,tip:`<br><span class="k">Min/pieza:</span> ${fmt(r.mpp,2)}<br><span class="k">Piezas/hora:</span> ${fmt(60/r.mpp,1)}`})), {dec:2});
   chBarrasH($('m4'), rankingPctRechazo(mov,r=>r.producto,r=>r.buenas,r=>r.rechazo,20), {color:'var(--series-2)',dec:1,suf:'%'});
-  chBarrasH($('m5'), [{label:'Rechazo calidad',value:re},{label:'Setup',value:su},{label:'Excedente',value:ex}].filter(r=>r.value>0), {color:'var(--series-2)'});
+  chBarrasH($('m5'), [{label:'Rechazado',value:re},{label:'Setup',value:su},{label:'Excedente',value:ex}].filter(r=>r.value>0), {color:'var(--series-2)'});
   tabla($('m6'), [{t:'Operario',k:'responsable'},{t:'Producto',k:'producto'},{t:'Cierres',k:'cierres',n:1},{t:'Días',k:'dias',n:1},{t:'Buenas',k:'buenas',n:1},{t:'Rechazo',k:'rechazo',n:1},{t:'Setup',k:'setup',n:1},{t:'Excedente',k:'excedente',n:1},{t:'Min/pieza',k:'min_pieza',n:1,dec:2},{t:'Piezas/hora',k:'pz_hora',n:1,dec:1},{t:'Horas',k:'horas',n:1,dec:1}],
     mec.slice().sort((a,b)=>b.buenas-a.buenas));
 }
