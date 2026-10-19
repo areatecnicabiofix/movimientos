@@ -387,13 +387,17 @@ function vWip(v){
   const w=(DATA.wip||[]).filter(r=>prodOk(r.producto));
   const orden=new Map(); w.forEach(r=>orden.set(r.etapa,r.orden));
   const viejos=w.filter(r=>num(r.dias)>=7);
-  v.innerHTML = kpis([['Piezas en proceso',fmt(sum(w,r=>r.cantidad))],['Lotes en proceso',fmt(new Set(w.map(r=>r.lote)).size)],['Lotes con 7+ días quietos',fmt(viejos.length)],['Días promedio en la etapa',fmt(w.length?sum(w,r=>r.dias)/w.length:null,1)]])
-    + grid(card('w1','c6','Piezas por etapa',''), card('w2','c6','Días promedio en cada etapa','Cuánto hace que los lotes están en esa etapa.'))
+  const cola=w.filter(r=>r.grupo!=='En trabajo'), trab=w.filter(r=>r.grupo==='En trabajo');
+  v.innerHTML = kpis([['Piezas en proceso (total)',fmt(sum(w,r=>r.cantidad))],['En cola (esperando etapa)',fmt(sum(cola,r=>r.cantidad))],['En trabajo (máquina y sectores)',fmt(sum(trab,r=>r.cantidad))],['Lotes con 7+ días quietos',fmt(viejos.length)]])
+    + grid(card('w1a','c6','En cola, por etapa','Piezas esperando entrar a la etapa.'), card('w1b','c6','En trabajo, por etapa','Piezas dentro de máquina o de cada sector. En Máquina = lo que falta producir de los lotes abiertos.'))
+    + grid(card('w2','c12','Días promedio en cada etapa','Cuánto hace que los lotes están en esa etapa.'))
     + grid(card('w3','c12','Lotes más demorados','Ordenados por días en la etapa actual.'));
-  chBarrasH($('w1'), ranking(w,r=>r.etapa,r=>r.cantidad).sort((a,b)=>(orden.get(a.label)||0)-(orden.get(b.label)||0)), {l:200,top:25});
+  const porEtapa = arr => ranking(arr,r=>r.etapa,r=>r.cantidad).sort((a,b)=>(orden.get(a.label)||0)-(orden.get(b.label)||0)).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Lotes:</span> ${x.n}`}));
+  chBarrasH($('w1a'), porEtapa(cola), {l:200,top:25});
+  chBarrasH($('w1b'), porEtapa(trab), {l:200,top:25,color:'var(--series-2)'});
   chBarrasH($('w2'), [...groupBy(w,r=>r.etapa).entries()].map(([k,a])=>({label:k,value:sum(a,r=>r.dias)/a.length,tip:`<br><span class="k">Días promedio:</span> ${fmt(sum(a,r=>r.dias)/a.length,1)}<br><span class="k">Lotes:</span> ${a.length}`})).sort((a,b)=>(orden.get(a.label)||0)-(orden.get(b.label)||0)), {l:200,top:25,dec:1,color:'var(--series-2)'});
   const heatD = d => d==null?'':d>=21?'var(--heat-3)':d>=14?'var(--heat-2)':d>=7?'var(--heat-1)':'';
-  tabla($('w3'), [{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Etapa',k:'etapa'},{t:'Desde',k:r=>ddmm(r.desde)},{t:'Días',k:'dias',n:1,heat:heatD},{t:'Piezas',k:'cantidad',n:1},{t:'Detalle',k:'detalle'}],
+  tabla($('w3'), [{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Grupo',k:'grupo'},{t:'Etapa',k:'etapa'},{t:'Desde',k:r=>ddmm(r.desde)},{t:'Días',k:'dias',n:1,heat:heatD},{t:'Piezas',k:'cantidad',n:1},{t:'Detalle',k:'detalle'}],
     w.slice().sort((a,b)=>num(b.dias)-num(a.dias)).slice(0,100));
 }
 
