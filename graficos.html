@@ -251,10 +251,11 @@ function rankingPctRechazo(rows, keyFn, okFn, rechFn, minTotal=1){
 /* ============================================================
  * SECCIONES
  * ============================================================ */
-const GRUPOS = {
-  '1 Mecanizado':'Mecanizado','2 Lavado':'Lavado primario','3 Control de Calidad':'Control de Calidad',
-  '4 Lavado Grueso':'Lavado Grueso','5 Blasting':'Blasting','6 Lavado Final':'Lavado Final','7 Sala Blanca':'Sala Blanca'
-};
+/* Producción: misma fuente que Power BI (pbi.produccion_sectores).
+   Lavado se muestra por sub-etapa (Lavado Primario, Abrillantado, Vaporeado, Lavado Secundario). */
+const ORDEN_ETAPA = ['Mecanizado','Lavado Primario','Abrillantado','Vaporeado','Lavado Secundario','Control de Calidad','Lavado Grueso','Blasting','Lavado Final','Sala Blanca (envasado)'];
+function etapaDe(r){ return r.grupo==='Lavado' ? (r.subetapa||'Lavado') : (r.grupo==='Envasado (Sala Blanca)' ? 'Sala Blanca (envasado)' : r.grupo); }
+const porOrdenEtapa = (a,b) => { const i=ORDEN_ETAPA.indexOf(a.label), j=ORDEN_ETAPA.indexOf(b.label); return (i<0?99:i)-(j<0?99:j); };
 const TABS = [
   ['general','Todos los sectores'], ['mec','Mecanizado'], ['qc','Control de Calidad'], ['blast','Blasting'],
   ['lp','Lavado primario'], ['lg','Lavado Grueso'], ['lf','Lavado Final'], ['wip','En proceso']
@@ -266,14 +267,13 @@ function movF(){ return (DATA.mov||[]).filter(r=>prodOk(r.producto)); }
 function vGeneral(v){
   const mov=movF(), wip=(DATA.wip||[]).filter(r=>prodOk(r.producto));
   const ok=sum(mov,r=>r.buenas), re=sum(mov,r=>r.rechazo);
-  v.innerHTML = kpis([['Piezas que avanzaron de etapa',fmt(ok)],['Rechazadas',fmt(re)],['% rechazo total',fmt(pct(re,ok+re),1)+' %'],['Piezas en proceso hoy',fmt(sum(wip,r=>r.cantidad))]])
-    + grid(card('g1','c12','Piezas por día (todos los sectores)','Buenas que pasaron a la etapa siguiente y rechazadas, sumando todos los sectores.'))
-    + grid(card('g2','c6','Piezas buenas por sector','Total del período.'), card('g3','c6','% de rechazo por sector','Rechazadas sobre (buenas + rechazadas).'))
-    + grid(card('g4','c6','Piezas buenas por producto',''), card('g5','c6','Piezas en proceso por etapa','Foto de hoy (no depende del período).'));
-  chColumnas($('g1'), porBucket(mov,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Buenas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
-  const sect = r => GRUPOS[r.grupo]||r.grupo;
-  chBarrasH($('g2'), ranking(mov,sect,r=>r.buenas));
-  chBarrasH($('g3'), rankingPctRechazo(mov,sect,r=>r.buenas,r=>r.rechazo,20), {color:'var(--series-2)',dec:1,suf:'%'});
+  v.innerHTML = kpis([['Piezas producidas (suma de etapas)',fmt(ok)],['Rechazadas',fmt(re)],['% rechazo total',fmt(pct(re,ok+re),1)+' %'],['Piezas en proceso hoy',fmt(sum(wip,r=>r.cantidad))]])
+    + grid(card('g1','c12','Piezas producidas por día (todas las etapas)','Piezas terminadas en cada etapa y rechazadas. Una pieza suma una vez por cada etapa que termina.'))
+    + grid(card('g2','c6','Piezas producidas por etapa','Total del período.'), card('g3','c6','% de rechazo por etapa','Rechazadas sobre (producidas + rechazadas).'))
+    + grid(card('g4','c6','Piezas producidas por producto','Suma de etapas.'), card('g5','c6','Piezas en proceso por etapa','Foto de hoy (no depende del período).'));
+  chColumnas($('g1'), porBucket(mov,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Producidas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
+  chBarrasH($('g2'), ranking(mov,etapaDe,r=>r.buenas).sort(porOrdenEtapa), {l:190});
+  chBarrasH($('g3'), rankingPctRechazo(mov,etapaDe,r=>r.buenas,r=>r.rechazo,20).sort(porOrdenEtapa), {color:'var(--series-2)',dec:1,suf:'%',l:190});
   chBarrasH($('g4'), ranking(mov,r=>r.producto,r=>r.buenas));
   const orden = new Map(); wip.forEach(r=>orden.set(r.etapa, r.orden));
   chBarrasH($('g5'), ranking(wip,r=>r.etapa,r=>r.cantidad).sort((a,b)=>(orden.get(a.label)||0)-(orden.get(b.label)||0)).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Lotes:</span> ${x.n}`})), {l:190, top:20});
@@ -281,7 +281,7 @@ function vGeneral(v){
 
 /* --- Mecanizado --- */
 function vMec(v){
-  const mov=movF().filter(r=>r.grupo==='1 Mecanizado');
+  const mov=movF().filter(r=>r.grupo==='Mecanizado');
   const mec=(DATA.mec||[]).filter(r=>prodOk(r.producto));
   const ok=sum(mov,r=>r.buenas), re=sum(mov,r=>r.rechazo), su=sum(mov,r=>r.setup), ex=sum(mov,r=>r.excedente);
   // pz/hora y min/pieza ponderados por operario
@@ -304,22 +304,23 @@ function vMec(v){
 /* --- Control de Calidad --- */
 function vQC(v){
   const qc=(DATA.qc||[]).filter(r=>prodOk(r.producto));
-  const piezas=sum(qc,r=>r.cantidad), rech=sum(qc,r=>r.rechazadas);
-  const lotes=new Set(qc.map(r=>r.lote)).size;
-  v.innerHTML = kpis([['Piezas controladas',fmt(piezas)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,piezas),1)+' %'],['Lotes controlados',fmt(lotes)]])
+  const mv=movF().filter(r=>r.grupo==='Control de Calidad');
+  const okq=sum(mv,r=>r.buenas), rech=sum(mv,r=>r.rechazo);
+  const lotes=new Set(mv.filter(r=>r.buenas>0).map(r=>r.lote)).size;
+  v.innerHTML = kpis([['Piezas controladas OK',fmt(okq)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,okq+rech),1)+' %'],['Lotes controlados',fmt(lotes)]])
     + grid(card('q1','c12','Piezas controladas por día','OK y rechazadas apiladas.'))
-    + grid(card('q2','c6','Piezas controladas por responsable','Suma de cantidad original.'), card('q3','c6','Minutos por pieza, promedio por responsable','Promedio de los controles con tiempo cargado.'))
+    + grid(card('q2','c6','Piezas controladas por responsable','Piezas OK.'), card('q3','c6','Minutos por pieza, promedio por responsable','Solo controles cargados con tiempo en la app de Control.'))
     + grid(card('q4','c6','% de rechazo por producto y medida','Solo combinaciones con 50 piezas o más.'), card('q5','c6','Rechazo por producto y medida','Tabla con mapa de calor.'))
-    + grid(card('q6','c12','Últimos lotes controlados','Los min/pieza fuera de lo normal quedan marcados.'))
+    + grid(card('q6','c12','Últimos lotes cargados en la app de Control','Con tiempos. Los min/pieza fuera de lo normal quedan marcados.'))
     + grid(`<div class="card c12"><p class="title">Resumen de cotas</p><p class="desc">Promedio, mínimo y máximo de cada cota medida, separado por tetón.</p><div class="row-sel"><select id="cP"></select><select id="cT"></select><select id="cM"></select></div><div id="q7"></div></div>`);
-  chColumnas($('q1'), porBucket(qc,r=>r.fecha,[r=>num(r.cantidad)-num(r.rechazadas),r=>r.rechazadas]), ['OK','Rechazadas'], ['var(--series-1)','var(--series-2)']);
-  chBarrasH($('q2'), ranking(qc,r=>r.responsable,r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Controles:</span> ${x.n}`})));
+  chColumnas($('q1'), porBucket(mv,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['OK','Rechazadas'], ['var(--series-1)','var(--series-2)']);
+  chBarrasH($('q2'), ranking(mv,r=>r.responsable,r=>r.buenas).map(x=>({...x,tip:`<br><span class="k">Piezas OK:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
   const mpp=[...groupBy(qc.filter(r=>r.min_pieza>0),r=>r.responsable).entries()].map(([k,a])=>({label:k,value:sum(a,r=>r.min_pieza)/a.length,tip:`<br><span class="k">Promedio:</span> ${fmt(sum(a,r=>r.min_pieza)/a.length,2)} min/pieza<br><span class="k">Controles con tiempo:</span> ${a.length}`})).sort((a,b)=>b.value-a.value);
   chBarrasH($('q3'), mpp, {dec:2});
-  const pm = rankingPctRechazo(qc, r=>(r.producto||'—')+' '+(r.medida||''), r=>num(r.cantidad)-num(r.rechazadas), r=>r.rechazadas, 50);
+  const pm = rankingPctRechazo(mv, r=>(r.producto||'—')+' '+(r.medida||''), r=>r.buenas, r=>r.rechazo, 50);
   chBarrasH($('q4'), pm, {color:'var(--series-2)',dec:1,suf:'%',l:190});
   tabla($('q5'), [{t:'Producto y medida',k:'label'},{t:'Controladas',k:'t',n:1},{t:'Rech.',k:'r',n:1},{t:'% rechazo',k:'value',n:1,dec:1,suf:'%',heat:heatPct}],
-    rankingPctRechazo(qc, r=>(r.producto||'—')+' '+(r.medida||''), r=>num(r.cantidad)-num(r.rechazadas), r=>r.rechazadas, 1));
+    rankingPctRechazo(mv, r=>(r.producto||'—')+' '+(r.medida||''), r=>r.buenas, r=>r.rechazo, 1));
   const heatM = x => x==null?'':x>=12?'var(--heat-3)':x>=6?'var(--heat-2)':x>=4?'var(--heat-1)':'';
   tabla($('q6'), [{t:'Fecha',k:r=>ddmm(r.fecha)},{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Medida',k:'medida'},{t:'Responsable',k:'responsable'},{t:'Cantidad',k:'cantidad',n:1},{t:'Rech.',k:'rechazadas',n:1},{t:'Tiempo neto (min)',k:'tiempo_min',n:1},{t:'Pausa (min)',k:'pausa_min',n:1},{t:'Min/pieza',k:'min_pieza',n:1,dec:2,heat:heatM}],
     qc.slice().reverse().slice(0,60));
@@ -346,39 +347,42 @@ function vBlast(v){
   const b=(DATA.blast||[]).filter(r=>prodOk(r.producto));
   const band=b.filter(r=>String(r.tipo||'').toLowerCase().startsWith('bandeja'));
   const ctl=b.filter(r=>String(r.tipo||'').toLowerCase()==='control');
-  const mov=movF().filter(r=>r.grupo==='5 Blasting');
-  const impl=sum(band,r=>r.cantidad), rech=sum(b,r=>r.rechazadas);
+  const mov=movF().filter(r=>r.grupo==='Blasting');
+  const blast=sum(mov,r=>r.buenas), rech=sum(mov,r=>r.rechazo), rebl=sum(mov,r=>r.reblasting);
   const prom=(arr,f)=>{ const a=arr.map(f).filter(x=>x>0); return a.length?a.reduce((s,x)=>s+x,0)/a.length:null; };
-  v.innerHTML = kpis([['Bandejas',fmt(band.length)],['Implantes en bandejas',fmt(impl)],['Rechazadas',fmt(rech)],['Ciclo neto promedio (min)',fmt(prom(band,r=>num(r.ciclo_neto)),0)]])
-    + grid(card('b1','c12','Implantes blastinados por día','Suma de implantes en bandejas.'))
-    + grid(card('b2','c6','Implantes por operario',''), card('b3','c6','Tiempo promedio por bandeja (min)','Armado, blastinado y control, cada uno por separado.'))
-    + grid(card('b4','c6','Piezas que salieron de Blasting','Buenas y rechazadas según movimientos.'), card('b5','c6','% de rechazo por producto','Según movimientos de Blasting.'))
-    + grid(card('b6','c12','Últimas bandejas y controles',''));
-  chColumnas($('b1'), porBucket(band,r=>r.dia,[r=>r.cantidad]), ['Implantes'], ['var(--series-1)'], {extra:d=>''});
+  v.innerHTML = kpis([['Piezas blastinadas',fmt(blast)],['Enviadas a reblasting',fmt(rebl)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,blast+rech),1)+' %']])
+    + grid(card('b1','c12','Piezas blastinadas por día','Blastinadas y rechazadas.'))
+    + grid(card('b4','c6','Piezas blastinadas por producto',''), card('b5','c6','% de rechazo por producto',''))
+    + grid(card('b2','c6','Implantes por operario','Según la planilla de Indicadores de Blasting (bandejas).'), card('b3','c6','Tiempo promedio por bandeja (min)','Armado, blastinado y control, según la planilla. Ciclo neto promedio: '+fmt(prom(band,r=>num(r.ciclo_neto)),0)+' min.'))
+    + grid(card('b6','c12','Últimas bandejas y controles','Planilla de Indicadores de Blasting.'));
+  chColumnas($('b1'), porBucket(mov,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Blastinadas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
+  chBarrasH($('b4'), ranking(mov,r=>r.producto,r=>r.buenas));
+  chBarrasH($('b5'), rankingPctRechazo(mov,r=>r.producto,r=>r.buenas,r=>r.rechazo,20), {color:'var(--series-2)',dec:1,suf:'%'});
   chBarrasH($('b2'), ranking(band,r=>r.operario,r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Implantes:</span> ${fmt(x.value)}<br><span class="k">Bandejas:</span> ${x.n}`})));
   chBarrasH($('b3'), [['Armado',r=>num(r.t_armado)],['Blastinado',r=>num(r.t_blastinado)],['Control',r=>num(r.t_control)]].map(([l,f])=>({label:l,value:prom(l==='Control'?b:band,f)||0})).filter(r=>r.value>0), {dec:1,suf:' min'});
-  chColumnas($('b4'), porBucket(mov,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Buenas','Rechazadas'], ['var(--series-1)','var(--series-2)'], {w:560,h:220});
-  chBarrasH($('b5'), rankingPctRechazo(mov,r=>r.producto,r=>r.buenas,r=>r.rechazo,20), {color:'var(--series-2)',dec:1,suf:'%'});
   tabla($('b6'), [{t:'Fecha',k:r=>ddmm(r.dia)},{t:'Tipo',k:'tipo'},{t:'Estado',k:'estado'},{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Operario',k:'operario'},{t:'Implantes',k:'cantidad',n:1},{t:'Rech.',k:'rechazadas',n:1},{t:'Armado',k:'t_armado',n:1},{t:'Blastinado',k:'t_blastinado',n:1},{t:'Control',k:'t_control',n:1},{t:'Ciclo neto',k:'ciclo_neto',n:1}],
     b.slice().reverse().slice(0,80));
 }
 
 /* --- Lavados (genérico) --- */
-function vLavado(v, sectores, titulo, grupoMov){
-  const l=(DATA.lav||[]).filter(r=>sectores.includes(r.sector)&&prodOk(r.producto));
-  const cant=sum(l,r=>r.cantidad), rech=sum(l,r=>r.rechazadas);
+function vLavado(v, sectores, titulo){
+  const l=movF().filter(r=>sectores.includes(etapaDe(r)) && (r.buenas>0||r.rechazo>0)).map(r=>({...r, sector:etapaDe(r)}));
+  const ok=sum(l,r=>r.buenas), rech=sum(l,r=>r.rechazo);
   const varios = sectores.length>1;
-  v.innerHTML = kpis([['Piezas lavadas',fmt(cant)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,cant),1)+' %'],['Lotes',fmt(new Set(l.map(r=>r.lote)).size)]])
-    + grid(card('l1','c12',`Piezas por día — ${titulo}`,'Cantidad lavada y rechazadas.'))
-    + grid(varios ? card('l2','c6','Piezas por etapa','') : card('l2','c6','Piezas por producto',''), card('l3','c6','Piezas por responsable',''))
+  const kp = varios
+    ? sectores.map(s=>[s, fmt(sum(l.filter(r=>r.sector===s),r=>r.buenas))])
+    : [['Piezas producidas',fmt(ok)],['Rechazadas',fmt(rech)],['% rechazo',fmt(pct(rech,ok+rech),1)+' %'],['Lotes',fmt(new Set(l.filter(r=>r.buenas>0).map(r=>r.lote)).size)]];
+  v.innerHTML = kpis(kp)
+    + grid(card('l1','c12',`Piezas por día — ${titulo}`, varios?'Piezas terminadas en cada sub-etapa (una pieza suma en cada sub-etapa que pasa) y rechazadas.':'Piezas terminadas y rechazadas.'))
+    + grid(varios ? card('l2','c6','Piezas por sub-etapa','') : card('l2','c6','Piezas por producto',''), card('l3','c6','Piezas por responsable',''))
     + grid(card('l4','c6','Piezas por medida','Top 15.'), card('l5','c6','% de rechazo por producto',''))
     + grid(card('l6','c12','Últimos registros',''));
-  chColumnas($('l1'), porBucket(l,r=>r.dia,[r=>num(r.cantidad)-num(r.rechazadas),r=>r.rechazadas]), ['OK','Rechazadas'], ['var(--series-1)','var(--series-2)']);
-  chBarrasH($('l2'), ranking(l, varios?(r=>r.sector):(r=>r.producto), r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
-  chBarrasH($('l3'), ranking(l,r=>r.responsable,r=>r.cantidad).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
-  chBarrasH($('l4'), ranking(l,r=>(r.producto||'')+' '+(r.medida||''),r=>r.cantidad), {l:190});
-  chBarrasH($('l5'), rankingPctRechazo(l,r=>r.producto,r=>num(r.cantidad)-num(r.rechazadas),r=>r.rechazadas,1), {color:'var(--series-2)',dec:1,suf:'%'});
-  tabla($('l6'), [{t:'Fecha',k:r=>ddmm(r.dia)}].concat(varios?[{t:'Etapa',k:'sector'}]:[]).concat([{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Responsable',k:'responsable'},{t:'Cantidad',k:'cantidad',n:1},{t:'Rech.',k:'rechazadas',n:1}]),
+  chColumnas($('l1'), porBucket(l,r=>r.dia,[r=>r.buenas,r=>r.rechazo]), ['Producidas','Rechazadas'], ['var(--series-1)','var(--series-2)']);
+  chBarrasH($('l2'), ranking(l, varios?(r=>r.sector):(r=>r.producto), r=>r.buenas).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
+  chBarrasH($('l3'), ranking(l,r=>r.responsable,r=>r.buenas).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Registros:</span> ${x.n}`})));
+  chBarrasH($('l4'), ranking(l,r=>(r.producto||'')+' '+(r.medida||''),r=>r.buenas), {l:190});
+  chBarrasH($('l5'), rankingPctRechazo(l,r=>r.producto,r=>r.buenas,r=>r.rechazo,1), {color:'var(--series-2)',dec:1,suf:'%'});
+  tabla($('l6'), [{t:'Fecha',k:r=>ddmm(r.dia)}].concat(varios?[{t:'Etapa',k:'sector'}]:[]).concat([{t:'Lote',k:'lote'},{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:r=>teton(r.teton)},{t:'Responsable',k:'responsable'},{t:'Producidas',k:'buenas',n:1},{t:'Rech.',k:'rechazo',n:1}]),
     l.slice().reverse().slice(0,80));
 }
 
@@ -422,14 +426,15 @@ $('btnAct').addEventListener('click', cargar);
 
 function llenarProductos(){
   const set=new Set();
-  ['mov','qc','blast','lav','mec','wip'].forEach(k=>(DATA[k]||[]).forEach(r=>{ if(r.producto) set.add(r.producto); }));
+  ['mov','qc','blast','mec','wip'].forEach(k=>(DATA[k]||[]).forEach(r=>{ if(r.producto) set.add(r.producto); }));
   const sel=$('fProducto'), cur=sel.value;
   sel.innerHTML='<option value="">Todos</option>'+[...set].sort().map(p=>`<option${p===cur?' selected':''}>${esc(p)}</option>`).join('');
 }
 
 async function cargar(){
   $('err').innerHTML=''; $('subInfo').textContent='Cargando…';
-  const d=new Date(); d.setDate(d.getDate()-dias()); const desde=d.toISOString().slice(0,10);
+  const d=new Date(); d.setDate(d.getDate()-dias());
+  const desde=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); // fecha local (Argentina)
   try{
     const [a,b] = await Promise.all([ sb.rpc('graficos_datos',{p_desde:desde}), sb.rpc('graficos_cotas',{p_desde:desde}) ]);
     if(a.error) throw a.error;
