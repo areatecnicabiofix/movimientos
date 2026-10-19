@@ -49,6 +49,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       });
     };
   }
+  window.BIOFIX_LAVADOS_INVALIDAR = function () { cache = null; cacheT = 0; };
   window.BIOFIX_LOCAL = {};
   Object.keys(SACAR).forEach(function (fn) { window.BIOFIX_LOCAL[fn] = planB(fn); });
 
@@ -122,6 +123,16 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   .trabajo a{ color:#0369a1; font-weight:700; }
   #diag{ display:none; margin-bottom:12px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:600; white-space:pre-wrap; }
   #diag.suave{ background:#fef3c7; border-color:#fbbf24; color:#92400e; }
+  .acciones{ display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .btn-mini:disabled{ opacity:.45; cursor:not-allowed; }
+  @media (max-width:600px){
+    body{ padding:10px; }
+    .card{ padding:12px; }
+    .acciones{ justify-content:stretch; }
+    .acciones .btn{ flex:1 1 100%; margin-top:6px; }
+    .acciones > span{ flex:1 1 100%; }
+    .tab{ font-size:13px; padding:10px 6px; }
+  }
 </style>
 </head>
 <body>
@@ -190,16 +201,16 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
             <option>Lourdes Deasis</option><option>Gabriela Goritz</option>
           </select>
         </div>
-        <div><label>Cantidad</label><input id="g_cant" type="number" min="1" oninput="ggGuardarEstado()"></div>
-        <div><label>Rechazadas</label><input id="g_rech" type="number" value="0" min="0" oninput="ggGuardarEstado()"></div>
+        <div><label>Cantidad</label><input id="g_cant" type="number" min="1" step="1" inputmode="numeric" oninput="ggGuardarEstado()"></div>
+        <div><label>Rechazadas</label><input id="g_rech" type="number" value="0" min="0" step="1" inputmode="numeric" oninput="ggGuardarEstado()"></div>
       </div>
       <div style="margin-top:12px;">
         <label>Observaciones</label>
         <textarea id="g_obs" rows="2" placeholder="Notas..." style="resize:none;" oninput="ggGuardarEstado()"></textarea>
       </div>
-      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+      <div class="acciones">
         <span id="g_msg" style="font-size:13px;"></span>
-        <button class="btn" style="background:#64748b;" onclick="g_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
+        <button class="btn" id="g_btnAgregar" style="background:#64748b;" onclick="g_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
         <button class="btn" id="g_btn" onclick="g_registrarSolo()">Registrar Lavado Grueso (solo este)</button>
       </div>
     </div>
@@ -216,8 +227,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
           <tbody id="g_bodyGrupo"></tbody>
         </table>
       </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
-        <button class="btn" style="background:#64748b; margin:0;" onclick="g_limpiarGrupo()">Limpiar Grupo</button>
+      <div class="acciones" style="margin-top:12px;">
+        <button class="btn" id="g_btnLimpiarGrupo" style="background:#64748b; margin:0;" onclick="g_limpiarGrupo()">Limpiar Grupo</button>
         <button class="btn" id="g_btnGrupo" style="background:#16a34a; margin:0;" onclick="g_registrarGrupo()">Registrar Grupo Completo</button>
       </div>
     </div>
@@ -227,7 +238,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   <div id="tabFinal" class="hide">
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
       <h2>1. Seleccionar lote (desde Blasting o componente ya lavado en Grueso)</h2>
-      <p class="empty" style="margin-bottom:8px;">Los componentes se ingresan en la pestaña Lavado Grueso; después de su Lavado Grueso aparecen acá.</p>
+      <p class="empty" style="margin-bottom:8px;">Acá aparecen los lotes que vienen de Blasting y los componentes que ya pasaron por Lavado Grueso.</p>
       <div class="grid-3">
         <div><label>Lotes disponibles</label><select id="f_combo" onchange="f_sel()"><option value="">Cargando lotes...</option></select></div>
         <div><label>Cantidad disponible</label><div id="f_disp" class="badge-stock">0 u.</div></div>
@@ -258,11 +269,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
             <option>Lourdes Deasis</option><option>Gabriela Goritz</option>
           </select>
         </div>
-        <div><label>Cantidad</label><input id="f_cant" type="number" min="1" oninput="lfGuardarEstado()"></div>
+        <div><label>Cantidad</label><input id="f_cant" type="number" min="1" step="1" inputmode="numeric" oninput="lfGuardarEstado()"></div>
         <!-- Rechazadas: solo para tapones / componentes (registro como Final) -->
-        <div id="f_rechWrap" style="display:none;"><label>Rechazadas</label><input id="f_rech" type="number" value="0" min="0" oninput="lfGuardarEstado()"></div>
+        <div id="f_rechWrap" style="display:none;"><label>Rechazadas</label><input id="f_rech" type="number" value="0" min="0" step="1" inputmode="numeric" oninput="lfGuardarEstado()"></div>
       </div>
-      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+      <div class="acciones">
         <button class="btn" id="f_btnAgregarGrupo" style="background:#64748b;" onclick="f_agregarAlGrupo()">Agregar al Grupo de Lotes</button>
         <button class="btn" id="f_btnTapon" style="background:#16a34a; display:none;" onclick="f_registrarTapon()">Registrar como Final (sin pasos ni monitoreo)</button>
       </div>
@@ -326,7 +337,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     <div class="card">
       <label>Observaciones</label>
       <textarea id="f_obs" rows="2" placeholder="Notas..." style="resize:none;" oninput="lfGuardarEstado()"></textarea>
-      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+      <div class="acciones">
         <span id="f_msg" style="font-size:13px;"></span>
         <button class="btn" id="f_btnGrupo" onclick="f_registrarGrupo()">Registrar Grupo Completo</button>
       </div>
@@ -391,6 +402,25 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var d = new Date();
     return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
   }
+  /* La fecha se toma al momento de registrar (si la tablet queda abierta de un día a otro, no queda la de ayer). */
+  function actualizarFecha_() { setVal_('g_fecha', hoy()); setVal_('f_fecha', hoy()); }
+  /* Clave estable de un lote (el desplegable ya no depende de la posición en la lista). */
+  function clave_(x) { return [x.producto, x.teton, x.medida, x.lote, x.refControl].map(function (v) { return String(v == null ? '' : v).trim(); }).join('\u00a6'); }
+  function esc_(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  /* Entero >= 0; NaN si no es válido (vacío = NaN). */
+  function entero_(v) { v = String(v == null ? '' : v).trim(); if (v === '') return NaN; var n = Number(v); return (Number.isInteger(n) && n >= 0) ? n : NaN; }
+  function dispDe_(id) { return Number(String(document.getElementById(id).textContent).replace(/[^\d]/g, '')) || 0; }
+  /* Lotes recién registrados: se ocultan hasta que la lista traiga el saldo nuevo (evita registrarlos dos veces). */
+  var RECIENTES = {};
+  function marcarReciente_(item, dispAntes) { RECIENTES[clave_(item)] = { disp: Number(dispAntes) || 0, hasta: Date.now() + 3 * 60000 }; if (window.BIOFIX_LAVADOS_INVALIDAR) window.BIOFIX_LAVADOS_INVALIDAR(); }
+  function desmarcarReciente_(item) { delete RECIENTES[clave_(item)]; }
+  function ocultoPorReciente_(x) {
+    var r = RECIENTES[clave_(x)];
+    if (!r) return false;
+    if (Date.now() > r.hasta || Number(x.disponible || 0) !== r.disp) { delete RECIENTES[clave_(x)]; return false; }
+    return true;   // la lista todavía muestra el saldo de antes de registrar
+  }
+
   function pestanaActiva_() {
     return document.getElementById('tabFinal').className === 'hide' ? 'grueso' : 'final';
   }
@@ -503,7 +533,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         campos: {
           fila: val_('f_fila'), prod: val_('f_prod'), med: val_('f_med'), loteReal: val_('f_loteReal'),
           teton: val_('f_teton'), disp: document.getElementById('f_disp').textContent, ref: val_('f_refControl'),
-          lotelav: val_('f_lotelav'), resp: val_('f_resp'), cant: val_('f_cant'), rech: val_('f_rech')
+          lotelav: val_('f_lotelav'), resp: val_('f_resp'), cant: val_('f_cant'), rech: val_('f_rech'), refOrig: F_REF_ORIG
         },
         grupo: F_AGRUPADOS,
         tiempos: tiempos,
@@ -534,7 +564,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         setVal_('f_fila', c.fila); setVal_('f_prod', c.prod); setVal_('f_med', c.med); setVal_('f_loteReal', c.loteReal);
         setVal_('f_lote', c.loteReal + (c.ref ? (' - ' + c.ref) : ''));
         setVal_('f_teton', c.teton); document.getElementById('f_disp').textContent = c.disp || '0 u.';
-        setVal_('f_refControl', c.ref); setVal_('f_ref', c.ref);
+        setVal_('f_refControl', c.ref); setVal_('f_ref', c.ref); F_REF_ORIG = c.refOrig != null ? c.refOrig : (c.ref || '');
         setVal_('f_lotelav', c.lotelav); setVal_('f_resp', c.resp); setVal_('f_cant', c.cant);
         setVal_('f_rech', (c.rech != null && c.rech !== '') ? c.rech : 0);
       }
@@ -618,7 +648,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         clearTimeout(timer); G_EN_CURSO = false;
         if (mi !== G_CARGA_SEQ) return;
         quitarDiag('lg_error'); quitarDiag('saturado'); quitarDiag('tarda_lgObtenerDisponibles');
-        G = res || []; g_combo(forzar);
+        G = res || []; g_combo(forzar); g_verificarSeleccion_();
       })
       .withFailureHandler(function(e){
         clearTimeout(timer); G_EN_CURSO = false;
@@ -630,7 +660,21 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .lgObtenerDisponibles();
   }
   function g_estaEnGrupo_(x) {
-    return G_AGRUPADOS.some(function(g){ return g.lote === x.lote && g.producto === x.producto && g.medida === x.medida; });
+    return G_AGRUPADOS.some(function(g){ return g.lote === x.lote && g.producto === x.producto && g.medida === x.medida; }) || ocultoPorReciente_(x);
+  }
+  function g_claveForm_() {
+    return val_('g_loteReal') ? clave_({ producto: val_('g_prod'), teton: val_('g_teton'), medida: val_('g_med'), lote: val_('g_loteReal'), refControl: val_('g_refControl') }) : '';
+  }
+  /* Si el lote que está en el formulario ya no está disponible (lo registró otro, o es de días atrás), se limpia y se avisa. */
+  function g_verificarSeleccion_() {
+    var k = g_claveForm_();
+    if (!k || G_REGISTRANDO) return;
+    var ae = document.activeElement;
+    if (G.some(function (x) { return clave_(x) === k; })) return;
+    if (ae && ae.id && /^g_/.test(ae.id)) return;   // no se borra mientras escribe
+    var lote = val_('g_loteReal');
+    g_limpiar(); ggGuardarEstado();
+    msg('g_msg', 'El lote ' + lote + ' ya no está disponible para Lavado Grueso. Elegilo de nuevo de la lista.', false);
   }
   function g_pintarOpciones_() {
     var c = document.getElementById('g_combo');
@@ -641,8 +685,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       c.innerHTML = '<option value="">' + (G.length ? 'Todos los lotes disponibles ya están en el grupo' : 'No hay lotes esperando lavado grueso') + '</option>';
     } else {
       c.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
-        disponibles.map(function(o){ var x = o.item; return '<option value="'+o.idx+'">'+x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u</option>'; }).join('');
-      if (valorPrevio !== '' && disponibles.some(function(o){ return String(o.idx) === valorPrevio; })) c.value = valorPrevio;
+        disponibles.map(function(o){ var x = o.item; return '<option value="'+esc_(clave_(x))+'">'+esc_(x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u')+'</option>'; }).join('');
+      var quiero = g_claveForm_() || valorPrevio;
+      if (quiero && disponibles.some(function(o){ return clave_(o.item) === quiero; })) c.value = quiero;
     }
     c.dataset.pintado = '1';
   }
@@ -656,12 +701,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       return;
     }
     g_pintarOpciones_();
-    if (!yaSeleccionado || forzar) { if (forzar) g_limpiar(); }
   }
   function g_sel() {
-    var idx = val_('g_combo');
-    if (idx === '' || !G[idx]) { g_limpiar(); return; }
-    var it = G[idx];
+    var k = val_('g_combo');
+    var it = k ? G.filter(function (x) { return clave_(x) === k; })[0] : null;
+    if (!it) { g_limpiar(); ggGuardarEstado(); return; }
     setVal_('g_fila', it.fila || '');
     setVal_('g_prod', it.producto || '');
     setVal_('g_med', it.medida || '');
@@ -684,21 +728,32 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function g_datosActuales() {
     return {
       producto: val_('g_prod'), medida: val_('g_med'), lote: val_('g_loteReal'), teton: val_('g_teton'),
-      loteLavado: val_('g_lotelav'), fecha: val_('g_fecha'), responsable: val_('g_resp'),
+      loteLavado: val_('g_lotelav'), fecha: hoy(), responsable: val_('g_resp'),
       cantidad: val_('g_cant'), rechazadas: val_('g_rech'), observaciones: val_('g_obs'),
       refControl: val_('g_refControl')
     };
+  }
+  /* Cantidad entera, no mayor a lo disponible; rechazadas enteras entre 0 y la cantidad. Devuelve el error o ''. */
+  function g_validarCantidades_(d) {
+    var cant = entero_(d.cantidad), rech = entero_(d.rechazadas === '' ? 0 : d.rechazadas), disp = dispDe_('g_disp');
+    if (isNaN(cant) || cant <= 0) return 'La cantidad tiene que ser un número entero mayor a 0.';
+    if (disp && cant > disp) return 'La cantidad (' + cant + ') supera lo disponible (' + disp + ').';
+    if (isNaN(rech)) return 'Las rechazadas tienen que ser un número entero, 0 o más.';
+    if (rech > cant) return 'Las rechazadas (' + rech + ') no pueden superar la cantidad (' + cant + ').';
+    d.cantidad = cant; d.rechazadas = rech;
+    return '';
   }
   function g_registrarSolo() {
     var d = g_datosActuales();
     if (!d.producto || !d.lote) { msg('g_msg','Seleccioná un lote.', false); return; }
     if (!d.responsable) { msg('g_msg','Falta el responsable.', false); return; }
-    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('g_msg','Falta la cantidad.', false); return; }
+    var errC = g_validarCantidades_(d); if (errC) { msg('g_msg', errC, false); return; }
     if (!d.loteLavado) { msg('g_msg','Escribí el lote de lavado grueso.', false); return; }
-    var b = document.getElementById('g_btn'); b.disabled = true;
+    var b = document.getElementById('g_btn'); if (b.disabled) return; b.disabled = true;
+    var dispAntes = dispDe_('g_disp');
     msg('g_msg','Guardando…', true);
     google.script.run
-      .withSuccessHandler(function(r){ b.disabled = false; msg('g_msg', (r && r.msg) || 'Registrado.', true); g_limpiar(); ggLimpiarEstado(); g_cargar(true); })
+      .withSuccessHandler(function(r){ b.disabled = false; marcarReciente_(d, dispAntes); msg('g_msg', (r && r.msg) || 'Registrado.', true); g_limpiar(); ggLimpiarEstado(); g_cargar(true); })
       .withFailureHandler(function(e){
         b.disabled = false;
         var t = textoError_(e);
@@ -708,9 +763,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .lgRegistrar(d);
   }
   function g_agregarAlGrupo() {
+    if (G_REGISTRANDO) { msg('g_msg','Esperá a que termine de registrarse el grupo.', false); return; }
     var d = g_datosActuales();
     if (!d.producto || !d.lote) { msg('g_msg','Seleccioná un lote primero.', false); return; }
-    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('g_msg','Completá la cantidad.', false); return; }
+    var errC = g_validarCantidades_(d); if (errC) { msg('g_msg', errC, false); return; }
+    d.dispAntes = dispDe_('g_disp');
     if (!d.responsable) { msg('g_msg','Elegí el Responsable antes de agregar al grupo.', false); return; }
     if (G_AGRUPADOS.some(function(x){ return x.lote === d.lote && x.producto === d.producto; })) { msg('g_msg','Este lote ya está en el grupo.', false); return; }
     G_AGRUPADOS.push(d);
@@ -723,20 +780,27 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     cont.style.display = 'block';
     tbody.innerHTML = G_AGRUPADOS.map(function(x, idx){
       return '<tr>' +
-        '<td><b>'+x.producto+'</b> ('+x.lote+')'+(x.teton?' <span style="color:#94a3b8;">· '+x.teton+'</span>':'')+'</td>' +
-        '<td>'+x.medida+'</td>' +
-        '<td style="text-align:center; font-weight:700;">'+(x.refControl || '—')+'</td>' +
-        '<td><input type="text" value="'+(x.loteLavado||'')+'" placeholder="Ej: LG-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'" onchange="g_actualizarLoteLavado('+idx+',this.value)"></td>' +
-        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+(x.responsable || 'FALTA')+'</td>' +
-        '<td style="text-align:center;">'+x.cantidad+'u</td>' +
-        '<td style="text-align:center;">'+(x.rechazadas||0)+'u</td>' +
-        '<td style="text-align:center;"><button class="btn-mini" style="background:#ef4444;color:#fff;" onclick="g_quitarDelGrupo('+idx+')">Quitar</button></td>' +
+        '<td><b>'+esc_(x.producto)+'</b> ('+esc_(x.lote)+')'+(x.teton?' <span style="color:#94a3b8;">· '+esc_(x.teton)+'</span>':'')+'</td>' +
+        '<td>'+esc_(x.medida)+'</td>' +
+        '<td style="text-align:center; font-weight:700;">'+esc_(x.refControl || '—')+'</td>' +
+        '<td><input type="text" value="'+esc_(x.loteLavado||'')+'" placeholder="Ej: LG-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'"'+(G_REGISTRANDO?' disabled':'')+' onchange="g_actualizarLoteLavado('+idx+',this.value)"></td>' +
+        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+esc_(x.responsable || 'FALTA')+'</td>' +
+        '<td style="text-align:center;">'+esc_(x.cantidad)+'u</td>' +
+        '<td style="text-align:center;">'+esc_(x.rechazadas||0)+'u</td>' +
+        '<td style="text-align:center;"><button class="btn-mini" style="background:#ef4444;color:#fff;"'+(G_REGISTRANDO?' disabled':'')+' onclick="g_quitarDelGrupo('+idx+')">Quitar</button></td>' +
       '</tr>';
     }).join('');
   }
-  function g_actualizarLoteLavado(idx, v) { G_AGRUPADOS[idx].loteLavado = v; ggGuardarEstado(); }
-  function g_quitarDelGrupo(idx) { G_AGRUPADOS.splice(idx, 1); g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); }
-  function g_limpiarGrupo() { G_AGRUPADOS = []; g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); msg('g_msg','Grupo vaciado.', true); }
+  function g_actualizarLoteLavado(idx, v) { if (G_REGISTRANDO || !G_AGRUPADOS[idx]) return; G_AGRUPADOS[idx].loteLavado = v; ggGuardarEstado(); }
+  function g_quitarDelGrupo(idx) { if (G_REGISTRANDO) return; G_AGRUPADOS.splice(idx, 1); g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); }
+  function g_limpiarGrupo() { if (G_REGISTRANDO) return; G_AGRUPADOS = []; g_renderGrupo(); g_pintarOpciones_(); ggGuardarEstado(); msg('g_msg','Grupo vaciado.', true); }
+  /* Mientras se registra el grupo no se puede tocar (Quitar / Limpiar / Agregar). */
+  var G_REGISTRANDO = false;
+  function g_bloquearGrupo_(si) {
+    G_REGISTRANDO = si;
+    ['g_btnGrupo', 'g_btnLimpiarGrupo', 'g_btnAgregar'].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = si; });
+    g_renderGrupo();
+  }
   function g_registrarGrupo() {
     if (!G_AGRUPADOS.length) { msg('g_msg','Agregá lotes al grupo antes de registrar.', false); return; }
     var sinLote = G_AGRUPADOS.filter(function(x){ return !x.loteLavado; });
@@ -749,14 +813,19 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       msg('g_msg', 'No se puede registrar el grupo: ' + partes.join(' y ') + '.', false);
       return;
     }
-    document.getElementById('g_btnGrupo').disabled = true;
-    g_procesarGrupoSecuencial(0, [], []);
+    if (G_REGISTRANDO) return;
+    var lista = G_AGRUPADOS.slice();          // copia fija: aunque cambie la pantalla, se registra exactamente esto
+    var fecha = hoy();
+    lista.forEach(function (it) { it.fecha = fecha; });
+    g_bloquearGrupo_(true);
+    msg('g_msg', 'Registrando ' + lista.length + ' lote(s)…', true);
+    g_procesarGrupoSecuencial(lista, 0, [], []);
   }
-  function g_procesarGrupoSecuencial(index, exitosos, fallidos) {
-    if (index >= G_AGRUPADOS.length) {
-      document.getElementById('g_btnGrupo').disabled = false;
+  function g_procesarGrupoSecuencial(lista, index, exitosos, fallidos) {
+    if (index >= lista.length) {
+      exitosos.forEach(function (it) { marcarReciente_(it, it.dispAntes); });
       G_AGRUPADOS = fallidos.map(function(f){ return f.item; });
-      g_renderGrupo();
+      g_bloquearGrupo_(false);
       g_cargar(true);
       if (!fallidos.length) {
         ggLimpiarEstado();
@@ -768,16 +837,17 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       }
       return;
     }
-    var item = G_AGRUPADOS[index];
+    var item = lista[index];
+    var enviar = Object.assign({}, item); delete enviar.dispAntes;
     google.script.run
-      .withSuccessHandler(function(){ exitosos.push(item); g_procesarGrupoSecuencial(index + 1, exitosos, fallidos); })
+      .withSuccessHandler(function(){ exitosos.push(item); g_procesarGrupoSecuencial(lista, index + 1, exitosos, fallidos); })
       .withFailureHandler(function(e){
         var t = textoError_(e);
         if (esSaturado_(t)) marcarSaturado_();
         fallidos.push({ item: item, error: t });
-        g_procesarGrupoSecuencial(index + 1, exitosos, fallidos);
+        g_procesarGrupoSecuencial(lista, index + 1, exitosos, fallidos);
       })
-      .lgRegistrar(item);
+      .lgRegistrar(enviar);
   }
 
 
@@ -793,7 +863,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         clearTimeout(timer); F_EN_CURSO = false;
         if (mi !== F_CARGA_SEQ) return;
         quitarDiag('lf_error'); quitarDiag('saturado'); quitarDiag('tarda_lfObtenerDisponibles');
-        F = res || []; f_combo(forzar);
+        F = res || []; f_combo(forzar); f_verificarSeleccion_();
       })
       .withFailureHandler(function(e){
         clearTimeout(timer); F_EN_CURSO = false;
@@ -807,7 +877,21 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function f_mismoLote_(a, b) { return a.lote === b.lote && a.producto === b.producto && a.medida === b.medida; }
   function f_estaEnGrupo_(x) {
     return F_AGRUPADOS.some(function(g){ return f_mismoLote_(g, x); }) ||
-           F_ENVIANDO.some(function(g){ return f_mismoLote_(g, x); });
+           F_ENVIANDO.some(function(g){ return f_mismoLote_(g, x); }) || ocultoPorReciente_(x);
+  }
+  function f_claveForm_() {
+    return val_('f_loteReal') ? clave_({ producto: val_('f_prod'), teton: val_('f_teton'), medida: val_('f_med'), lote: val_('f_loteReal'), refControl: F_REF_ORIG }) : '';
+  }
+  var F_REF_ORIG = '';   // REF con que vino el lote (la del formulario se puede escribir a mano)
+  function f_verificarSeleccion_() {
+    if (!val_('f_loteReal')) return;
+    var it = { producto: val_('f_prod'), medida: val_('f_med'), lote: val_('f_loteReal') };
+    if (F.some(function (x) { return f_mismoLote_(x, it); })) return;
+    var ae = document.activeElement;
+    if (ae && ae.id && /^f_(resp|cant|rech|lotelav|ref)$/.test(ae.id)) return;
+    var lote = it.lote;
+    f_limpiar(); lfGuardarEstado();
+    msg('f_msg', 'El lote ' + lote + ' ya no está disponible para Lavado Final. Elegilo de nuevo de la lista.', false);
   }
   function f_pintarOpciones_() {
     var c = document.getElementById('f_combo');
@@ -818,8 +902,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       c.innerHTML = '<option value="">' + (F.length ? 'Todos los lotes disponibles ya están en el grupo' : 'No hay lotes esperando lavado final') + '</option>';
     } else {
       c.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
-        disponibles.map(function(o){ var x = o.item; return '<option value="'+o.idx+'">'+x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u</option>'; }).join('');
-      if (valorPrevio !== '' && disponibles.some(function(o){ return String(o.idx) === valorPrevio; })) c.value = valorPrevio;
+        disponibles.map(function(o){ var x = o.item; return '<option value="'+esc_(clave_(x))+'">'+esc_(x.producto+' — '+x.medida+' ('+x.lote+') · '+(x.disponible||0)+'u')+'</option>'; }).join('');
+      var quiero = f_claveForm_() || valorPrevio;
+      if (quiero && disponibles.some(function(o){ return clave_(o.item) === quiero; })) c.value = quiero;
     }
     c.dataset.pintado = '1';
   }
@@ -835,9 +920,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     f_pintarOpciones_();
   }
   function f_sel() {
-    var idx = val_('f_combo');
-    if (idx === '' || !F[idx]) { f_limpiar(); return; }
-    var it = F[idx];
+    var k = val_('f_combo');
+    var it = k ? F.filter(function (x) { return clave_(x) === k; })[0] : null;
+    if (!it) { f_limpiar(); lfGuardarEstado(); return; }
+    F_REF_ORIG = it.refControl || '';
     setVal_('f_fila', it.fila || '');
     setVal_('f_prod', it.producto || '');
     setVal_('f_med', it.medida || '');
@@ -855,13 +941,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   function f_limpiar() {
     ['f_fila','f_loteReal','f_prod','f_med','f_lote','f_teton','f_cant','f_lotelav','f_refControl','f_ref'].forEach(function(id){ setVal_(id, ''); });
     setVal_('f_rech', 0);
+    F_REF_ORIG = '';
     document.getElementById('f_disp').textContent = '0 u.';
     f_actualizarModoTapon_();
   }
   function f_datosActuales() {
     return {
       producto: val_('f_prod'), medida: val_('f_med'), lote: val_('f_loteReal'), teton: val_('f_teton'),
-      loteLavado: val_('f_lotelav'), fecha: val_('f_fecha'), responsable: val_('f_resp'),
+      loteLavado: val_('f_lotelav'), fecha: hoy(), responsable: val_('f_resp'),
       cantidad: val_('f_cant'), observaciones: val_('f_obs'), refControl: val_('f_refControl')
     };
   }
@@ -920,17 +1007,19 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var d = { producto: val_('gi_prod'), cantidad: val_('gi_cant'), lote: val_('gi_lote').trim(), responsable: val_('gi_resp') };
     if (F_INSTRUMENTAL_MED[d.producto]) d.medida = F_INSTRUMENTAL_MED[d.producto];
     if (!d.producto) { msg('gi_msg', 'Elegí el destornillador.', false); return; }
-    if (!(Number(d.cantidad) > 0)) { msg('gi_msg', 'Completá la cantidad.', false); return; }
+    if (!(entero_(d.cantidad) > 0)) { msg('gi_msg', 'La cantidad tiene que ser un número entero mayor a 0.', false); return; }
     if (!d.lote) { msg('gi_msg', 'Completá el lote.', false); return; }
     if (!d.responsable) { msg('gi_msg', 'Elegí el responsable.', false); return; }
     var btn = document.getElementById('gi_btn');
+    if (btn.disabled) return;
     btn.disabled = true; msg('gi_msg', 'Registrando…', true);
     google.script.run
       .withSuccessHandler(function (r) {
         btn.disabled = false;
         msg('gi_msg', (r && r.msg) || 'Ingreso registrado.', true);
         setVal_('gi_cant', ''); setVal_('gi_lote', '');
-        g_cargar(true);
+        if (window.BIOFIX_LAVADOS_INVALIDAR) window.BIOFIX_LAVADOS_INVALIDAR();
+        g_cargar(true);   // refresca la lista sin borrar el lote que se estaba cargando
       })
       .withFailureHandler(function (e) { btn.disabled = false; msg('gi_msg', textoError_(e), false); })
       .lfIngresoComponente(d);
@@ -1012,7 +1101,10 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var d = f_datosActuales();
     if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
     if (f_esTapon_(d.producto)) { msg('f_msg','Los tapones y componentes se registran solos con "Registrar como Final".', false); return; }
-    if (!d.cantidad || Number(d.cantidad) <= 0) { msg('f_msg','Completá la cantidad.', false); return; }
+    var cantF = entero_(d.cantidad), dispF = dispDe_('f_disp');
+    if (isNaN(cantF) || cantF <= 0) { msg('f_msg','La cantidad tiene que ser un número entero mayor a 0.', false); return; }
+    if (dispF && cantF > dispF) { msg('f_msg','La cantidad (' + cantF + ') supera lo disponible (' + dispF + ').', false); return; }
+    d.cantidad = cantF; d.dispAntes = dispF;
     if (!d.responsable) { msg('f_msg','Elegí el Responsable antes de agregar al grupo.', false); return; }
     if (F_AGRUPADOS.some(function(x){ return x.lote === d.lote && x.producto === d.producto; })) { msg('f_msg','Este lote ya está en el grupo.', false); return; }
     F_AGRUPADOS.push(d);
@@ -1025,12 +1117,12 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     cont.style.display = 'block';
     tbody.innerHTML = F_AGRUPADOS.map(function(x, idx){
       return '<tr>' +
-        '<td><b>'+x.producto+'</b> ('+x.lote+')'+(x.teton?' <span style="color:#94a3b8;">· '+x.teton+'</span>':'')+'</td>' +
-        '<td>'+x.medida+'</td>' +
-        '<td><input type="text" value="'+(x.refControl||'')+'" placeholder="Sin REF" style="text-align:center; font-weight:700;'+(!x.refControl?'border-color:#f59e0b;background:#fffbeb;':'')+'" onchange="f_actualizarRefControl('+idx+',this.value)"></td>' +
-        '<td><input type="text" value="'+(x.loteLavado||'')+'" placeholder="Ej: LF-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'" onchange="f_actualizarLoteLavado('+idx+',this.value)"></td>' +
-        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+(x.responsable || 'FALTA')+'</td>' +
-        '<td style="text-align:center;">'+x.cantidad+'u</td>' +
+        '<td><b>'+esc_(x.producto)+'</b> ('+esc_(x.lote)+')'+(x.teton?' <span style="color:#94a3b8;">· '+esc_(x.teton)+'</span>':'')+'</td>' +
+        '<td>'+esc_(x.medida)+'</td>' +
+        '<td><input type="text" value="'+esc_(x.refControl||'')+'" placeholder="Sin REF" style="text-align:center; font-weight:700;'+(!x.refControl?'border-color:#f59e0b;background:#fffbeb;':'')+'" onchange="f_actualizarRefControl('+idx+',this.value)"></td>' +
+        '<td><input type="text" value="'+esc_(x.loteLavado||'')+'" placeholder="Ej: LF-00'+(idx+1)+'" style="'+(!x.loteLavado?'border-color:#ef4444;background:#fef2f2;':'')+'" onchange="f_actualizarLoteLavado('+idx+',this.value)"></td>' +
+        '<td style="'+(!x.responsable?'color:#ef4444;font-weight:700;':'')+'">'+esc_(x.responsable || 'FALTA')+'</td>' +
+        '<td style="text-align:center;">'+esc_(x.cantidad)+'u</td>' +
         '<td style="text-align:center;"><button class="btn-mini" style="background:#ef4444;color:#fff;" onclick="f_quitarDelGrupo('+idx+')">Quitar</button></td>' +
       '</tr>';
     }).join('');
@@ -1061,8 +1153,48 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .withFailureHandler(function (e) { f_trabajoSet_(id, textoBase + ' (No se pudo generar el PDF del día: ' + textoError_(e) + ')', 'ok'); })
       .lfGenerarPdfDelDiaEnSegundoPlano();
   }
-  function f_enviarEnSegundoPlano_(items, comunes) {
+  /* Copia de lo cargado en el Proceso químico, para devolverlo si el registro falla. */
+  function f_capturarProceso_() {
+    var t = {}; F_PASOS.forEach(function (p) { t[p] = val_(f_idTiempo(p)); });
+    return { tiempos: t, horaIni: val_('f_horaIni'), horaFin: val_('f_horaFin'), obs: val_('f_obs'),
+             cond: { a: val_('f_condInicial'), b: val_('f_cond1erDescarte'), c: val_('f_condUltimoDescarte') } };
+  }
+  function f_procesoVacio_() {
+    var p = f_capturarProceso_();
+    return !p.horaIni && !p.horaFin && !p.obs && !p.cond.a && !p.cond.b && !p.cond.c && F_PASOS.every(function (x) { return !p.tiempos[x]; });
+  }
+  function f_restaurarProceso_(p) {
+    if (!p || !f_procesoVacio_()) return false;   // si ya empezó a cargar otro proceso, no se pisa
+    F_PASOS.forEach(function (x) { setVal_(f_idTiempo(x), p.tiempos[x] || ''); var el = document.getElementById(f_idTiempo(x)); if (el) f_validarTiempo(el); });
+    setVal_('f_horaIni', p.horaIni); setVal_('f_horaFin', p.horaFin); setVal_('f_obs', p.obs);
+    setVal_('f_condInicial', p.cond.a); setVal_('f_cond1erDescarte', p.cond.b); setVal_('f_condUltimoDescarte', p.cond.c);
+    Object.keys(F_COND_RANGOS).forEach(function (id) { var el = document.getElementById('f_' + id); if (el) f_revisarConductimetro(el, F_COND_RANGOS[id].min, F_COND_RANGOS[id].max); });
+    return true;
+  }
+  /* Devuelve lotes que no se registraron: los del grupo químico vuelven al grupo; un tapón vuelve a su formulario. */
+  function f_devolver_(lista, proceso) {
+    var grupo = [], tapon = null;
+    lista.forEach(function (it) { desmarcarReciente_(it); if (it.rechazadasTapon != null || f_esTapon_(it.producto)) tapon = tapon || it; else grupo.push(it); });
+    grupo.forEach(function (it) { if (!F_AGRUPADOS.some(function (x) { return f_mismoLote_(x, it); })) F_AGRUPADOS.push(it); });
+    if (grupo.length) { f_renderGrupo(); f_pintarOpciones_(); }
+    var procOk = grupo.length ? f_restaurarProceso_(proceso) : true;
+    if (tapon && !val_('f_loteReal')) {
+      setVal_('f_prod', tapon.producto); setVal_('f_med', tapon.medida); setVal_('f_loteReal', tapon.lote); setVal_('f_teton', tapon.teton);
+      setVal_('f_lote', tapon.lote + (tapon.refControl ? (' - ' + tapon.refControl) : ''));
+      setVal_('f_refControl', tapon.refControl || ''); setVal_('f_ref', tapon.refControl || ''); F_REF_ORIG = tapon.refControl || '';
+      setVal_('f_lotelav', tapon.loteLavado); setVal_('f_resp', tapon.responsable); setVal_('f_cant', tapon.cantidad);
+      setVal_('f_rech', tapon.rechazadasTapon || 0);
+      document.getElementById('f_disp').textContent = (tapon.dispAntes || tapon.cantidad) + ' u.';
+      f_actualizarModoTapon_();
+    }
+    lfGuardarEstado();
+    return procOk;
+  }
+  function f_enviarEnSegundoPlano_(items, comunes, proceso) {
     var id = ++F_TRABAJO_SEQ;
+    var fecha = hoy();
+    items.forEach(function (it) { it.fecha = fecha; });
+    var enviar = items.map(function (it) { var o = Object.assign({}, it); delete o.dispAntes; return o; });
     var nombres = items.map(function (x) { return x.lote; }).join(', ');
     F_ENVIANDO = F_ENVIANDO.concat(items);
     f_pintarOpciones_();
@@ -1074,10 +1206,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
       .withSuccessHandler(function (r) {
         sacarDeEnviando();
         var exitosos = (r && r.exitosos) || [], fallidos = (r && r.fallidos) || [];
+        exitosos.forEach(function (i) { if (items[i]) marcarReciente_(items[i], items[i].dispAntes); });
         f_cargar(true);
         if (fallidos.length) {
-          var det = fallidos.map(function (f) { return (items[f.idx] ? items[f.idx].lote : '?') + ' (' + f.error + ')'; }).join(' · ');
-          f_trabajoSet_('x' + id, '⚠ No se guardaron: ' + det + '. Vuelven a aparecer en "Lotes disponibles".', 'err');
+          var det = fallidos.map(function (f) { return (items[f.idx] ? items[f.idx].lote : '?') + ' (' + esc_(f.error) + ')'; }).join(' · ');
+          var volvieron = fallidos.map(function (f) { return items[f.idx]; }).filter(Boolean);
+          var procOk = f_devolver_(volvieron, proceso);
+          f_trabajoSet_('x' + id, '⚠ No se guardaron: ' + det + '. Volvieron al grupo / al formulario' +
+            (procOk ? ' con los datos del proceso.' : ' (el proceso químico no se repuso porque ya habías empezado otro: revisalo).'), 'err');
         }
         if (exitosos.length) {
           var textoOk = '✓ Registrados ' + exitosos.length + ' de ' + items.length + ' lote(s): ' + nombres + '.';
@@ -1093,15 +1229,17 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
         if (esSaturado_(t)) {
           marcarSaturado_();
 
-          items.forEach(function (it) { if (!F_AGRUPADOS.some(function (x) { return f_mismoLote_(x, it); })) F_AGRUPADOS.push(it); });
-          f_renderGrupo(); lfGuardarEstado();
-          f_trabajoSet_(id, '✗ Google estaba saturado y no se registró ' + nombres + '. Los lotes volvieron al grupo: esperá un par de minutos y registrá de nuevo (revisá los tiempos del proceso).', 'err');
+          var procOk1 = f_devolver_(items, proceso);
+          f_trabajoSet_(id, '✗ Google estaba saturado y no se registró ' + esc_(nombres) + '. Volvieron al grupo / al formulario' +
+            (procOk1 ? ' con los datos del proceso' : '') + ': esperá un par de minutos y registrá de nuevo.', 'err');
           return;
         }
+        var procOk2 = f_devolver_(items, proceso);
         f_cargar(true);
-        f_trabajoSet_(id, '✗ Problema registrando ' + nombres + ' (' + t + '). Si siguen en "Lotes disponibles", no se registraron.', 'err');
+        f_trabajoSet_(id, '✗ Problema registrando ' + esc_(nombres) + ' (' + esc_(t) + '). Volvieron al grupo / al formulario' +
+          (procOk2 ? ' con los datos del proceso' : '') + '. Si después de actualizar ya no figuran en "Lotes disponibles", es que sí se registraron: en ese caso quitalos del grupo.', 'err');
       })
-      .lfRegistrarGrupo({ items: items, comunes: comunes });
+      .lfRegistrarGrupo({ items: enviar, comunes: comunes });
   }
 
   // Tapones / componentes: se registran SOLOS como Final, con rechazadas.
@@ -1109,19 +1247,21 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   // El servidor registra las buenas (Cantidad - Rechazadas) y manda las rechazadas a DESCARTE CALIDAD.
   function f_registrarTapon() {
     var d = f_datosActuales();
-    var cant = Number(d.cantidad) || 0;
-    var rech = Number(val_('f_rech')) || 0;
-    var disp = Number(String(document.getElementById('f_disp').textContent).replace(/[^\d.]/g, '')) || 0;
+    var cant = entero_(d.cantidad);
+    var rech = entero_(val_('f_rech') === '' ? 0 : val_('f_rech'));
+    var disp = dispDe_('f_disp');
     if (!d.producto || !d.lote) { msg('f_msg','Seleccioná un lote primero.', false); return; }
-    if (!(cant > 0)) { msg('f_msg','Completá la cantidad.', false); return; }
-    if (rech < 0) { msg('f_msg','Las rechazadas no pueden ser negativas.', false); return; }
+    if (!(cant > 0)) { msg('f_msg','La cantidad tiene que ser un número entero mayor a 0.', false); return; }
+    if (isNaN(rech)) { msg('f_msg','Las rechazadas tienen que ser un número entero, 0 o más.', false); return; }
     if (rech > cant) { msg('f_msg','Las rechazadas (' + rech + ') no pueden superar la cantidad (' + cant + ').', false); return; }
     if (disp && cant > disp) { msg('f_msg','La cantidad (' + cant + ') supera lo disponible (' + disp + ').', false); return; }
     if (!d.responsable) { msg('f_msg','Elegí el Responsable.', false); return; }
     if (!d.loteLavado) { msg('f_msg','Completá el Lote de lavado.', false); return; }
+    d.cantidad = cant;
     d.rechazadasTapon = rech;
+    d.dispAntes = disp;
     f_limpiar(); lfGuardarEstado();
-    f_enviarEnSegundoPlano_([d], {});
+    f_enviarEnSegundoPlano_([d], {}, null);
   }
 
   function f_registrarGrupo() {
@@ -1147,6 +1287,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     if (msIni && msFin && msFin < msIni) msFin += 24 * 60 * 60 * 1000;
 
     var items = F_AGRUPADOS.slice();
+    var proceso = f_capturarProceso_();
     var comunes = {
       cantidadesPasos: f_cantidadesPasosPara_(f_totalCantidadGrupo_(), tiempos),
       tiemposVariables: tiempos,
@@ -1159,13 +1300,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     f_renderGrupo();
     f_limpiarProceso_();
     lfLimpiarEstado();
-    f_enviarEnSegundoPlano_(items, comunes);
+    f_enviarEnSegundoPlano_(items, comunes, proceso);
   }
 
 
 
 
   function refrescarTodo() {
+    actualizarFecha_();
     if (document.hidden) return;
     if (Date.now() < PAUSA_HASTA) return;
     if (F_ENVIANDO.length) return;
@@ -1173,14 +1315,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
   }
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
+    actualizarFecha_();
     var ultima = pestanaActiva_() === 'grueso' ? G_ULTIMA : F_ULTIMA;
     if (Date.now() - ultima > 30000) refrescarTodo();
   });
 
   window.onload = function() {
     try {
-      setVal_('g_fecha', hoy());
-      setVal_('f_fecha', hoy());
+      actualizarFecha_();
       f_renderPasos();
       gi_pintarCombo_();
       f_actualizarModoTapon_();
