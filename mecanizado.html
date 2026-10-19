@@ -57,6 +57,17 @@
   .hist-table th{ padding:4px 8px; font-size:11px; background:#f1f5f9; }
   .hist-table td{ padding:4px 8px; font-size:12px; }
   .muestra-fila input[type="text"]{ width:90px; }
+  .hist-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .fila-pausa{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button:disabled{ opacity:.55; cursor:not-allowed; }
+  @media (max-width:600px){
+    body{ padding:10px; }
+    .card{ padding:14px; }
+    .pend .close{ grid-template-columns:1fr 1fr; }
+    .pend .ttl{ font-size:13px; }
+    .tab{ font-size:13px; padding:9px 6px; }
+  }
+  @media (max-width:380px){ .pend .close{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -77,9 +88,9 @@
         <div><label>Medida</label><select id="medida"></select></div>
         <div><label>N° de lote</label><input id="lote" placeholder="Lote 0000"></div>
         <div><label>Hora Inicio</label><input id="horaInicio" type="time"></div>
-        <div><label>Cantidad Objetivo</label><input id="cantidad" type="number" placeholder="Ej: 200" oninput="mecMostrarConPrueba()"><div id="mecAvisoPrueba" style="font-size:11px;color:#64748b;margin-top:3px;"></div></div>
-        <div><label>Minutos por pieza <span style="font-weight:400;color:#94a3b8;">(queda fijo para todo el lote)</span></label><input id="minPieza" type="number" step="0.1" placeholder="Ej: 2.5"><div style="font-size:11px;color:#64748b;margin-top:3px;">Si todavía no lo sabés, dejalo vacío: se pide en el primer cierre y queda fijo.</div></div>
-        <div><label>Contador de maquina inicial</label><input id="contador" placeholder="0000"></div>
+        <div><label>Cantidad Objetivo</label><input id="cantidad" type="number" min="1" step="1" inputmode="numeric" placeholder="Ej: 200" oninput="mecMostrarConPrueba()"><div id="mecAvisoPrueba" style="font-size:11px;color:#64748b;margin-top:3px;"></div></div>
+        <div><label>Minutos por pieza <span style="font-weight:400;color:#94a3b8;">(queda fijo para todo el lote)</span></label><input id="minPieza" type="number" min="0" step="0.1" inputmode="decimal" placeholder="Ej: 2.5"><div style="font-size:11px;color:#64748b;margin-top:3px;">Si todavía no lo sabés, dejalo vacío: se pide en el primer cierre y queda fijo.</div></div>
+        <div><label>Contador de maquina inicial</label><input id="contador" type="number" min="0" step="1" inputmode="numeric" placeholder="0000"></div>
         <div><label>Responsable</label><select id="responsable"></select></div>
       </div>
 
@@ -118,7 +129,7 @@
 
     <div class="card" id="prcCardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
       <h2>2. Lotes en Control de Piezas(borradores) <span id="prcCntEnControl" class="badge" style="background:#dbeafe; color:#1d4ed8;">0</span></h2>
-      <p class="hint" style="margin-bottom:10px;">Cargá las cotas con el responsable de cada una. Podés agregar varias muestras por cota (hasta 20). Si parás, usá Pausa — el tiempo parado no se cuenta.</p>
+      <p class="hint" style="margin-bottom:10px;">Cargá las cotas con el responsable de cada una. Podés agregar varias muestras por cota (hasta 50). Si parás, usá Pausa — el tiempo parado no se cuenta.</p>
       <div id="prcListaEnControl"><p class="empty">Cargando...</p></div>
     </div>
 
@@ -177,25 +188,34 @@
     if (_confirmCallback) { var cb = _confirmCallback; _confirmCallback = null; cb(ok); }
   }
 
-  function verTabMec(cual){
+  /* ---------- utilidades ---------- */
+  function errMsg_(e){ return (e && e.message) ? e.message : String(e || 'Error desconocido'); }
+  function esc_(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function jsq_(t){ return String(t == null ? '' : t).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  /* Bloquea un botón mientras guarda (evita doble toque). Devuelve false si ya estaba bloqueado. */
+  function btnOn_(b){ if (!b) return true; if (b.disabled) return false; b.disabled = true; b.setAttribute('data-txt', b.textContent); b.textContent = 'Guardando…'; return true; }
+  function btnOff_(b){ if (!b) return; b.disabled = false; var t = b.getAttribute('data-txt'); if (t) b.textContent = t; }
+  /* Número entero >= 0 (vacío = 0). Devuelve NaN si es inválido. */
+  function entero_(v){ v = String(v == null ? '' : v).trim(); if (v === '') return 0; var n = Number(v); return (Number.isInteger(n) && n >= 0) ? n : NaN; }
+
+  function verTabMec(cual, loteAbrir){
     var m = (cual === 'mec');
     document.getElementById('paneMec').className = m ? '' : 'hide';
     document.getElementById('panePrc').className = m ? 'hide' : '';
     document.getElementById('tabBtnMec').className = m ? 'tab active' : 'tab';
     document.getElementById('tabBtnPrc').className = m ? 'tab' : 'tab active';
-    if (!m) { prcActualizar(); pcpActualizar(); }
+    if (!m) {
+      prcActualizar();
+      pcpActualizar(loteAbrir ? function(){
+        pcpSeleccionarPorLote(loteAbrir);
+        var card = document.getElementById('pcpCardAbrir');
+        if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } : null);
+    }
   }
 
   function irAControlPrueba(lote){
-    verTabMec('prc');
-    setTimeout(function(){
-      pcpActualizar();
-      setTimeout(function(){
-        pcpSeleccionarPorLote(lote);
-        var card = document.getElementById('pcpCardAbrir');
-        if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 400);
-    }, 100);
+    verTabMec('prc', lote);
   }
 
   var CAT = { productos:[], tetones:[], responsables:[], medidas:{} };
@@ -239,7 +259,7 @@
          togglePend();
          refrescarPendientes();
       })
-      .withFailureHandler(function(e){ msg('Error al cargar catálogo: ' + e.message, false); })
+      .withFailureHandler(function(e){ msg('Error al cargar catálogo: ' + errMsg_(e), false); })
       .mecCatalogo('En Maquina');
   }
   function esCompInstr(nombre){
@@ -262,12 +282,26 @@
     if(esCompInstr(prod)){ t.value='-'; t.disabled=true; }
     else { t.disabled=false; }
   }
-  function refrescarPendientes(){ google.script.run.withSuccessHandler(render).withFailureHandler(function(e){ document.getElementById('listaPend').innerHTML = '<p style="color:#b91c1c;font-size:13px;">Error al cargar lotes: '+e.message+'</p>'; }).mecPendientes(); }
+  /* Si alguien está escribiendo en un lote, o hay un cierre en curso, el refresco automático
+     se posterga hasta que termine (así no se borra lo que está cargando). */
+  var MEC_OCUPADO = false, MEC_REFRESCO_PEND = false;
+  function mecEscribiendo_(){
+    var a = document.activeElement, l = document.getElementById('listaPend');
+    return !!(a && l && l.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));
+  }
+  function refrescarPendientes(forzar){
+    if (!forzar && (MEC_OCUPADO || mecEscribiendo_())) { MEC_REFRESCO_PEND = true; return; }
+    MEC_REFRESCO_PEND = false;
+    google.script.run.withSuccessHandler(render).withFailureHandler(function(e){ document.getElementById('listaPend').innerHTML = '<p style="color:#b91c1c;font-size:13px;">Error al cargar lotes: '+esc_(errMsg_(e))+'</p>'; }).mecPendientes();
+  }
+  document.addEventListener('focusout', function(){
+    setTimeout(function(){ if (MEC_REFRESCO_PEND && !MEC_OCUPADO && !mecEscribiendo_()) refrescarPendientes(); }, 300);
+  });
 
   function mecDraftKey_(f){ return 'mecDraftLote_' + f; }
   function mecGuardarDraft_(f){
     function val(id){ var el = document.getElementById(id); return el ? el.value : ''; }
-    var d = { hi: val('hi_'+f), hf: val('hf_'+f), cf: val('cf_'+f), rj: val('rj_'+f), pj: val('pj_'+f), su: val('su_'+f), ex: val('ex_'+f), mp: val('mp_'+f), obs: val('obs_'+f), cc: val('cc_'+f), resp: val('responsable_'+f) };
+    var d = { lote: val('lote_'+f), hi: val('hi_'+f), hf: val('hf_'+f), cf: val('cf_'+f), rj: val('rj_'+f), pj: val('pj_'+f), su: val('su_'+f), ex: val('ex_'+f), mp: val('mp_'+f), obs: val('obs_'+f), cc: val('cc_'+f), resp: val('responsable_'+f), pm: val('pmot_'+f) };
     try { localStorage.setItem(mecDraftKey_(f), JSON.stringify(d)); } catch(e){}
   }
   function mecSetResponsable_(f, valor) {
@@ -296,9 +330,9 @@
     var elEa = document.getElementById('ea_val_'+f), elPp = document.getElementById('pp_val_'+f);
     var elRj = document.getElementById('rj_'+f), elPj = document.getElementById('pj_'+f),
         elSu = document.getElementById('su_'+f), elEx = document.getElementById('ex_'+f);
-    if (!elCf || !elHint || !elCi) return;
+    if (!elCf || !elHint || !elCi) return null;
     var cantHechas = Number(elCf.value) || 0;
-    if (cantHechas <= 0) { elHint.textContent = ''; return; }
+    if (cantHechas <= 0 && !(Number(elRj && elRj.value) > 0) && !(Number(elPj && elPj.value) > 0)) { elHint.textContent = ''; return null; }
     var rechazadas = elRj ? (Number(elRj.value) || 0) : 0;
     var perdidas = elPj ? (Number(elPj.value) || 0) : 0;
     var setup = elSu ? (Number(elSu.value) || 0) : 0;
@@ -309,15 +343,31 @@
     var piezasPrueba = elPp ? (Number(elPp.value) || 0) : 0;
     var esperado = (Number(elCi.value)||0) + piezasPrueba + (Number(elPa.value)||0) + cantHechas +
                    descartesAcum + rechazadas + perdidas + setupAcum + setup + excedenteAcum + excedente;
-    elHint.textContent = 'Esperado en el contador: ' + esperado;
+    var elCc = document.getElementById('cc_'+f);
+    var cc = elCc ? String(elCc.value).trim() : '';
+    if (cc !== '' && Number(cc) !== esperado) {
+      var dif = Number(cc) - esperado;
+      elHint.innerHTML = 'Esperado en el contador: <b>' + esperado + '</b> · <span style="color:#b45309;font-weight:700;">⚠ diferencia ' + (dif > 0 ? '+' : '') + dif + '</span>';
+    } else {
+      elHint.textContent = 'Esperado en el contador: ' + esperado;
+    }
+    return esperado;
   }
   function horaAhoraMec_(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
-  function mecPausarProd(f){
+  function mecPausarProd(f, btn){
+    if (!btnOn_(btn)) return;
     var mot = document.getElementById('pmot_'+f) ? document.getElementById('pmot_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
+    google.script.run
+      .withSuccessHandler(function(r){ btnOff_(btn); msg((r && r.msg) || 'Pausa registrada.', true); refrescarPendientes(true); })
+      .withFailureHandler(function(e){ btnOff_(btn); alert(errMsg_(e)); })
+      .mecPausarProduccion({ fila:f, hora:horaAhoraMec_(), motivo:mot });
   }
-  function mecReanudarProd(f){
-    google.script.run.withSuccessHandler(function(r){ alert(r.msg); }).withFailureHandler(function(e){ alert(e.message); }).mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
+  function mecReanudarProd(f, btn){
+    if (!btnOn_(btn)) return;
+    google.script.run
+      .withSuccessHandler(function(r){ btnOff_(btn); msg((r && r.msg) || 'Producción reanudada.', true); refrescarPendientes(true); })
+      .withFailureHandler(function(e){ btnOff_(btn); alert(errMsg_(e)); })
+      .mecReanudarProduccion({ fila:f, hora:horaAhoraMec_() });
   }
 
   /* ============ HISTORIAL DE CONTADORES POR LOTE ============ */
@@ -329,7 +379,7 @@ function toggleHistorialGenerico_(idPrefix, f, lote) {
   cont.innerHTML = '<p class="empty">Cargando historial...</p>';
   google.script.run
     .withSuccessHandler(function (lista) { mecRenderHistorial_(idPrefix, f, lista); })
-    .withFailureHandler(function (e) { cont.innerHTML = '<p style="color:#b91c1c;font-size:12px;">Error: ' + e.message + '</p>'; })
+    .withFailureHandler(function (e) { cont.innerHTML = '<p style="color:#b91c1c;font-size:12px;">Error: ' + errMsg_(e) + '</p>'; })
     .mecHistorialLote(lote);
 }
 function mecToggleHistorial(f, lote) { toggleHistorialGenerico_('hist_', f, lote); } // se mantiene para no romper la lista principal
@@ -355,7 +405,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     '</tr>';
   }).join('');
   cont.innerHTML =
-    '<table class="hist-table">' +
+    '<div class="hist-wrap"><table class="hist-table">' +
       '<thead><tr>' +
         '<th style="text-align:left;">Fecha</th>' +
         '<th style="text-align:left;">Tipo</th>' +
@@ -368,7 +418,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
         '<th style="text-align:left;">Responsable</th>' +
       '</tr></thead>' +
       '<tbody>' + filas + '</tbody>' +
-    '</table>';
+    '</table></div>';
 }
 
 
@@ -383,6 +433,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     c.innerHTML = list.map(function(p){
       var f = p.fila;
       var d = mecCargarDraft_(f);
+      if (d.lote && String(d.lote) !== String(p.lote)) { d = {}; mecLimpiarDraft_(f); } // la fila ahora es de otro lote
       var mpFijo = Number(p.minutosPorPieza) > 0;
 
       // Minutos por pieza: se carga UNA sola vez por lote. Si ya está fijado, se muestra bloqueado.
@@ -393,6 +444,8 @@ function mecRenderHistorial_(idPrefix, f, lista) {
         : '<div><label>Minutos por pieza <span style="font-weight:400;color:#b45309;">(se carga una sola vez: queda fijo para todo el lote)</span></label>' +
             '<input id="mp_'+f+'" type="number" step="0.1" placeholder="Ej: 2.5" style="border-color:#fbbf24; background:#fffbeb;" value="'+(d.mp||'')+'" oninput="mecGuardarDraft_('+f+')">' +
             '<input type="hidden" id="mpfijo_'+f+'" value="0"></div>';
+      var pm = d.pm || 'Falla';
+      function optPm(v){ return '<option' + (v === pm ? ' selected' : '') + '>' + v + '</option>'; }
 
       var bloqueCierre;
       if (!p.controlPruebaOk) {
@@ -400,19 +453,19 @@ function mecRenderHistorial_(idPrefix, f, lista) {
           '<div class="pendbar" style="margin-top:14px; background:#fef3c7; color:#92400e;">' +
             '<span style="font-weight:700;">⚠ Falta controlar las 3 piezas de prueba de este lote.</span>' +
             '<span style="font-weight:400;">No se puede cargar el cierre hasta hacerlo.</span>' +
-            '<button class="primary" style="margin-left:auto;" onclick="irAControlPrueba(\'' + p.lote + '\')">Controlar piezas de prueba ▶</button>' +
+            '<button class="primary" style="margin-left:auto;" onclick="irAControlPrueba(\'' + jsq_(p.lote) + '\')">Controlar piezas de prueba ▶</button>' +
           '</div>';
       } else {
         bloqueCierre =
           '<div class="close">' +
             '<div><label>Hora Inicio Parcial <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label><input id="hi_'+f+'" type="time" value="'+(d.hi||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
             '<div><label>Hora Fin Parcial <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label><input id="hf_'+f+'" type="time" value="'+(d.hf||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
-            '<div><label>Cantidad Terminada Hoy <span style="font-weight:400;color:#94a3b8;">(producción real, sin contar las 3 de prueba)</span></label><input id="cf_'+f+'" type="number" placeholder="Ej: 30" style="border-color:#93c5fd; background:#f0f9ff;" value="'+(d.cf||'')+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
+            '<div><label>Cantidad Terminada Hoy <span style="font-weight:400;color:#94a3b8;">(producción real, sin contar las 3 de prueba)</span></label><input id="cf_'+f+'" type="number" min="0" step="1" inputmode="numeric" placeholder="Ej: 30" style="border-color:#93c5fd; background:#f0f9ff;" value="'+esc_(d.cf||'')+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
             bloqueMinutos +
-            '<div><label>Rechazadas Hoy</label><input id="rj_'+f+'" type="number" value="'+(d.rj!==undefined && d.rj!==''?d.rj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
-            '<div><label>Perdidas Hoy</label><input id="pj_'+f+'" type="number" value="'+(d.pj!==undefined && d.pj!==''?d.pj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
-            '<div><label>Piezas de Setup Hoy <span style="font-weight:400;color:#94a3b8;">(calibración, no van a lavado)</span></label><input id="su_'+f+'" type="number" value="'+(d.su!==undefined && d.su!==''?d.su:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
-            '<div><label>Excedente Hoy</label><input id="ex_'+f+'" type="number" value="'+(d.ex!==undefined && d.ex!==''?d.ex:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
+            '<div><label>Rechazadas Hoy</label><input id="rj_'+f+'" type="number" min="0" step="1" inputmode="numeric" value="'+(d.rj!==undefined && d.rj!==''?d.rj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
+            '<div><label>Perdidas Hoy</label><input id="pj_'+f+'" type="number" min="0" step="1" inputmode="numeric" value="'+(d.pj!==undefined && d.pj!==''?d.pj:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
+            '<div><label>Piezas de Setup Hoy <span style="font-weight:400;color:#94a3b8;">(calibración, no van a lavado)</span></label><input id="su_'+f+'" type="number" min="0" step="1" inputmode="numeric" value="'+(d.su!==undefined && d.su!==''?d.su:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
+            '<div><label>Excedente Hoy</label><input id="ex_'+f+'" type="number" min="0" step="1" inputmode="numeric" value="'+(d.ex!==undefined && d.ex!==''?d.ex:0)+'" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')"></div>' +
             '<div><label>Responsable</label>' +
               '<input type="hidden" id="responsable_'+f+'" value="'+(d.resp||'')+'">' +
               '<div style="display:flex; gap:6px;">' +
@@ -422,43 +475,44 @@ function mecRenderHistorial_(idPrefix, f, lista) {
             '</div>' +
           '</div>' +
 
-          '<div style="margin-top:10px;"><label>Observaciones <span style="font-weight:400; color:#64748b;">(obligatorio si hay rechazadas o perdidas)</span></label><input id="obs_'+f+'" type="text" placeholder="Motivo del descarte..." value="'+(d.obs||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
+          '<div style="margin-top:10px;"><label>Observaciones <span style="font-weight:400; color:#64748b;">(obligatorio si hay rechazadas o perdidas)</span></label><input id="obs_'+f+'" type="text" placeholder="Motivo del descarte..." value="'+esc_(d.obs||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
 
-          '<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">' +
-            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>' +
-            '<button style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecPausarProd('+f+')">⏸ Pausa de producción</button>' +
-            '<button style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecReanudarProd('+f+')">▶ Reanudar</button>' +
+          '<div class="fila-pausa" style="margin-top:10px;">' +
+            '<select id="pmot_'+f+'" style="width:auto;" onchange="mecGuardarDraft_('+f+')">' + optPm('Falla') + optPm('Otra prioridad') + optPm('Otro motivo') + '</select>' +
+            '<button style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecPausarProd('+f+', this)">⏸ Pausa de producción</button>' +
+            '<button style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecReanudarProd('+f+', this)">▶ Reanudar</button>' +
           '</div>' +
 
           '<div class="row-actions" style="display: flex; flex-direction: column; gap: 12px; width: 100%; margin-top: 10px;">' +
 
             '<div style="width: 100%;">' +
               '<label style="display: block; margin-bottom: 5px; font-weight: bold;">Cierre contador de Máquina <span style="font-weight:400; color:#64748b;">(leelo de la máquina y escribilo acá)</span></label>' +
-              '<input id="cc_'+f+'" type="number" value="'+(d.cc||'')+'" style="width: 100%; padding: 6px; box-sizing: border-box;" placeholder="Ej: 1024" oninput="mecGuardarDraft_('+f+')">' +
+              '<input id="cc_'+f+'" type="number" min="0" step="1" inputmode="numeric" value="'+esc_(d.cc||'')+'" style="width: 100%; padding: 6px; box-sizing: border-box;" placeholder="Ej: 1024" oninput="mecGuardarDraft_('+f+'); mecRecalcContador_('+f+')">' +
               '<div id="ccHint_'+f+'" style="font-size:11px;color:#64748b;margin-top:3px;"></div>' +
               '<input type="hidden" id="ci_val_'+f+'" value="'+(Number(p.contadorInicial)||0)+'"><input type="hidden" id="pa_val_'+f+'" value="'+(Number(p.producidoAcumulado)||0)+'">' +
               '<input type="hidden" id="da_val_'+f+'" value="'+(Number(p.descartesAcumulado)||0)+'"><input type="hidden" id="sa_val_'+f+'" value="'+(Number(p.setupAcumulado)||0)+'">' +
               '<input type="hidden" id="ea_val_'+f+'" value="'+(Number(p.excedenteAcumulado)||0)+'"><input type="hidden" id="pp_val_'+f+'" value="'+(Number(p.piezasPrueba)||0)+'">' +
+              '<input type="hidden" id="lote_'+f+'" value="'+esc_(p.lote)+'">' +
             '</div>' +
 
             '<div style="display: flex; gap: 10px; width: 100%; margin-top: 5px;">' +
-              '<button class="parcial" onclick="procesarLote('+f+', \'parcial\')" style="flex: 1; padding: 8px; cursor: pointer;">Cierre Parcial (Guardar avance)</button>' +
-              '<button class="total" onclick="procesarLote('+f+', \'total\')" style="flex: 1; padding: 8px; cursor: pointer;">Cierre Total / Forzar fin lote</button>' +
+              '<button class="parcial" onclick="procesarLote('+f+', \'parcial\', this)" style="flex: 1; padding: 8px; cursor: pointer;">Cierre Parcial (Guardar avance)</button>' +
+              '<button class="total" onclick="procesarLote('+f+', \'total\', this)" style="flex: 1; padding: 8px; cursor: pointer;">Cierre Total / Forzar fin lote</button>' +
             '</div>' +
 
           '</div>';
       }
 
       return '<div class="pend">' +
-        '<div class="ttl">' + p.producto + ' · ' + (p.teton || '') + ' · ' + p.medida +
+        '<div class="ttl">' + esc_(p.producto) + ' · ' + esc_(p.teton || '') + ' · ' + esc_(p.medida) +
          ' <span style="color:var(--acc);">[Objetivo: ' + p.cantidadObjetivo + ' u. · Producido real: ' + p.cantidadRealAcumulada + ' u.' +
          (mpFijo ? ' · ' + p.minutosPorPieza + ' min/pieza' : '') + ']</span><br>' +
-        '<span style="font-weight:400; font-size:12px; color:#64748b;">Lote de origen: ' + p.lote +
+        '<span style="font-weight:400; font-size:12px; color:#64748b;">Lote de origen: ' + esc_(p.lote) +
         ' | Contador Inicial: <strong id="ci_' + f + '">' + (p.contadorInicial || 0) + '</strong></span></div>' +
 
         '<span style="font-weight:400; font-size:12px; color:#64748b; display:block; margin-bottom:8px;">Lote colocado en máquina a las: ' + (p.horaInicio || 'No registrada') + '</span>' +
 
-        '<a href="#" class="hist-link" onclick="mecToggleHistorial(' + f + ', \'' + p.lote + '\'); return false;">📋 Ver historial de cierres de este lote</a>' +
+        '<a href="#" class="hist-link" onclick="mecToggleHistorial(' + f + ', \'' + jsq_(p.lote) + '\'); return false;">📋 Ver historial de cierres de este lote</a>' +
         '<div id="hist_' + f + '" class="hide"></div>' +
 
         bloqueCierre +
@@ -495,8 +549,26 @@ function mecRenderHistorial_(idPrefix, f, lista) {
         msg("Faltan datos obligatorios (producto, lote y cantidad objetivo).", false);
         return;
     }
+    var txtCant = document.getElementById("cantidad").value;
+    if (!Number.isInteger(Number(txtCant)) || Number(txtCant) <= 0) {
+        msg("La cantidad objetivo tiene que ser un número entero mayor a 0.", false); return;
+    }
+    if ((CAT.medidas[datos.producto] || []).length && !datos.medida) {
+        msg("Elegí la medida.", false); return;
+    }
+    if (!datos.responsable) {
+        msg("Elegí el responsable.", false); return;
+    }
+    var txtMin = document.getElementById("minPieza").value;
+    if (String(txtMin).trim() !== '' && !(Number(txtMin) > 0)) {
+        msg("Los minutos por pieza tienen que ser mayores a 0 (o dejalo vacío).", false); return;
+    }
+    if (String(datos.contadorInicial).trim() !== '' && isNaN(entero_(datos.contadorInicial))) {
+        msg("El contador inicial tiene que ser un número entero, sin puntos ni comas.", false); return;
+    }
 
     var btn = document.getElementById('btnGuardar');
+    if (btn && btn.disabled) return;
     if (btn) btn.disabled = true;
     msg('Guardando...', true);
 
@@ -505,11 +577,11 @@ function mecRenderHistorial_(idPrefix, f, lista) {
           if(btn) btn.disabled = false;
           msg(respuesta.msg, true);
           limpiarFormularioPrincipal();
-          refrescarPendientes();
+          refrescarPendientes(true);
       })
       .withFailureHandler(function(error) {
           if(btn) btn.disabled = false;
-          msg("Error: " + error.message, false);
+          msg("Error: " + errMsg_(error), false);
       })
       .mecGuardarNuevaCarga(datos);
   }
@@ -520,7 +592,8 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     setTimeout(function() { var m = document.getElementById('msg'); if (m) m.textContent = ''; }, 4000);
   }
 
-  function procesarLote(fila, tipo) {
+  function procesarLote(fila, tipo, btn) {
+    if (MEC_OCUPADO) return;
     var hi = document.getElementById('hi_' + fila).value;
     var hf = document.getElementById('hf_' + fila).value;
     var cantTerminada = document.getElementById('cf_' + fila).value;
@@ -534,28 +607,53 @@ function mecRenderHistorial_(idPrefix, f, lista) {
     var observaciones = document.getElementById('obs_' + fila).value;
 
     if (!responsable) { alert("Elegí el Responsable."); return; }
-    if (!cantTerminada || Number(cantTerminada) <= 0) {
+    var nCant = entero_(cantTerminada);
+    if (isNaN(nCant)) { alert("La cantidad terminada tiene que ser un número entero (sin decimales ni negativos)."); return; }
+    if (tipo !== 'total' && nCant <= 0) {
       alert("Ingresá cuántas piezas terminó en este turno."); return;
     }
-    if (!minutosPorPieza || Number(minutosPorPieza) <= 0) {
+    var malos = [['Rechazadas', rechazadas], ['Perdidas', perdidas], ['Setup', setup], ['Excedente', excedente]]
+      .filter(function(x){ return isNaN(entero_(x[1])); }).map(function(x){ return x[0]; });
+    if (malos.length) { alert("Revisá " + malos.join(', ') + ": tienen que ser números enteros, 0 o más."); return; }
+    rechazadas = entero_(rechazadas); perdidas = entero_(perdidas); setup = entero_(setup); excedente = entero_(excedente);
+    cantTerminada = nCant;
+    var sinProduccion = (tipo === 'total' && nCant === 0);
+    if (!sinProduccion && (!minutosPorPieza || Number(minutosPorPieza) <= 0)) {
       alert("Ingresá cuántos minutos tarda por pieza (se carga una sola vez y queda fijo para todo el lote)."); return;
     }
     if ((Number(rechazadas) > 0 || Number(perdidas) > 0) && !observaciones.trim()) {
       alert("Hay rechazadas y/o perdidas cargadas: hay que anotar el motivo en Observaciones.");
       return;
     }
-    if (!contador || Number(contador) <= 0) {
-      alert("Falta el Cierre contador de Máquina (leelo de la máquina y escribilo)."); return;
+    if (!contador || isNaN(entero_(contador)) || Number(contador) <= 0) {
+      alert("Falta el Cierre contador de Máquina (leelo de la máquina y escribilo, número entero)."); return;
+    }
+    var elCi = document.getElementById('ci_val_' + fila);
+    if (elCi && Number(contador) < (Number(elCi.value) || 0)) {
+      alert("El contador de cierre (" + contador + ") es menor que el contador inicial del lote (" + elCi.value + "). Revisalo."); return;
+    }
+    var avisos = [];
+    var esperado = mecRecalcContador_(fila);
+    if (esperado != null && Number(contador) !== esperado) {
+      var dif = Number(contador) - esperado;
+      avisos.push("El contador (" + contador + ") no coincide con el esperado (" + esperado + "): diferencia " + (dif > 0 ? "+" : "") + dif + ".");
     }
     if (tipo === 'total') {
-      confirmarPersonalizado("¿Está seguro que desea cerrar este lote definitivamente? Las piezas no fabricadas se darán de baja en la máquina.", function(ok){
-        if (ok) enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador);
-      });
+      avisos.push(sinProduccion
+        ? "Vas a cerrar el lote SIN piezas terminadas hoy. Las piezas no fabricadas se darán de baja en la máquina."
+        : "Vas a cerrar este lote definitivamente. Las piezas no fabricadas se darán de baja en la máquina.");
+    }
+    function seguir(){ enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, sinProduccion ? (minutosPorPieza || '') : minutosPorPieza, observaciones, responsable, contador, btn, sinProduccion); }
+    if (avisos.length) {
+      confirmarPersonalizado(avisos.join(' ') + " ¿Confirmás?", function(ok){ if (ok) seguir(); });
       return;
     }
-    enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador);
+    seguir();
   }
-  function enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador) {
+  function enviarCierre_(fila, tipo, hi, hf, cantTerminada, rechazadas, perdidas, setup, excedente, minutosPorPieza, observaciones, responsable, contador, btn, sinProduccion) {
+    if (MEC_OCUPADO) return;
+    MEC_OCUPADO = true;
+    if (btn) btnOn_(btn);
     var elFijo = document.getElementById('mpfijo_' + fila);
     var yaFijo = elFijo && elFijo.value === '1';
 
@@ -577,20 +675,21 @@ function mecRenderHistorial_(idPrefix, f, lista) {
 
     document.getElementById('listaPend').innerHTML = '<p class="empty">Procesando movimiento en base de datos...</p>';
 
+    function fin(){ MEC_OCUPADO = false; refrescarPendientes(true); }
     function cerrar() {
       google.script.run
         .withSuccessHandler(function(r) {
            mecLimpiarDraft_(fila);
            alert(r.msg);
-           refrescarPendientes();
+           fin();
         })
         .withFailureHandler(function(e) {
-           alert("Error: " + e.message);
-           refrescarPendientes();
+           alert("Error: " + errMsg_(e));
+           fin();
         }).mecProcesarCierre(datos);
     }
 
-    if (yaFijo) { cerrar(); return; }
+    if (yaFijo || (sinProduccion && !(Number(minutosPorPieza) > 0))) { cerrar(); return; }
 
     // Primer cierre de un lote sin minutos fijados: se fija en el lote y recién después se cierra.
     google.script.run
@@ -599,14 +698,16 @@ function mecRenderHistorial_(idPrefix, f, lista) {
          cerrar();
       })
       .withFailureHandler(function(e) {
-         alert("Error al fijar los minutos por pieza: " + e.message);
-         refrescarPendientes();
+         alert("Error al fijar los minutos por pieza: " + errMsg_(e));
+         fin();
       }).mecFijarMinutosPorPieza({ fila: fila, minutosPorPieza: minutosPorPieza });
   }
 
-  /* ================= Compartido: cotas con muestras múltiples (hasta 20) ================= */
+  /* ================= Compartido: cotas con muestras múltiples (hasta 50) ================= */
   var LETRAS_COA = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
   var RESP_QC = ['Matias','Javier','Gabriela'];
+  var LETRAS_CARD = {}; // letras dibujadas en cada tarjeta (prefijo+fila)
+  function letrasDe_(prefix, f){ return LETRAS_CARD[prefix + f] || LETRAS_COA; }
 
   /* -- Colapsar/desplegar cada cota (A, B, C...) para que la lista no quede tan larga.
      Por defecto arrancan colapsadas; el estado se guarda en memoria por lote+letra,
@@ -662,8 +763,8 @@ function mecRenderHistorial_(idPrefix, f, lista) {
 
   function renderMuestraFila_(prefix, f, l, idx, val, resp){
     return '<div class="muestra-fila" style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">'+
-      '<input type="text" id="'+prefix+'c_'+l+'_'+f+'_'+idx+'" value="'+(val||'')+'" placeholder="Valor">'+
-      '<input type="hidden" id="'+prefix+'r_'+l+'_'+f+'_'+idx+'" value="'+(resp||'')+'">'+
+      '<input type="text" id="'+prefix+'c_'+l+'_'+f+'_'+idx+'" value="'+esc_(val==null?'':val)+'" placeholder="Valor" inputmode="decimal">'+
+      '<input type="hidden" id="'+prefix+'r_'+l+'_'+f+'_'+idx+'" value="'+esc_(resp||'')+'">'+
       botonesCotaResp_(prefix, f, l, idx, resp)+
     '</div>';
   }
@@ -742,7 +843,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       });
       prcPoblarCombo();
     })
-    .withFailureHandler(function(e){ prcMsg('Error al leer lotes: ' + e.message, false); })
+    .withFailureHandler(function(e){ prcMsg('Error al leer lotes: ' + errMsg_(e), false); })
     .mecPendientes();
   prcRefrescarEnControl();
 }
@@ -772,7 +873,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   prcMsg('Abriendo…', true);
   google.script.run
     .withSuccessHandler(function(r){ if(b) b.disabled = false; prcMsg(r.msg, true); prcActualizar(); })
-    .withFailureHandler(function(e){ if(b) b.disabled = false; prcMsg(e.message, false); })
+    .withFailureHandler(function(e){ if(b) b.disabled = false; prcMsg(errMsg_(e), false); })
     .prcCrearBorradorDesdeLote({
       producto: it.producto, teton: it.teton, medida: it.medida, lote: it.lote,
       hora: prcHoraAhora()
@@ -781,7 +882,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   function prcRefrescarEnControl(){
     google.script.run
       .withSuccessHandler(prcRenderEnControl)
-      .withFailureHandler(function(e){ document.getElementById('prcListaEnControl').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+      .withFailureHandler(function(e){ document.getElementById('prcListaEnControl').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+errMsg_(e)+'</p>'; })
       .prcListarEnControl();
   }
   function prcRenderEnControl(lista){
@@ -791,15 +892,16 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     cont.innerHTML = lista.map(function(b){
       var f = b.fila;
       var letras = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      LETRAS_CARD['p' + f] = letras;
       var bloquesCoa = letras.map(function(l){
         var data = (b.coas && b.coas[l]) ? b.coas[l] : {};
         var muestras = Array.isArray(data.muestras) ? data.muestras : [];
         return renderCotaBloque_('p', f, l, muestras);
       }).join('');
       var botonPausa = b.enPausa
-        ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="prcReanudar('+f+')">▶ Reanudar</button>'
+        ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="prcReanudar('+f+', this)">▶ Reanudar</button>'
         : '<select id="pmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>'+
-          '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcPausar('+f+')">⏸ Pausa</button>';
+          '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcPausar('+f+', this)">⏸ Pausa</button>';
       var tiempos = '<div class="tiempos">'+
         '<span>Inicio: <b>'+(b.inicio||'—')+'</b></span>'+
         '<span>Pausas: <b>'+(b.pausaMin||0)+' min</b></span>'+
@@ -818,15 +920,15 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
           '<button type="button" onclick="expandirTodoLote_(\'p\','+f+',\''+letras.join(',')+'\')" style="padding:3px 8px;font-size:11px;border-radius:6px;">▾ Expandir todo</button>'+
         '</div>'+
         '<div style="margin-top:6px;">'+bloquesCoa+'</div>'+
-        '<div style="margin-top:10px;"><label>Observaciones</label><input id="pobs_'+f+'" value="'+(b.observaciones||'')+'"></div>'+
+        '<div style="margin-top:10px;"><label>Observaciones</label><input id="pobs_'+f+'" value="'+esc_(b.observaciones||'')+'"></div>'+
         '<div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">'+
           '<div style="display:flex; gap:8px;">'+
             '<button style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcEliminarBorrador('+f+')">🗑 Eliminar</button>'+
             botonPausa +
           '</div>'+
           '<div style="display:flex; gap:8px;">'+
-            '<button style="background:#fff;color:#6b21a8;border:1px solid #c084fc;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcGuardarAvance('+f+')">Guardar avance</button>'+
-            '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="prcCerrarControl('+f+')">Marcar Controlada ✓</button>'+
+            '<button style="background:#fff;color:#6b21a8;border:1px solid #c084fc;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcGuardarAvance('+f+', this)">Guardar avance</button>'+
+            '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="prcCerrarControl('+f+', this)">Marcar Controlada ✓</button>'+
           '</div>'+
         '</div>'+
       '</div>';
@@ -834,7 +936,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   }
   function prcDatosCard(f){
     var coas = {};
-    LETRAS_COA.forEach(function(l){
+    letrasDe_('p', f).forEach(function(l){
       var contEl = document.getElementById('cotaCount_p_'+l+'_'+f);
       var count = contEl ? Number(contEl.value)||0 : 0;
       var muestras = [];
@@ -852,24 +954,31 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       observaciones: document.getElementById('pobs_'+f) ? document.getElementById('pobs_'+f).value : ''
     };
   }
-  function prcGuardarAvance(f){
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcActualizar(prcDatosCard(f));
+  function prcGuardarAvance(f, btn){
+    if (!btnOn_(btn)) return;
+    google.script.run.withSuccessHandler(function(r){ btnOff_(btn); prcMsg(r.msg, true); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcActualizar(prcDatosCard(f));
   }
-  function prcPausar(f){
+  function prcPausar(f, btn){
+    if (!btnOn_(btn)) return;
     var mot = document.getElementById('pmotivo_'+f) ? document.getElementById('pmotivo_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot });
   }
-  function prcReanudar(f){
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora() });
+  function prcReanudar(f, btn){
+    if (!btnOn_(btn)) return;
+    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcRefrescarEnControl(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcReanudar({ fila:f, hora:prcHoraAhora() });
   }
-  function prcCerrarControl(f){
-    var d = prcDatosCard(f); d.hora = prcHoraAhora();
-    google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcCerrar(d);
+  function prcCerrarControl(f, btn){
+    if (btn && btn.disabled) return;
+    confirmarPersonalizado('¿Marcar este lote como controlado? Después no se puede volver atrás.', function(ok){
+      if (!ok || !btnOn_(btn)) return;
+      var d = prcDatosCard(f); d.hora = prcHoraAhora();
+      google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcCerrar(d);
+    });
   }
   function prcEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control? El lote vuelve a la lista de espera.', function(ok){
       if (!ok) return;
-      google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ prcMsg(e.message, false); }).prcEliminarBorrador({ fila:f });
+      google.script.run.withSuccessHandler(function(r){ prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ prcMsg(errMsg_(e), false); }).prcEliminarBorrador({ fila:f });
     });
   }
 
@@ -878,7 +987,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
 
   function pcpMsg(t, ok){ var m=document.getElementById('pcpMsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
 
-  function pcpActualizar(){
+  function pcpActualizar(cb){
   google.script.run
     .withSuccessHandler(function(res){
       var lotes = res || [];
@@ -895,8 +1004,9 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
           };
         });
       pcpPoblarCombo();
+      if (typeof cb === 'function') cb();
     })
-    .withFailureHandler(function(e){ pcpMsg('Error al leer lotes: ' + e.message, false); })
+    .withFailureHandler(function(e){ pcpMsg('Error al leer lotes: ' + errMsg_(e), false); })
     .mecPendientes();
   pcpRefrescarEnControl();
 }
@@ -936,14 +1046,14 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     var b = document.getElementById('pcpBtnAbrir'); if (b) b.disabled = true;
     pcpMsg('Abriendo…', true);
     google.script.run
-      .withSuccessHandler(function(r){ if(b) b.disabled = false; pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); })
-      .withFailureHandler(function(e){ if(b) b.disabled = false; pcpMsg(e.message, false); })
+      .withSuccessHandler(function(r){ if(b) b.disabled = false; pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(true); })
+      .withFailureHandler(function(e){ if(b) b.disabled = false; pcpMsg(errMsg_(e), false); })
       .prcCrearBorrador({ producto: it.producto, teton: it.teton, medida: it.medida, lote: it.lote, hora: prcHoraAhora(), esPrueba: true });
   }
   function pcpRefrescarEnControl(){
     google.script.run
       .withSuccessHandler(pcpRenderEnControl)
-      .withFailureHandler(function(e){ document.getElementById('pcpListaEnControl').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+      .withFailureHandler(function(e){ document.getElementById('pcpListaEnControl').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+errMsg_(e)+'</p>'; })
       .prcListarEnControl(true);
   }
  function pcpRenderEnControl(lista){
@@ -953,15 +1063,16 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     cont.innerHTML = lista.map(function(b){
       var f = b.fila;
       var letras = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      LETRAS_CARD['q' + f] = letras;
       var bloquesCoa = letras.map(function(l){
         var data = (b.coas && b.coas[l]) ? b.coas[l] : {};
         var muestras = Array.isArray(data.muestras) ? data.muestras : [];
         return renderCotaUnicaBloque_('q', f, l, muestras[0]);
       }).join('');
       var botonPausa = b.enPausa
-        ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpReanudar('+f+')">▶ Reanudar</button>'
+        ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpReanudar('+f+', this)">▶ Reanudar</button>'
         : '<select id="qmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>'+
-          '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpPausar('+f+')">⏸ Pausa</button>';
+          '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpPausar('+f+', this)">⏸ Pausa</button>';
       var tiempos = '<div class="tiempos">'+
         '<span>Inicio: <b>'+(b.inicio||'—')+'</b></span>'+
         '<span>Pausas: <b>'+(b.pausaMin||0)+' min</b></span>'+
@@ -974,7 +1085,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
           '<span class="badge-sub" style="background:#fde68a;color:#92400e;">'+(b.enPausa?'En pausa':'En control (prueba)')+'</span>'+
         '</div>'+
         tiempos +
-        '<a href="#" class="hist-link" onclick="toggleHistorialGenerico_(\'histq_\', ' + f + ', \'' + b.lote + '\'); return false;">📋 Ver historial de cierres de este lote</a>'+
+        '<a href="#" class="hist-link" onclick="toggleHistorialGenerico_(\'histq_\', ' + f + ', \'' + jsq_(b.lote) + '\'); return false;">📋 Ver historial de cierres de este lote</a>'+
         '<div id="histq_' + f + '" class="hide"></div>'+
         '<div class="grid-3" style="margin-bottom:10px;">'+
           '<div><label>Con/Sin Tetón</label><input value="'+(b.teton||'—')+'" readonly style="background:#f1f5f9;"></div>'+
@@ -986,15 +1097,15 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
           '<button type="button" onclick="expandirTodoLote_(\'q\','+f+',\''+letras.join(',')+'\')" style="padding:3px 8px;font-size:11px;border-radius:6px;">▾ Expandir todo</button>'+
         '</div>'+
         '<div style="margin-top:6px;">'+bloquesCoa+'</div>'+
-        '<div style="margin-top:10px;"><label>Observaciones</label><input id="qobs_'+f+'" value="'+(b.observaciones||'')+'"></div>'+
+        '<div style="margin-top:10px;"><label>Observaciones</label><input id="qobs_'+f+'" value="'+esc_(b.observaciones||'')+'"></div>'+
         '<div style="display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">'+
           '<div style="display:flex; gap:8px;">'+
             '<button style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpEliminarBorrador('+f+')">🗑 Eliminar</button>'+
             botonPausa +
           '</div>'+
           '<div style="display:flex; gap:8px;">'+
-            '<button style="background:#fff;color:#6b21a8;border:1px solid #c084fc;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpGuardarAvance('+f+')">Guardar avance</button>'+
-            '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpCerrarControl('+f+')">Marcar Controlada ✓</button>'+
+            '<button style="background:#fff;color:#6b21a8;border:1px solid #c084fc;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpGuardarAvance('+f+', this)">Guardar avance</button>'+
+            '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpCerrarControl('+f+', this)">Marcar Controlada ✓</button>'+
           '</div>'+
         '</div>'+
       '</div>';
@@ -1002,7 +1113,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   }
   function pcpDatosCard(f){
   var coas = {};
-  LETRAS_COA.forEach(function(l){
+  letrasDe_('q', f).forEach(function(l){
     var elV = document.getElementById('qc_'+l+'_'+f+'_0');
     var elR = document.getElementById('qr_'+l+'_'+f+'_0');
     var v = elV ? elV.value : '';
@@ -1015,24 +1126,35 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     observaciones: document.getElementById('qobs_'+f) ? document.getElementById('qobs_'+f).value : ''
   };
 }
-  function pcpGuardarAvance(f){
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcActualizar(pcpDatosCard(f));
+  function pcpGuardarAvance(f, btn){
+    if (!btnOn_(btn)) return;
+    google.script.run.withSuccessHandler(function(r){ btnOff_(btn); pcpMsg(r.msg, true); }).withFailureHandler(function(e){ btnOff_(btn); pcpMsg(errMsg_(e), false); }).prcActualizar(pcpDatosCard(f));
   }
-  function pcpPausar(f){
+  function pcpPausar(f, btn){
+    if (!btnOn_(btn)) return;
     var mot = document.getElementById('qmotivo_'+f) ? document.getElementById('qmotivo_'+f).value : '';
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ btnOff_(btn); pcpMsg(errMsg_(e), false); }).prcPausar({ fila:f, hora:prcHoraAhora(), motivo:mot, esPrueba:true });
   }
-  function pcpReanudar(f){
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
+  function pcpReanudar(f, btn){
+    if (!btnOn_(btn)) return;
+    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpRefrescarEnControl(); }).withFailureHandler(function(e){ btnOff_(btn); pcpMsg(errMsg_(e), false); }).prcReanudar({ fila:f, hora:prcHoraAhora(), esPrueba:true });
   }
-  function pcpCerrarControl(f){
-    var d = pcpDatosCard(f); d.hora = prcHoraAhora();
-    google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcCerrar(d);
+  function pcpCerrarControl(f, btn){
+    if (btn && btn.disabled) return;
+    var elR = document.getElementById('qrech_'+f), elC = document.getElementById('qcant_'+f);
+    var rech = entero_(elR ? elR.value : 0), tot = Number(elC ? elC.value : 0) || 0;
+    if (isNaN(rech)) { pcpMsg('Las rechazadas tienen que ser un número entero, 0 o más.', false); return; }
+    if (tot && rech > tot) { pcpMsg('Las rechazadas (' + rech + ') no pueden ser más que las piezas de prueba (' + tot + ').', false); return; }
+    confirmarPersonalizado('¿Marcar las piezas de prueba como controladas? Después no se puede volver atrás.', function(ok){
+      if (!ok || !btnOn_(btn)) return;
+      var d = pcpDatosCard(f); d.hora = prcHoraAhora();
+      google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); refrescarPendientes(true); }).withFailureHandler(function(e){ btnOff_(btn); pcpMsg(errMsg_(e), false); }).prcCerrar(d);
+    });
   }
   function pcpEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control de prueba? Vuelve a la lista de espera.', function(ok){
       if (!ok) return;
-      google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); }).withFailureHandler(function(e){ pcpMsg(e.message, false); }).prcEliminarBorrador({ fila:f, esPrueba:true });
+      google.script.run.withSuccessHandler(function(r){ pcpMsg(r.msg, true); pcpActualizar(); }).withFailureHandler(function(e){ pcpMsg(errMsg_(e), false); }).prcEliminarBorrador({ fila:f, esPrueba:true });
     });
   }
 
