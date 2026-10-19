@@ -444,7 +444,7 @@ $('fProducto').addEventListener('change', render);
 $('fPeriodo').addEventListener('change', ()=>{ aplicarPeriodo(); cargar(); });
 ['fDesde','fHasta'].forEach(id=>$(id).addEventListener('change', ()=>{ $('fPeriodo').value='custom'; cargar(); }));
 aplicarPeriodo();
-$('btnAct').addEventListener('click', cargar);
+$('btnAct').addEventListener('click', ()=>cargar());
 
 function llenarProductos(){
   const set=new Set();
@@ -453,8 +453,13 @@ function llenarProductos(){
   sel.innerHTML='<option value="">Todos</option>'+[...set].sort().map(p=>`<option${p===cur?' selected':''}>${esc(p)}</option>`).join('');
 }
 
-async function cargar(){
-  $('err').innerHTML=''; $('subInfo').textContent='Cargando…';
+let CARGANDO=false, ULTIMA_CARGA=0;
+async function cargar(silencioso){
+  if(CARGANDO) return; CARGANDO=true;
+  try{ await cargarDatos_(silencioso===true); } finally { CARGANDO=false; ULTIMA_CARGA=Date.now(); }
+}
+async function cargarDatos_(silencioso){
+  if(!silencioso){ $('err').innerHTML=''; $('subInfo').textContent='Cargando…'; }
   const { desde, hasta } = rango();
   if(!desde || !hasta || desde > hasta){ $('err').innerHTML='<div class="msg">Revisá las fechas: "Desde" tiene que ser anterior o igual a "Hasta".</div>'; $('subInfo').textContent=''; return; }
   try{
@@ -462,14 +467,28 @@ async function cargar(){
     if(a.error) throw a.error;
     DATA=a.data||{}; COTAS=(b && !b.error && b.data) || [];
     llenarProductos();
-    $('subInfo').textContent='Del '+ddmm(desde)+'/'+desde.slice(0,4)+' al '+ddmm(hasta)+'/'+hasta.slice(0,4)+' · actualizado '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    $('subInfo').textContent='Del '+ddmm(desde)+'/'+desde.slice(0,4)+' al '+ddmm(hasta)+'/'+hasta.slice(0,4)+' · actualizado '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+' (se actualiza solo cada 5 min)';
     render();
   }catch(e){
     const m=String(e && (e.message||e));
+    if(silencioso) return;   // en la actualización automática, si falla se queda con los datos que ya tenía
     $('err').innerHTML='<div class="msg">'+esc(/permiso|autoriz|denied|42501/i.test(m)?'Esta pantalla es solo para el usuario de técnica.':'No se pudieron cargar los datos: '+m)+'</div>';
     $('subInfo').textContent='';
   }
 }
+
+/* ---------- actualización automática (cada 5 minutos) ---------- */
+const AUTO_MIN = 5;
+function autoActualizar(){
+  if(document.hidden || $('app').classList.contains('hidden')) return;
+  if($('fPeriodo').value !== 'custom') aplicarPeriodo();   // si es "Últimos X días", corre la fecha "Hasta" a hoy
+  const y = window.scrollY;
+  cargar(true).then(()=>window.scrollTo(0, y));
+}
+setInterval(autoActualizar, AUTO_MIN*60*1000);
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden && ULTIMA_CARGA && Date.now()-ULTIMA_CARGA > AUTO_MIN*60*1000) autoActualizar();
+});
 
 /* ---------- sesión ---------- */
 async function iniciar(){
