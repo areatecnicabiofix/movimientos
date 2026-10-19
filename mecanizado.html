@@ -82,11 +82,6 @@
         <div><label>Contador de maquina inicial</label><input id="contador" placeholder="0000"></div>
         <div><label>Responsable</label><select id="responsable"></select></div>
       </div>
-        <div class="pendbar">
-      <span style="font-weight:600;">¿Queda pendiente en máquina?</span>
-      <label><input type="radio" name="pend" value="no" checked onchange="togglePend()"> No (Hacer todo)</label>
-      <label><input type="radio" name="pend" value="si" onchange="togglePend()"> Sí (Lote abierto / fraccionado)</label>
-    </div>
 
     <div style="margin-top:12px;"><label>Observaciones</label><textarea id="observaciones" rows="2"></textarea></div>
     <div class="row-actions"><button class="primary" id="btnGuardar" onclick="guardarCarga()">Abrir / Guardar carga</button></div>
@@ -430,7 +425,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
           '<div style="margin-top:10px;"><label>Observaciones <span style="font-weight:400; color:#64748b;">(obligatorio si hay rechazadas o perdidas)</span></label><input id="obs_'+f+'" type="text" placeholder="Motivo del descarte..." value="'+(d.obs||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
 
           '<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">' +
-            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla de máquina</option><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>' +
+            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>' +
             '<button style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecPausarProd('+f+')">⏸ Pausa de producción</button>' +
             '<button style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecReanudarProd('+f+')">▶ Reanudar</button>' +
           '</div>' +
@@ -803,7 +798,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       }).join('');
       var botonPausa = b.enPausa
         ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="prcReanudar('+f+')">▶ Reanudar</button>'
-        : '<select id="pmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>'+
+        : '<select id="pmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>'+
           '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="prcPausar('+f+')">⏸ Pausa</button>';
       var tiempos = '<div class="tiempos">'+
         '<span>Inicio: <b>'+(b.inicio||'—')+'</b></span>'+
@@ -965,7 +960,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       }).join('');
       var botonPausa = b.enPausa
         ? '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpReanudar('+f+')">▶ Reanudar</button>'
-        : '<select id="qmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>'+
+        : '<select id="qmotivo_'+f+'" style="width:auto;padding:7px;font-size:12px;"><option>Falla</option><option>Otra prioridad</option><option>Otro motivo</option></select>'+
           '<button style="background:#b45309;color:#fff;border:none;margin:0;padding:7px 14px;font-size:12px;border-radius:8px;cursor:pointer;" onclick="pcpPausar('+f+')">⏸ Pausa</button>';
       var tiempos = '<div class="tiempos">'+
         '<span>Inicio: <b>'+(b.inicio||'—')+'</b></span>'+
