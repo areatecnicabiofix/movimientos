@@ -2,6 +2,17 @@
 <html>
 <head>
 <base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mecanizado</title>
+<script>
+  window.BIOFIX_PANTALLA = 'mecanizado';
+  window.BIOFIX_CACHE = ['mecCatalogo'];
+  /* Tiempo real: si cambia algo de Mecanizado, se refresca la lista de lotes (ver gas.js) */
+  window.BIOFIX_REFRESCAR = function () { if (typeof refrescarPendientes === 'function') refrescarPendientes(); };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
 <style>
   :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#2563eb; --warn:#b45309; --warnbg:#fef3c7; --okbg:#dcfce7; --ok:#15803d; }
   *{ box-sizing:border-box; }
@@ -217,6 +228,11 @@
   }
 
   function init(){
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      msg('No se pudo conectar con el servidor (falta gas.js). Actualizá la página con Ctrl+F5.', false);
+      document.getElementById('listaPend').innerHTML = '<p style="color:#b91c1c;font-size:13px;">No se pudo conectar con el servidor. Actualizá con Ctrl+F5.</p>';
+      return;
+    }
     google.script.run
       .withSuccessHandler(function(c){
          CAT = c;
@@ -414,7 +430,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
           '<div style="margin-top:10px;"><label>Observaciones <span style="font-weight:400; color:#64748b;">(obligatorio si hay rechazadas o perdidas)</span></label><input id="obs_'+f+'" type="text" placeholder="Motivo del descarte..." value="'+(d.obs||'')+'" oninput="mecGuardarDraft_('+f+')"></div>' +
 
           '<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">' +
-            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla de máquina</option><option>Otra prioridad</option></select>' +
+            '<select id="pmot_'+f+'" style="width:auto;"><option>Falla de máquina</option><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>' +
             '<button style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecPausarProd('+f+')">⏸ Pausa de producción</button>' +
             '<button style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;" onclick="mecReanudarProd('+f+')">▶ Reanudar</button>' +
           '</div>' +
