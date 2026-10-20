@@ -285,7 +285,7 @@ const ORDEN_ETAPA = ['Mecanizado','Lavado Primario','Abrillantado','Vaporeado','
 function etapaDe(r){ return r.grupo==='Lavado' ? (r.subetapa||'Lavado') : (r.grupo==='Envasado (Sala Blanca)' ? 'Sala Blanca (envasado)' : r.grupo); }
 const porOrdenEtapa = (a,b) => { const i=ORDEN_ETAPA.indexOf(a.label), j=ORDEN_ETAPA.indexOf(b.label); return (i<0?99:i)-(j<0?99:j); };
 const TABS = [
-  ['general','Todos los sectores'], ['mec','Mecanizado'], ['qc','Control de Calidad'], ['blast','Blasting'],
+  ['general','Todos los sectores'], ['prod','Por implante y medida'], ['mec','Mecanizado'], ['qc','Control de Calidad'], ['blast','Blasting'],
   ['lp','Lavado primario'], ['lg','Lavado Grueso'], ['lf','Lavado Final'], ['wip','En proceso']
 ];
 
@@ -305,6 +305,63 @@ function vGeneral(v){
   chBarrasH($('g4'), ranking(mov,r=>r.producto,r=>r.buenas));
   const orden = new Map(); wip.forEach(r=>orden.set(r.etapa, r.orden));
   chBarrasH($('g5'), ranking(wip,r=>r.etapa,r=>r.cantidad).sort((a,b)=>(orden.get(a.label)||0)-(orden.get(b.label)||0)).map(x=>({...x,tip:`<br><span class="k">Piezas:</span> ${fmt(x.value)}<br><span class="k">Lotes:</span> ${x.n}`})), {l:190, top:20});
+}
+
+/* --- Por implante y medida --- */
+function medNum_(m){ const a=String(m||'').replace(/,/g,'.').match(/\d+(?:\.\d+)?/g)||[]; return [Number(a[0])||0, Number(a[1])||0]; }
+function ordenMedida_(a,b){ const x=medNum_(a), y=medNum_(b); return (x[0]-y[0])||(x[1]-y[1])||String(a).localeCompare(String(b)); }
+function claveIM_(r){ return (r.producto||'—')+'|'+(r.medida||'—')+'|'+teton(r.teton); }
+function vProd(v){
+  const unProd = $('fProducto').value;
+  const mov=movF(), wip=(DATA.wip||[]).filter(r=>prodOk(r.producto)), qc=(DATA.qc||[]).filter(r=>prodOk(r.producto));
+  const mec=mov.filter(r=>r.grupo==='Mecanizado'), otros=mov.filter(r=>r.grupo!=='Mecanizado'&&r.grupo!=='Control de Calidad');
+  /* una fila por producto + medida + tetón */
+  const F=new Map();
+  const fila=r=>{ const k=claveIM_(r); if(!F.has(k)) F.set(k,{producto:r.producto||'—',medida:r.medida||'—',teton:teton(r.teton),stock:0,etapas:{},mecOk:0,mecRech:0,qcCtl:0,qcRech:0,otrRech:0}); return F.get(k); };
+  wip.forEach(r=>{ const f=fila(r); f.stock+=num(r.cantidad); f.etapas[r.etapa]=(f.etapas[r.etapa]||0)+num(r.cantidad); });
+  mec.forEach(r=>{ const f=fila(r); f.mecOk+=num(r.buenas); f.mecRech+=num(r.rechazo); });
+  qc.forEach(r=>{ const f=fila(r); f.qcCtl+=num(r.cantidad); f.qcRech+=num(r.rechazadas); });
+  otros.forEach(r=>{ if(num(r.rechazo)>0) fila(r).otrRech+=num(r.rechazo); });
+  const filas=[...F.values()].map(f=>({...f, rechTot:f.mecRech+f.qcRech+f.otrRech,
+      pMec:pct(f.mecRech,f.mecOk), pQc:pct(f.qcRech,f.qcCtl)}))
+    .sort((a,b)=>a.producto.localeCompare(b.producto)||ordenMedida_(a.medida,b.medida)||a.teton.localeCompare(b.teton));
+  const nombre=f=>(unProd?'':f.producto+' · ')+f.medida+(f.teton!=='—'?' · '+f.teton:'');
+  const stock=sum(filas,f=>f.stock), mOk=sum(filas,f=>f.mecOk), rT=sum(filas,f=>f.rechTot), qcC=sum(filas,f=>f.qcCtl), qcR=sum(filas,f=>f.qcRech);
+  v.innerHTML = (unProd?'':'<p class="desc">Elegí un producto arriba (filtro <b>Producto</b>) para ver el detalle de sus medidas.</p>')
+    + kpis([['Stock hoy',fmt(stock)],['Mecanizado en el período',fmt(mOk)],['Rechazadas en el período (todas las etapas)',fmt(rT)],['% rechazo en Control de Calidad',fmt(pct(qcR,qcC),2)+' %']])
+    + grid(card('p1','c6', unProd?'Stock hoy por medida':'Stock hoy por tipo de implante','Foto de hoy: esperando + en proceso (no depende del período).'),
+           card('p2','c6', unProd?'Mecanizado por medida':'Mecanizado por tipo de implante','Piezas buenas del período.'))
+    + grid(card('p3','c6','Medidas con más rechazadas','Total de rechazadas del período en todas las etapas.'),
+           card('p4','c6','% de rechazo en Control de Calidad por medida','Rechazadas / controladas. Solo medidas con 20 piezas controladas o más.'))
+    + grid(card('p5','c12','Stock hoy por medida y etapa','Dónde está cada medida hoy. Las columnas son las etapas, en el orden del proceso.'))
+    + grid(card('p6','c12','Producción y rechazo por medida (período)','Mecanizado: % sobre lo producido. Control: % sobre lo controlado. Otras etapas: lavados, blasting y lavado final.'));
+  const porProd = (arr,val)=>ranking(arr,r=>r.producto,val);
+  if(unProd){
+    chBarrasH($('p1'), filas.filter(f=>f.stock>0).map(f=>({label:nombre(f),value:f.stock})).sort((a,b)=>b.value-a.value), {l:190, top:25});
+    chBarrasH($('p2'), filas.filter(f=>f.mecOk>0).map(f=>({label:nombre(f),value:f.mecOk,tip:`<br><span class="k">Buenas:</span> ${fmt(f.mecOk)}<br><span class="k">Rechazadas:</span> ${fmt(f.mecRech)}`})).sort((a,b)=>b.value-a.value), {l:190, top:25});
+  } else {
+    chBarrasH($('p1'), porProd(wip,r=>r.cantidad), {l:190, top:25});
+    chBarrasH($('p2'), porProd(mec,r=>r.buenas), {l:190, top:25});
+  }
+  chBarrasH($('p3'), filas.filter(f=>f.rechTot>0).map(f=>({label:nombre(f),value:f.rechTot,
+      tip:`<br><span class="k">Mecanizado:</span> ${fmt(f.mecRech)}<br><span class="k">Control:</span> ${fmt(f.qcRech)}<br><span class="k">Otras etapas:</span> ${fmt(f.otrRech)}`})).sort((a,b)=>b.value-a.value), {color:'var(--series-2)', l:190, top:20});
+  chBarrasH($('p4'), filas.filter(f=>f.qcCtl>=20).map(f=>({label:nombre(f),value:f.pQc||0,
+      tip:`<br><span class="k">Controladas:</span> ${fmt(f.qcCtl)}<br><span class="k">Rechazadas:</span> ${fmt(f.qcRech)}`})).sort((a,b)=>b.value-a.value), {color:'var(--series-2)', dec:1, suf:'%', l:190, top:20});
+  /* pivot de stock por etapa */
+  const orden=new Map(); wip.forEach(r=>orden.set(r.etapa,r.orden));
+  const etapas=[...orden.keys()].sort((a,b)=>(orden.get(a)||0)-(orden.get(b)||0));
+  const heatS = x => !x?'':'var(--heat-1)';
+  const colsS=[{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:'teton'}]
+    .filter(c=>!(unProd&&c.k==='producto'))
+    .concat(etapas.map(e=>({t:e,k:r=>r.etapas[e]||null,n:1,heat:heatS})))
+    .concat([{t:'Total',k:'stock',n:1}]);
+  tabla($('p5'), colsS, filas.filter(f=>f.stock>0));
+  const heatP = p => p==null?'':p>=4?'var(--heat-3)':p>=2?'var(--heat-2)':p>0?'var(--heat-1)':'';
+  tabla($('p6'), [{t:'Producto',k:'producto'},{t:'Medida',k:'medida'},{t:'Tetón',k:'teton'}].filter(c=>!(unProd&&c.k==='producto')).concat([
+    {t:'Mecanizado buenas',k:'mecOk',n:1},{t:'Rech. mecanizado',k:'mecRech',n:1},{t:'% mec.',k:'pMec',n:1,dec:1,suf:'%',heat:heatP},
+    {t:'Controladas',k:'qcCtl',n:1},{t:'Rech. control',k:'qcRech',n:1},{t:'% control',k:'pQc',n:1,dec:1,suf:'%',heat:heatP},
+    {t:'Rech. otras etapas',k:'otrRech',n:1},{t:'Rechazadas total',k:'rechTot',n:1},{t:'Stock hoy',k:'stock',n:1}]),
+    filas.filter(f=>f.mecOk||f.mecRech||f.qcCtl||f.otrRech||f.stock));
 }
 
 /* --- Mecanizado --- */
@@ -451,7 +508,7 @@ function render(){
   $('tabs').innerHTML = TABS.map(([k,t])=>`<button data-k="${k}" class="${k===TAB?'on':''}">${esc(t)}</button>`).join('');
   const v=$('view'); v.innerHTML='';
   if(!DATA) return;
-  ({ general:vGeneral, mec:vMec, qc:vQC, blast:vBlast,
+  ({ general:vGeneral, prod:vProd, mec:vMec, qc:vQC, blast:vBlast,
      lp: x=>vLavado(x,['Lavado Primario','Abrillantado','Vaporeado','Lavado Secundario'],'Lavado primario / abrillantado / vaporeado / secundario'),
      lg: x=>vLavado(x,['Lavado Grueso'],'Lavado Grueso'),
      lf: x=>vLavado(x,['Lavado Final'],'Lavado Final'),
