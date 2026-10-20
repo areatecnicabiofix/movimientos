@@ -29,6 +29,8 @@
     cache.catch(function () { cache = null; });
     return cache;
   }
+  // Después de guardar algo se descarta la lectura guardada: la próxima vuelve a consultar.
+  window.BIOFIX_BLASTING_INVALIDAR = function () { cache = null; cacheT = 0; };
   function falta() { throw new Error('la copia de la hoja todavía no está en Supabase'); }
   /* ---- ayudantes comunes (mismas reglas que Codigo.gs) ---- */
   function N(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
@@ -259,20 +261,21 @@
   .btn{ color:#fff; border:none; padding:10px 18px; font-size:14px; font-weight:600; border-radius:6px; cursor:pointer; margin-top:12px; }
   .btn-borrador{ background:#fff; color:#b45309; border:1px solid #f59e0b; }
   .btn-final{ background:#16a34a; }
-  .btn:disabled{ opacity:.5; cursor:default; }
+  .btn:disabled, button:disabled{ opacity:.5; cursor:default; }
   .lote-card{ border:1px solid #fde68a; border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
-  .lote-card-header{ font-weight:700; font-size:13px; color:#92400e; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .lote-card-header{ font-weight:700; font-size:13px; color:#92400e; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
   .badge-sub{ display:inline-block; padding:2px 10px; border-radius:8px; font-size:11px; font-weight:700; background:#fef3c7; color:#92400e; }
   .hint{ font-size:11px; color:var(--mut); margin:4px 0 0 0; }
   .tabs{ display:flex; gap:8px; margin-bottom:16px; }
   .tab{ flex:1; padding:11px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
   .tab.active{ background:#0284c7; color:#fff; border-color:#0284c7; }
   .hide{ display:none; }
+  .tabla-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   table{ width:100%; border-collapse:collapse; font-size:12px; }
-  th{ background:#f1f5f9; text-align:left; padding:5px 7px; border:1px solid #e2e8f0; }
+  th{ background:#f1f5f9; text-align:left; padding:5px 7px; border:1px solid #e2e8f0; white-space:nowrap; }
   td{ padding:4px 7px; border:1px solid #e2e8f0; }
   .aviso50{ font-size:12px; font-weight:700; margin-top:4px; }
-   
+
   .estado-actual{ font-size:16px; font-weight:800; padding:10px 14px; border-radius:10px; text-align:center; margin-bottom:14px; }
   .paso{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fff; }
   .paso.activo{ border-color:#7c3aed; background:#faf5ff; box-shadow:0 0 0 2px #ede9fe; }
@@ -283,6 +286,12 @@
   .btn-accion{ background:#7c3aed; color:#fff; border:none; padding:12px 18px; font-size:15px; font-weight:800; border-radius:10px; cursor:pointer; width:100%; margin-top:8px; }
   .btn-mini{ border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
   .chip{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; }
+  /* Celular: una columna (los campos que ocupaban 2 columnas no fuerzan columnas de más) */
+  @media (max-width:600px){
+    body{ padding:10px; }
+    .grid-3 > div{ grid-column:auto !important; }
+    .tab{ font-size:13px; padding:10px 6px; }
+  }
 </style>
 </head>
 <body>
@@ -296,7 +305,7 @@
   </div>
 
 
-  
+
   <div id="paneBla">
     <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
       <h2>1. Seleccionar lote para blastinar </h2>
@@ -316,8 +325,8 @@
       </div>
       <div class="grid-3" style="margin-top:12px;">
         <div><label>Con / Sin Teton (viene del proceso anterior)</label><input id="txtTeton" readonly style="background:#f1f5f9;" placeholder="Se completa solo"></div>
-        <div><label>Cantidad OK</label><input id="txtCantidad" type="number" min="1"></div>
-        <div><label>Rechazadas</label><input id="txtRechazadas" type="number" min="0" value="0"></div>
+        <div><label>Cantidad OK</label><input id="txtCantidad" type="number" min="1" step="1"></div>
+        <div><label>Rechazadas</label><input id="txtRechazadas" type="number" min="0" step="1" value="0"></div>
       </div>
       <div class="grid-3" style="margin-top:12px;">
         <div><label>Responsable (quien controla esta partida)</label>
@@ -325,7 +334,7 @@
         </div>
       </div>
       <div style="margin-top:12px;"><label>Observaciones</label><textarea id="txtObservaciones" rows="2" placeholder="Notas sobre el lote..."></textarea></div>
-      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
         <span id="msg" style="font-size:13px;"></span>
         <button class="btn btn-borrador" id="btnBorrador" onclick="guardarBlasting('borrador')">Agregar a blasting (borrador)</button>
       </div>
@@ -338,7 +347,7 @@
   </div>
 
 
-  
+
   <div id="paneInd" class="hide">
     <div id="indControl"></div>
     <div id="indZona"><p class="hint">Cargando…</p></div>
@@ -353,10 +362,30 @@
 <script>
   var DATA = [];
   var BORRADORES = [];
+  var TAB = 'bla';
+
+  /* ===== Ayudantes ===== */
+  // Texto seguro para meter en el HTML (comillas, <, >, & no rompen la pantalla)
+  function esc_(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // Mensaje de error legible (nunca "undefined")
+  function errMsg_(e){
+    if (!e) return 'Error desconocido. Probá de nuevo.';
+    if (typeof e === 'string') return e;
+    var m = e.message || e.error || '';
+    if (m && typeof m === 'object') m = m.message || JSON.stringify(m);
+    return String(m || e) || 'Error desconocido. Probá de nuevo.';
+  }
+  // Número entero >= 0: devuelve el número, null si está vacío, NaN si no es un entero válido
+  function entero_(v){ var s = String(v == null ? '' : v).trim(); if (s === '') return null; return /^\d+$/.test(s) ? Number(s) : NaN; }
+  // Después de guardar: que la próxima lectura vaya a buscar los datos nuevos
+  function invalidar_(){ try { if (window.BIOFIX_BLASTING_INVALIDAR) window.BIOFIX_BLASTING_INVALIDAR(); } catch(e){} }
+  function fechaHoy_(){ var d = new Date(); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); }
+  function claveLote_(x){ return [x.producto, x.medida, x.lote].map(function(v){ return String(v == null ? '' : v).trim().toLowerCase(); }).join('|'); }
 
 
   function verTab(cual){
     var b = (cual === 'bla');
+    TAB = b ? 'bla' : 'ind';
     document.getElementById('paneBla').className = b ? '' : 'hide';
     document.getElementById('paneInd').className = b ? 'hide' : '';
     document.getElementById('tb_bla').className = b ? 'tab active' : 'tab';
@@ -365,38 +394,53 @@
   }
 
 
-   
-  function actualizar() {
-    
+
+  function actualizar(conservar) {
+
     refrescarBorradores();
-    
+
     google.script.run
       .withSuccessHandler(function(res){
         DATA = res || [];
-        try { poblarCombo(); } catch (err) {
+        try { poblarCombo(conservar === true); } catch (err) {
           var cb = document.getElementById('comboLotes');
           if (cb) cb.innerHTML = '<option value="">Error al armar la lista</option>';
         }
       })
-      .withFailureHandler(function(e){ msg('Error al leer inventario: ' + e.message, false); })
+      .withFailureHandler(function(e){ msg('Error al leer inventario: ' + errMsg_(e), false); })
       .blaObtenerDisponibles();
   }
-  function poblarCombo() {
+  // conservar = true (refresco automático): si el lote elegido sigue en la lista, queda elegido y no se borra lo cargado
+  function poblarCombo(conservar) {
     var combo = document.getElementById('comboLotes');
-    if (!DATA.length) { combo.innerHTML = '<option value="">No hay lotes esperando blasting</option>'; limpiar(); return; }
-    
-    
+    var antes = (conservar && combo.value !== '' && combo._clave) ? combo._clave : '';
+    if (!DATA.length) { combo.innerHTML = '<option value="">No hay lotes esperando blasting</option>'; combo._clave = ''; limpiar(); return; }
+
+
     combo.innerHTML = '<option value="">— Seleccioná un lote —</option>' +
   DATA.map(function(x, i){
-    return '<option value="' + i + '">' + x.producto + ' — ' + x.medida + ' (' + x.lote + ') · ' +
-      (x.disponible || 0) + 'u. disponibles</option>';
+    return '<option value="' + i + '">' + esc_(x.producto) + ' — ' + esc_(x.medida) + ' (' + esc_(x.lote) + ') · ' +
+      esc_(x.disponible || 0) + 'u. disponibles</option>';
   }).join('');
+    if (antes) {
+      for (var i = 0; i < DATA.length; i++) {
+        if (claveLote_(DATA[i]) === antes) {
+          combo.value = String(i); combo._clave = antes;
+          document.getElementById('hidFila').value = DATA[i].fila || '';
+          document.getElementById('lblDisponible').textContent = (DATA[i].disponible || 0) + ' u.';
+          return;
+        }
+      }
+    }
+    combo._clave = '';
     limpiar();
   }
   function seleccionarLote() {
-    var idx = document.getElementById('comboLotes').value;
-    if (idx === '' || !DATA[idx]) { limpiar(); return; }
+    var combo = document.getElementById('comboLotes');
+    var idx = combo.value;
+    if (idx === '' || !DATA[idx]) { combo._clave = ''; limpiar(); return; }
     var it = DATA[idx];
+    combo._clave = claveLote_(it);
     document.getElementById('hidFila').value     = it.fila || '';
     document.getElementById('txtProducto').value = it.producto || '';
     document.getElementById('txtMedida').value   = it.medida || '';
@@ -414,49 +458,56 @@
   function guardarBlasting(modo) {
     var producto = document.getElementById('txtProducto').value;
     var lote     = document.getElementById('txtLote').value;
-    var cantidad = document.getElementById('txtCantidad').value;
     var resp     = document.getElementById('responsable').value;
-    
-    if ((!producto || !lote)) {
-      var cb = document.getElementById('comboLotes');
-      var iSel = cb ? cb.value : '';
-      if (iSel !== '' && DATA[iSel]) {
-        var X = DATA[iSel];
-        document.getElementById('txtProducto').value = X.producto;
-        document.getElementById('txtMedida').value   = X.medida || '';
-        document.getElementById('txtLote').value     = X.lote;
-        document.getElementById('txtTeton').value    = X.teton || '';
-        producto = X.producto; lote = X.lote;
-      }
+    var cb = document.getElementById('comboLotes');
+    var iSel = cb ? cb.value : '';
+    var item = (iSel !== '' && DATA[iSel]) ? DATA[iSel] : null;
+
+    if ((!producto || !lote) && item) {
+      document.getElementById('txtProducto').value = item.producto;
+      document.getElementById('txtMedida').value   = item.medida || '';
+      document.getElementById('txtLote').value     = item.lote;
+      document.getElementById('txtTeton').value    = item.teton || '';
+      producto = item.producto; lote = item.lote;
     }
     if (!producto || !lote) { msg('Elegí un lote en la lista de arriba.', false); return; }
     if (!resp) { msg('Tenés que seleccionar un Responsable.', false); return; }
-    if (!cantidad || Number(cantidad) <= 0) { msg('Completá la cantidad.', false); return; }
+    var cantidad = entero_(document.getElementById('txtCantidad').value);
+    var rech = entero_(document.getElementById('txtRechazadas').value);
+    if (rech === null) rech = 0;
+    if (cantidad === null || cantidad <= 0) { msg('Completá la cantidad OK (mayor a 0).', false); return; }
+    if (isNaN(cantidad)) { msg('La cantidad OK tiene que ser un número entero, sin decimales.', false); return; }
+    if (isNaN(rech)) { msg('Las rechazadas tienen que ser un número entero, 0 o más.', false); return; }
+    var disp = item ? Number(item.disponible) : NaN;
+    if (!isNaN(disp) && cantidad + rech > disp) {
+      msg('Cantidad OK + Rechazadas (' + (cantidad + rech) + ') supera lo disponible del lote (' + disp + ').', false); return;
+    }
     var datos = {
       fila: Number(document.getElementById('hidFila').value) || 0, producto: producto,
       medida: document.getElementById('txtMedida').value, lote: lote, teton: document.getElementById('txtTeton').value,
-      cantidad: Number(cantidad) || 0, rechazadas: Number(document.getElementById('txtRechazadas').value) || 0,
+      cantidad: cantidad, rechazadas: rech,
       responsable: resp, observaciones: document.getElementById('txtObservaciones').value, modo: modo
     };
+    if (ocupado_('reg')) return;
     var btnB = document.getElementById('btnBorrador');
     if (btnB) btnB.disabled = true;
     msg('Guardando…', true);
     var listo = false;
-    
+
     var guard = setTimeout(function(){
-      if (!listo) { if (btnB) btnB.disabled = false; msg('El servidor no respondió. Probá de nuevo o recargá la página.', false); }
+      if (!listo) { libre_('reg'); if (btnB) btnB.disabled = false; msg('El servidor no respondió. Fijate en "En blasting" si quedó cargado antes de volver a intentar.', false); }
     }, 20000);
     google.script.run
       .withSuccessHandler(function(r){
-        listo = true; clearTimeout(guard);
+        listo = true; clearTimeout(guard); libre_('reg'); invalidar_();
         if (btnB) btnB.disabled = false;
         msg((r && r.msg) ? r.msg : 'Guardado.', true);
         document.getElementById('txtObservaciones').value = ''; actualizar();
       })
       .withFailureHandler(function(e){
-        listo = true; clearTimeout(guard);
+        listo = true; clearTimeout(guard); libre_('reg'); invalidar_();
         if (btnB) btnB.disabled = false;
-        msg(e.message, false);
+        msg(errMsg_(e), false);
       })
       .blaRegistrar(datos);
   }
@@ -465,66 +516,85 @@
       .withSuccessHandler(function(list){
         BORRADORES = list || [];
         try { renderBorradores(BORRADORES); } catch (err) {
-          document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">Error al mostrar los borradores: ' + err.message + '</p>';
+          document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">Error al mostrar los borradores: ' + esc_(err.message) + '</p>';
         }
       })
-      .withFailureHandler(function(e){ document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + e.message + '</p>'; })
+      .withFailureHandler(function(e){ document.getElementById('listaBorradores').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + esc_(errMsg_(e)) + '</p>'; })
       .blaListar();
   }
  function renderBorradores(list) {
     document.getElementById('cntBorr').textContent = list.length;
     var cont = document.getElementById('listaBorradores');
     if (!list.length) { cont.innerHTML = '<p style="color:var(--mut);font-size:13px;">No hay piezas en blasting.</p>'; return; }
-   
+
     cont.innerHTML = list.map(function(b){
-      var f = b.fila;
-     
-      
-      
+      var f = Number(b.fila) || 0;
+
+
+
       var estaEnProceso = (b.estado === "En proceso");
-     
-      
+
+
       var attrEliminar = estaEnProceso
         ? 'disabled title="No se puede eliminar un lote que ya está en proceso" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;cursor:not-allowed;margin:0;padding:7px 12px;font-size:12px;"'
-        : 'style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminar(' + f + ')"';
+        : 'id="bdel_' + f + '" style="background:#fff;color:#b91c1c;border:1px solid #fca5a5;margin:0;padding:7px 12px;font-size:12px;" onclick="eliminar(' + f + ')"';
 
 
       return '<div class="lote-card">' +
         '<div class="lote-card-header">' +
-          '<span>' + b.producto + ' · ' + b.medida + '  <span style="color:#94a3b8;font-weight:400;">(' + b.lote + ')</span></span>' +
+          '<span>' + esc_(b.producto) + ' · ' + esc_(b.medida) + '  <span style="color:#94a3b8;font-weight:400;">(' + esc_(b.lote) + ')</span></span>' +
           '<span class="badge-sub">en blasting</span>' +
         '</div>' +
         '<div class="grid-3">' +
-          '<div><label>Con/Sin Teton</label><input value="' + (b.teton || '—') + '" readonly style="background:#f1f5f9;"></div>' +
-          '<div><label>Cantidad OK</label><input type="number" min="0" id="bcant_' + f + '" value="' + b.cantidad + '"></div>' +
-          '<div><label>Rechazadas</label><input type="number" min="0" id="brech_' + f + '" value="' + (b.rechazadas || 0) + '"></div>' +
+          '<div><label>Con/Sin Teton</label><input value="' + esc_(b.teton || '—') + '" readonly style="background:#f1f5f9;"></div>' +
+          '<div><label>Cantidad OK</label><input type="number" min="1" step="1" id="bcant_' + f + '" value="' + esc_(b.cantidad) + '"></div>' +
+          '<div><label>Rechazadas</label><input type="number" min="0" step="1" id="brech_' + f + '" value="' + esc_(b.rechazadas || 0) + '"></div>' +
         '</div>' +
         '<div class="grid-3" style="margin-top:10px;">' +
-          '<div><label>Responsable</label><input id="bresp_' + f + '" value="' + (b.responsable || '') + '"></div>' +
-          '<div style="grid-column:span 2;"><label>Observaciones</label><input id="bobs_' + f + '" value="' + (b.observaciones || '') + '"></div>' +
+          '<div><label>Responsable</label><input id="bresp_' + f + '" value="' + esc_(b.responsable || '') + '"></div>' +
+          '<div style="grid-column:span 2;"><label>Observaciones</label><input id="bobs_' + f + '" value="' + esc_(b.observaciones || '') + '"></div>' +
         '</div>' +
-        '<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center; margin-top:10px;">' +
-          
+        '<div style="display:flex; gap:8px; justify-content:flex-end; align-items:center; margin-top:10px; flex-wrap:wrap;">' +
+
           '<button class="btn" ' + attrEliminar + '>🗑 Eliminar</button>' +
-          '<button class="btn" style="background:#0284c7;color:#fff;margin:0;padding:7px 14px;font-size:12px;" onclick="guardarAvance(' + f + ')">💾 Guardar avance</button>' +
+          '<button class="btn" id="bsav_' + f + '" style="background:#0284c7;color:#fff;margin:0;padding:7px 14px;font-size:12px;" onclick="guardarAvance(' + f + ')">💾 Guardar avance</button>' +
         '</div>' +
       '</div>';
     }).join('');
 }
   function datosCard(f) {
     return {
-      fila: f, cantidad: Number(document.getElementById('bcant_' + f).value) || 0,
-      rechazadas: Number(document.getElementById('brech_' + f).value) || 0,
+      fila: f, cantidad: entero_(document.getElementById('bcant_' + f).value),
+      rechazadas: entero_(document.getElementById('brech_' + f).value),
       responsable: document.getElementById('bresp_' + f).value, observaciones: document.getElementById('bobs_' + f).value
     };
   }
+  function botonesCard_(f, on){
+    ['bsav_', 'bdel_'].forEach(function(p){ var b = document.getElementById(p + f); if (b) b.disabled = !on; });
+  }
   function guardarAvance(f) {
     var d = datosCard(f);
-    google.script.run.withSuccessHandler(function(r){ msg(r.msg, true); actualizar(); }).withFailureHandler(function(e){ msg(e.message, false); }).blaActualizar(d);
+    if (d.rechazadas === null) d.rechazadas = 0;
+    if (d.cantidad === null || d.cantidad <= 0) { msg('La cantidad OK tiene que ser mayor a 0.', false); return; }
+    if (isNaN(d.cantidad)) { msg('La cantidad OK tiene que ser un número entero, sin decimales.', false); return; }
+    if (isNaN(d.rechazadas)) { msg('Las rechazadas tienen que ser un número entero, 0 o más.', false); return; }
+    if (ocupado_('bor' + f)) return;
+    botonesCard_(f, false);
+    msg('Guardando…', true);
+    google.script.run
+      .withSuccessHandler(function(r){ libre_('bor' + f); invalidar_(); msg((r && r.msg) || 'Guardado.', true); actualizar(); })
+      .withFailureHandler(function(e){ libre_('bor' + f); invalidar_(); botonesCard_(f, true); msg(errMsg_(e), false); })
+      .blaActualizar(d);
   }
   function eliminar(f) {
     if (!confirm('¿Eliminar este borrador? El lote vuelve a la lista de espera de blasting.')) return;
-    google.script.run.withSuccessHandler(function(r){ msg(r.msg, true); actualizar(); }).withFailureHandler(function(e){ msg(e.message, false); }).blaEliminar({ fila: f });
+    if (ocupado_('bor' + f)) return;
+    botonesCard_(f, false);
+    msg('Eliminando…', true);
+    google.script.run
+      .withSuccessHandler(function(r){ libre_('bor' + f); invalidar_(); msg((r && r.msg) || 'Eliminado.', true); actualizar(); })
+      .withFailureHandler(function(e){ libre_('bor' + f); invalidar_(); botonesCard_(f, true); msg(errMsg_(e), false); })
+      .blaEliminar({ fila: f });
   }
   function msg(t, ok) {
     var m = document.getElementById('msg'); if(!m) return; m.textContent = t; m.style.color = ok ? '#15803d' : '#b91c1c';
@@ -532,22 +602,22 @@
   }
 
 
-   
+
   var BND_LOTES = [];
   var BND_COMPLETOS = [];
   var PROXIMA_BANDEJA = '—';
   function horaAhora(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
   function imsg(t, ok){ var m=document.getElementById('imsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
-  function tl(v){ return (v===''||v==null)?'—':v; }
+  function tl(v){ return (v===''||v==null)?'—':esc_(v); }
 
 
-  
-  
-  
+
+
   /* ---- Varias bandejas: una en pausa NO bloquea, se puede iniciar otra ---- */
   var BND_PAUSADAS = [];      // bandejas en pausa (se reanudan desde acá)
   var BND_HAY_ACTIVA = false; // hay una bandeja en curso (sin pausa)
   var CUR_FILA = 0;           // fila de la bandeja que se ve en pantalla
+  var CTRL_ACTUAL = null;     // control de lote en curso (para validar cantidades)
   function pmsg_(t, ok){
     var m = document.getElementById('pmsg') || document.getElementById('imsg');
     if (!m) { if (!ok) alert(t); return; }
@@ -564,18 +634,20 @@
         var e0 = String(p.estado||'').toLowerCase(), etapa = e0==='blastinando' ? 'Blastinando' : (e0==='armado listo' ? 'Armado listo (falta blastinar)' : 'Armando');
         return '<div style="border:1px solid #fde68a;border-radius:10px;padding:10px;margin-bottom:8px;background:#fff;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">'+
           '<div style="font-size:13px;"><b>'+tl(p.lote)+'</b> · '+tl(p.producto)+' · '+tl(p.medida)+' · Bandeja '+tl(p.bandeja)+' · '+tl(p.cantidad)+' u.'+
-          '<br><span style="font-size:12px;color:#92400e;">'+etapa+' · en pausa desde '+tl(p.pausaDesde)+(p.motivos?' · '+p.motivos:'')+'</span></div>'+
+          '<br><span style="font-size:12px;color:#92400e;">'+etapa+' · en pausa desde '+tl(p.pausaDesde)+(p.motivos?' · '+esc_(p.motivos):'')+'</span></div>'+
           '<button class="btn-mini" style="background:'+(BND_HAY_ACTIVA?'#cbd5e1':'#16a34a')+';color:#fff;" '+
-            (BND_HAY_ACTIVA ? 'disabled' : 'onclick="reanudar('+p.fila+')"')+'>▶ Reanudar</button>'+
+            (BND_HAY_ACTIVA ? 'disabled' : 'onclick="reanudar('+(Number(p.fila)||0)+')"')+'>▶ Reanudar</button>'+
         '</div>';
       }).join('')+
       '<span id="pmsg" style="font-size:13px;"></span>'+
     '</div>';
   }
 
-  function cargarBandejaActual(){
-    document.getElementById('indZona').innerHTML = '<p class="hint">Cargando…</p>';
-    document.getElementById('indControl').innerHTML = '';
+  function cargarBandejaActual(silencioso){
+    if (!silencioso) {
+      document.getElementById('indZona').innerHTML = '<p class="hint">Cargando…</p>';
+      document.getElementById('indControl').innerHTML = '';
+    }
     cargarControlLote();
     google.script.run
       .withSuccessHandler(function(d){
@@ -591,29 +663,29 @@
               .withFailureHandler(function(e){ BND_COMPLETOS = []; renderIniciar(); cargarPanel(); })
               .bndLotesCompletos();
           })
-          .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+          .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+esc_(errMsg_(e))+'</p>'; })
           .bndLotes();
       })
-      .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+e.message+'</p>'; })
+      .withFailureHandler(function(e){ document.getElementById('indZona').innerHTML='<p style="color:#b91c1c;font-size:13px;">'+esc_(errMsg_(e))+'</p>'; })
       .bndActual();
   }
   function cargarControlLote(){
     google.script.run
-      .withSuccessHandler(function(ctrl){ if (ctrl) renderControlLote(ctrl); else document.getElementById('indControl').innerHTML = ''; })
-      .withFailureHandler(function(e){ document.getElementById('indControl').innerHTML = '<p style="color:#b91c1c;font-size:12px;">'+e.message+'</p>'; })
+      .withSuccessHandler(function(ctrl){ if (ctrl) renderControlLote(ctrl); else { CTRL_ACTUAL = null; document.getElementById('indControl').innerHTML = ''; } })
+      .withFailureHandler(function(e){ document.getElementById('indControl').innerHTML = '<p style="color:#b91c1c;font-size:12px;">'+esc_(errMsg_(e))+'</p>'; })
       .bndControlEnCurso();
   }
 
 
-   
+
   function renderIniciar(){
     var htmlCompletos='';
     if (BND_COMPLETOS && BND_COMPLETOS.length){
       htmlCompletos = BND_COMPLETOS.map(function(L,i){
         return '<div class="card" style="border-color:#86efac; background:#f0fdf4; margin-bottom:14px;">'+
           '<h2 style="color:#15803d;">✅ Lote 100% blastinado — listo para Control</h2>'+
-          '<p style="font-size:13px; color:#166534; margin:0 0 10px;"><b>'+L.producto+' · '+L.medida+'</b> ('+L.lote+') — <b>'+L.cantidad+' blastinadas</b></p>'+
-          '<button class="btn btn-final" style="background:#0284c7;width:100%;" onclick="iniciarControlLote('+i+')">🔍 Iniciar Control de '+L.lote+'</button>'+
+          '<p style="font-size:13px; color:#166534; margin:0 0 10px;"><b>'+esc_(L.producto)+' · '+esc_(L.medida)+'</b> ('+esc_(L.lote)+') — <b>'+esc_(L.cantidad)+' blastinadas</b></p>'+
+          '<button class="btn btn-final" id="bctl_'+i+'" style="background:#0284c7;width:100%;" onclick="iniciarControlLote('+i+')">🔍 Iniciar Control de '+esc_(L.lote)+'</button>'+
           '<div style="margin-top:6px;"><span id="fmsg'+i+'" style="font-size:13px;"></span></div>'+
         '</div>';
       }).join('');
@@ -629,7 +701,7 @@
       return;
     }
     var opts='<option value="">— Elegí el lote en blasting —</option>'+BND_LOTES.map(function(x,i){
-      return '<option value="'+i+'">'+x.producto+' · '+x.medida+' ('+x.lote+' · '+(x.teton||'')+') — disponible '+x.cantidad+'</option>';
+      return '<option value="'+i+'">'+esc_(x.producto)+' · '+esc_(x.medida)+' ('+esc_(x.lote)+' · '+esc_(x.teton||'')+') — disponible '+esc_(x.cantidad)+'</option>';
     }).join('');
     document.getElementById('indZona').innerHTML = htmlPausadas_() + htmlCompletos +
       '<div class="card" style="border-color:#c4b5fd; background:#faf5ff;">'+
@@ -637,35 +709,39 @@
         '<div style="margin-bottom:12px;"><label>Lote en blasting</label><select id="iLote" onchange="onLote()">'+opts+'</select></div>'+
         '<div class="grid-3">'+
           '<div><label>Fecha</label><input id="iFecha" type="date" value="'+fh+'" disabled style="background:#f1f5f9;"></div>'+
-          '<div><label>N° Bandeja (automático)</label><input id="iBandeja" value="'+PROXIMA_BANDEJA+'" readonly style="background:#f1f5f9;"></div>'+
+          '<div><label>N° Bandeja (automático)</label><input id="iBandeja" value="'+esc_(PROXIMA_BANDEJA)+'" readonly style="background:#f1f5f9;"></div>'+
           '<div><label>Operario</label><select id="iOperario"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel</option><option>Marcos</option></select></div>'+
         '</div>'+
         '<div class="grid-3" style="margin-top:12px;">'+
-          '<div><label>Cuántas piezas van en esta bandeja (máx 50)</label><input id="iCant" type="number" min="1" placeholder="Ej: 50" oninput="chequear50()"><div id="aviso50" style="font-size:12px;font-weight:700;margin-top:4px;"></div></div>'+
-          '<div><label>Hora inicio armado (+ orings)</label><input id="iHora" type="time" value="'+horaAhora()+'"></div>'+
-          '<div style="display:flex;align-items:flex-end;"><button class="btn btn-final" style="background:#7c3aed;width:100%;" onclick="iniciarBandeja()">Iniciar armado ▶</button></div>'+
+          '<div><label>Cuántas piezas van en esta bandeja (máx 50)</label><input id="iCant" type="number" min="1" max="50" step="1" placeholder="Ej: 50" oninput="chequear50()"><div id="aviso50" style="font-size:12px;font-weight:700;margin-top:4px;"></div></div>'+
+          '<div><label>Hora inicio armado (+ orings)</label><input id="iHora" type="time" value="'+horaAhora()+'" oninput="this.dataset.editada=\'1\'"><div class="hint">Si no la cambiás, se guarda la hora del momento en que tocás Iniciar.</div></div>'+
+          '<div style="display:flex;align-items:flex-end;"><button class="btn btn-final" id="btnIniciar" style="background:#7c3aed;width:100%;" onclick="iniciarBandeja()">Iniciar armado ▶</button></div>'+
         '</div>'+
         '<div style="margin-top:8px;"><span id="imsg" style="font-size:13px;"></span></div>'+
       '</div>';
   }
   function iniciarControlLote(i){
     var L=BND_COMPLETOS[i]; if(!L) return;
-    var fm=document.getElementById('fmsg'+i);
+    if (ocupado_('ctlini')) return;
+    var fm=document.getElementById('fmsg'+i), bt=document.getElementById('bctl_'+i);
+    if(bt) bt.disabled = true;
     if(fm){ fm.textContent='Iniciando control…'; fm.style.color='#15803d'; }
-    google.script.run.withSuccessHandler(function(r){ cargarBandejaActual(); })
-      .withFailureHandler(function(e){ if(fm){fm.textContent=e.message; fm.style.color='#b91c1c';} })
+    google.script.run.withSuccessHandler(function(r){ libre_('ctlini'); invalidar_(); cargarBandejaActual(); })
+      .withFailureHandler(function(e){ libre_('ctlini'); invalidar_(); if(bt) bt.disabled = false; if(fm){fm.textContent=errMsg_(e); fm.style.color='#b91c1c';} })
       .bndIniciarControlLote({ producto:L.producto, medida:L.medida, lote:L.lote, teton:L.teton, hora:horaAhora() });
   }
+  var LOTE_TOKEN = 0;
   function onLote(){
     chequear50();
     var idx = document.getElementById('iLote').value;
     var elB = document.getElementById('iBandeja');
+    var tk = ++LOTE_TOKEN;   // si se cambia de lote rápido, solo vale la última respuesta
     if (idx === '' || !BND_LOTES[idx]) { if (elB) elB.value = '—'; return; }
     var L = BND_LOTES[idx];
     if (elB) elB.value = '…';
     google.script.run
-      .withSuccessHandler(function(n){ if (elB) elB.value = n || 1; })
-      .withFailureHandler(function(){ if (elB) elB.value = 1; })
+      .withSuccessHandler(function(n){ if (tk !== LOTE_TOKEN) return; if (elB) elB.value = n || 1; })
+      .withFailureHandler(function(){ if (tk !== LOTE_TOKEN) return; if (elB) elB.value = 1; })
       .bndProximoNumero(L.producto, L.medida, L.lote);
   }
   function chequear50(){
@@ -679,20 +755,30 @@
   function iniciarBandeja(){
     var idx=document.getElementById('iLote').value;
     if(idx==='' || !BND_LOTES[idx]){ imsg('Elegí el lote en blasting.', false); return; }
-    var L=BND_LOTES[idx], cant=Number(document.getElementById('iCant').value)||0;
-    if(cant<=0){ imsg('Cargá cuántas piezas van.', false); return; }
+    var L=BND_LOTES[idx], cant=entero_(document.getElementById('iCant').value);
+    if(cant===null || cant<=0){ imsg('Cargá cuántas piezas van.', false); return; }
+    if(isNaN(cant)){ imsg('La cantidad tiene que ser un número entero, sin decimales.', false); return; }
     if(cant>50){ imsg('Máximo 50 por bandeja.', false); return; }
     if(cant>(L.cantidad||0)){ imsg('Supera lo disponible del lote.', false); return; }
-    var fv=document.getElementById('iFecha').value;
-    var p={ fecha:(fv?fv.split('-')[2]+'/'+fv.split('-')[1]+'/'+fv.split('-')[0]:''), bandeja:document.getElementById('iBandeja').value,
+    var nb=String(document.getElementById('iBandeja').value||'').trim();
+    if(!/^\d+$/.test(nb)){ imsg('Esperá a que aparezca el N° de bandeja y volvé a tocar Iniciar.', false); return; }
+    var elH=document.getElementById('iHora');
+    var hora=(elH && elH.dataset.editada && elH.value) ? elH.value : horaAhora();
+    var p={ fecha:fechaHoy_(), bandeja:nb,
       operario:document.getElementById('iOperario').value, producto:L.producto, lote:L.lote, medida:L.medida, teton:L.teton,
-      cantidad:cant, hora:document.getElementById('iHora').value||horaAhora() };
+      cantidad:cant, hora:hora };
     if(!p.operario){ imsg('Elegí el operario.', false); return; }
-    google.script.run.withSuccessHandler(function(){ cargarBandejaActual(); }).withFailureHandler(function(e){ imsg(''+e.message, false); }).bndIniciar(p);
+    if (ocupado_('ini')) return;
+    var bt=document.getElementById('btnIniciar'); if(bt) bt.disabled=true;
+    imsg('Guardando…', true);
+    google.script.run
+      .withSuccessHandler(function(){ libre_('ini'); invalidar_(); cargarBandejaActual(); })
+      .withFailureHandler(function(e){ libre_('ini'); invalidar_(); if(bt) bt.disabled=false; imsg(errMsg_(e), false); })
+      .bndIniciar(p);
   }
 
 
-   
+
   function selResp(id, def){ var ops=['Javier','Miguel','Marcos']; var o=ops.map(function(x){return '<option'+(x===def?' selected':'')+'>'+x+'</option>';}).join(''); return '<select id="'+id+'">'+o+'</select>'; }
   function renderEnCurso(d){
     CUR_FILA = (d && d.fila) || CUR_FILA;
@@ -705,81 +791,83 @@
       'blastinando':['BLASTINANDO','#dbeafe','#1d4ed8']
     };
     var c = enPausa ? ['⏸ EN PAUSA','#fde68a','#92400e'] : (carteles[est] || ['—','#f1f5f9','#334155']);
- 
+
     function fila(label, val){ return '<div style="flex:1;min-width:120px;"><label>'+label+'</label><input value="'+tl(val)+'" readonly style="background:#f1f5f9;"></div>'; }
     function pasoBox(cls, titulo, chip, cuerpo){ return '<div style="border:1px solid '+(cls==='act'?'#7c3aed':(cls==='ok'?'#bbf7d0':'#e2e8f0'))+';background:'+(cls==='act'?'#faf5ff':(cls==='ok'?'#f0fdf4':'#fff'))+';border-radius:10px;padding:12px;margin-bottom:10px;"><div style="font-weight:700;font-size:13px;display:flex;justify-content:space-between;margin-bottom:8px;"><span>'+titulo+'</span>'+(chip||'')+'</div>'+cuerpo+'</div>'; }
-    function chipOK(t){ return '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:7px;background:#dcfce7;color:#15803d;">✓ '+t+' min</span>'; }
-    function btn(txt,color,onclick){ return '<button style="background:'+color+';color:#fff;border:none;padding:12px 18px;font-size:15px;font-weight:800;border-radius:10px;cursor:pointer;width:100%;margin-top:8px;" onclick="'+onclick+'">'+txt+'</button>'; }
+    function chipOK(t){ return '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:7px;background:#dcfce7;color:#15803d;">✓ '+esc_(t)+' min</span>'; }
+    function btn(txt,color,onclick){ return '<button class="btn-band" style="background:'+color+';color:#fff;border:none;padding:12px 18px;font-size:15px;font-weight:800;border-radius:10px;cursor:pointer;width:100%;margin-top:8px;" onclick="'+onclick+'">'+txt+'</button>'; }
     function botonesPausa(){
       if(enPausa) return btn('▶ Reanudar (volví)','#16a34a','reanudar()');
       return '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">'+
         '<select id="eMotivo" style="width:auto;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Fin de Jornada</option></select>'+
-        '<button style="background:#b45309;color:#fff;border:none;padding:9px 14px;font-weight:700;border-radius:8px;cursor:pointer;" onclick="pausar()">⏸ Pausa</button></div>';
+        '<button class="btn-band" style="background:#b45309;color:#fff;border:none;padding:9px 14px;font-weight:700;border-radius:8px;cursor:pointer;" onclick="pausar()">⏸ Pausa</button></div>';
     }
- 
+
     var cuA = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'+fila('Inicio', d.hIniArm)+fila('Fin', d.hFinArm)+fila('Pausa (min)', d.pausaArm||0)+'</div>';
     if(est==='armando'){ cuA += botonesPausa(); if(!enPausa){ cuA += '<div class="grid-3" style="margin-top:8px;"><div><label>Responsable armado</label>'+selResp('respArmado',d.operario)+'</div><div style="grid-column:2/4;"><label>Observación del armado (opcional)</label><input id="obsArmado" placeholder="Ej: faltaban orings..."></div></div>'; cuA += btn('Terminé el armado ✓','#7c3aed',"marcar('finArmado')"); } }
     var pA = pasoBox(d.hFinArm?'ok':(est==='armando'?'act':''), '1) Armado (+ orings)', d.tArm!==''&&d.hFinArm?chipOK(d.tArm):'', cuA);
- 
+
     var cuB = '<div style="display:flex;gap:12px;flex-wrap:wrap;">'+fila('Inicio', d.hIniBla)+fila('Fin', d.hFinBla)+fila('Pausa (min)', d.pausaBla||0)+'</div>';
     if(est==='armado listo'){ cuB += botonesPausa(); if(!enPausa) cuB += btn('Empezar el blastinado ▶','#1d4ed8',"marcar('iniBlast')"); }
     if(est==='blastinando'){ cuB += botonesPausa(); if(!enPausa){ cuB += '<div class="grid-3" style="margin-top:8px;"><div><label>Responsable blastinado</label>'+selResp('respBlast',d.operario)+'</div><div style="grid-column:2/4;"><label>Observación del blastinado (opcional)</label><input id="obsBlast" placeholder="Ej: ..."></div></div>'; cuB += btn('Terminé el blastinado ✓ (bandeja lista)','#1d4ed8',"marcar('finBlast')"); } }
     var pB = pasoBox(d.hFinBla?'ok':(est==='blastinando'||est==='armado listo'?'act':''), '2) Blastinado', d.tBla!==''&&d.hFinBla?chipOK(d.tBla):'', cuB);
- 
+
     document.getElementById('indZona').innerHTML =
       '<div class="card" style="border-color:#a78bfa;">'+
         '<div style="font-size:16px;font-weight:800;padding:10px 14px;border-radius:10px;text-align:center;margin-bottom:12px;background:'+c[1]+';color:'+c[2]+';">'+c[0]+'</div>'+
-        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;text-align:center;">'+tl(d.lote)+' · '+tl(d.producto)+' · '+tl(d.medida)+' · Bandeja '+tl(d.bandeja)+' · <span style="color:#6d28d9;">'+d.cantidad+' implantes</span> · '+tl(d.operario)+'</div>'+
+        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;text-align:center;">'+tl(d.lote)+' · '+tl(d.producto)+' · '+tl(d.medida)+' · Bandeja '+tl(d.bandeja)+' · <span style="color:#6d28d9;">'+tl(d.cantidad)+' implantes</span> · '+tl(d.operario)+'</div>'+
         '<div id="panelPromedio" style="text-align:center;margin-bottom:12px;font-size:12px;color:#64748b;">…</div>'+
         pA + pB +
-        (d.motivos?'<div style="font-size:11px;color:#92400e;margin-top:8px;">Pausas: '+d.motivos+'</div>':'')+
+        (d.motivos?'<div style="font-size:11px;color:#92400e;margin-top:8px;">Pausas: '+esc_(d.motivos)+'</div>':'')+
         '<div style="margin-top:8px;"><span id="imsg" style="font-size:13px;"></span></div>'+
       '</div>';
-    
+
     document.getElementById('indZona').insertAdjacentHTML('beforeend', htmlPausadas_());
     google.script.run.withSuccessHandler(function(pr){
       var el=document.getElementById('panelPromedio'); if(!el) return;
       if(pr && pr.hay){
-        el.innerHTML='<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 10px;color:#1d4ed8;">📊 Tiempo estimado ('+pr.n+' bandejas) — Armado: <b>'+pr.armado+'</b> min · Blastinado: <b>'+pr.blastinado+'</b> min</span>';
+        el.innerHTML='<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:4px 10px;color:#1d4ed8;">📊 Tiempo estimado ('+esc_(pr.n)+' bandejas) — Armado: <b>'+esc_(pr.armado)+'</b> min · Blastinado: <b>'+esc_(pr.blastinado)+'</b> min</span>';
       } else {
-        el.innerHTML='<span style="color:#94a3b8;">📊 Promedio: faltan datos ('+((pr&&pr.n)||0)+'/'+((pr&&pr.minimo)||20)+' bandejas de este tipo+medida)</span>';
+        el.innerHTML='<span style="color:#94a3b8;">📊 Promedio: faltan datos ('+esc_((pr&&pr.n)||0)+'/'+esc_((pr&&pr.minimo)||20)+' bandejas de este tipo+medida)</span>';
       }
-    }).bndPromedio(d.producto, d.medida);
+    }).withFailureHandler(function(){ var el=document.getElementById('panelPromedio'); if(el) el.textContent=''; }).bndPromedio(d.producto, d.medida);
   }
 
 
-   
+
   function renderControlLote(ctrl){
+    CTRL_ACTUAL = ctrl || null;
+    if (!ctrl) { document.getElementById('indControl').innerHTML = ''; return; }
     var enPausa = !!ctrl.enPausa;
     var estadoTxt = enPausa ? '⏸ CONTROL EN PAUSA' : '🔍 CONTROL EN CURSO';
     var estadoColor = enPausa ? '#92400e;background:#fde68a;' : '#0369a1;background:#e0f2fe;';
     var botonPausa = enPausa
-      ? '<button class="btn-mini" style="background:#16a34a;color:#fff;" onclick="reanudarControl()">▶ Reanudar</button>'
+      ? '<button class="btn-mini btn-ctl" style="background:#16a34a;color:#fff;" onclick="reanudarControl()">▶ Reanudar</button>'
       : '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
           '<select id="ctrlMotivo" style="width:auto;"><option>Otra prioridad</option><option>Baño</option><option>Comida</option><option>Otro motivo</option></select>'+
-          '<button class="btn-mini" style="background:#b45309;color:#fff;" onclick="pausarControl()">⏸ Pausa</button>'+
+          '<button class="btn-mini btn-ctl" style="background:#b45309;color:#fff;" onclick="pausarControl()">⏸ Pausa</button>'+
         '</div>';
     document.getElementById('indControl').innerHTML =
       '<div class="card" style="border-color:#0ea5e9; background:#f0f9ff;">'+
         '<div style="font-size:15px;font-weight:800;padding:8px 14px;border-radius:10px;text-align:center;margin-bottom:10px;color:'+estadoColor+'">'+estadoTxt+'</div>'+
-        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;">'+tl(ctrl.producto)+' · '+tl(ctrl.medida)+' ('+tl(ctrl.lote)+') · '+ctrl.cantidad+' piezas'+(ctrl.teton?' · '+ctrl.teton:'')+'</div>'+
-        '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Inicio: <b>'+tl(ctrl.horaInicio)+'</b> · Pausas: <b>'+(ctrl.pausaMin||0)+' min</b>'+(enPausa?' · <span style="color:#b45309;font-weight:700;">en pausa desde '+ctrl.pausaDesde+'</span>':'')+'</div>'+
+        '<div style="font-size:13px;color:#1e293b;margin-bottom:6px;font-weight:600;">'+tl(ctrl.producto)+' · '+tl(ctrl.medida)+' ('+tl(ctrl.lote)+') · '+tl(ctrl.cantidad)+' piezas'+(ctrl.teton?' · '+esc_(ctrl.teton):'')+'</div>'+
+        '<div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Inicio: <b>'+tl(ctrl.horaInicio)+'</b> · Pausas: <b>'+esc_(ctrl.pausaMin||0)+' min</b>'+(enPausa?' · <span style="color:#b45309;font-weight:700;">en pausa desde '+tl(ctrl.pausaDesde)+'</span>':'')+'</div>'+
         botonPausa +
         (enPausa ? '' :
           '<div class="grid-3" style="margin-top:12px;">'+
             '<div><label>Resultado</label><select id="clRes" onchange="toggleReblast()"><option value="">— Seleccionar —</option><option>OK</option><option>Re-blastinar</option></select></div>'+
-            '<div><label>Rechazadas (se descartan)</label><input id="clRech" type="number" min="0" value="0"></div>'+
-            '<div><label>Pérdidas (se descartan)</label><input id="clPerd" type="number" min="0" value="0"></div>'+
+            '<div><label>Rechazadas (se descartan)</label><input id="clRech" type="number" min="0" step="1" value="0"></div>'+
+            '<div><label>Pérdidas (se descartan)</label><input id="clPerd" type="number" min="0" step="1" value="0"></div>'+
           '</div>'+
           '<div id="clReblastWrap" style="display:none;margin-top:12px;">'+
             '<label>¿Cuántas piezas van a Re-blastinar? (el resto sigue de largo como OK)</label>'+
-            '<input id="clReblast" type="number" min="0" value="0">'+
+            '<input id="clReblast" type="number" min="0" step="1" value="0">'+
           '</div>'+
           '<div class="grid-3" style="margin-top:12px;">'+
             '<div><label>Responsable del control</label>'+selResp('clResp','')+'</div>'+
             '<div style="grid-column:2/4;"><label>Observaciones</label><input id="clObs" placeholder="Notas..."></div>'+
           '</div>'+
-          '<button class="btn-accion" style="background:#16a34a;" onclick="finalizarControlLote()">Finalizar Control ✓</button>'
+          '<button class="btn-accion btn-ctl" style="background:#16a34a;" onclick="finalizarControlLote()">Finalizar Control ✓</button>'
         ) +
         '<div style="margin-top:8px;"><span id="cmsg" style="font-size:13px;"></span></div>'+
       '</div>';
@@ -792,95 +880,114 @@
   }
   function cmsg(t, ok){ var m=document.getElementById('cmsg'); if(m){ m.textContent=t; m.style.color=ok?'#15803d':'#b91c1c'; if(ok) setTimeout(function(){ if(m.textContent===t) m.textContent=''; },4000);} }
   // Un solo toque por botón: mientras el servidor no responde, un segundo toque no hace nada
-  // (así no aparece "Ya está en pausa" / "No está en pausa" por tocar dos veces).
+  // (así no aparece "Ya está en pausa" / "No está en pausa" por tocar dos veces, ni se crean bandejas repetidas).
   var BF_OCUPADO = {};
   function ocupado_(k){ if (BF_OCUPADO[k]) return true; BF_OCUPADO[k] = setTimeout(function(){ delete BF_OCUPADO[k]; }, 60000); return false; }
   function libre_(k){ clearTimeout(BF_OCUPADO[k]); delete BF_OCUPADO[k]; }
+  function hayGuardando_(){ return Object.keys(BF_OCUPADO).length > 0; }
+  function botones_(sel, on){ Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){ b.disabled = !on; }); }
   function errPausa_(e, fmsg){
-    fmsg(e.message, false);
-    if (/pausa/i.test(e.message)) cargarBandejaActual();   // la pantalla estaba desactualizada: se vuelve a leer
+    var t = errMsg_(e);
+    fmsg(t, false);
+    if (/pausa/i.test(t)) cargarBandejaActual();   // la pantalla estaba desactualizada: se vuelve a leer
   }
   function pausarControl(){
     if (ocupado_('ctl')) return;
     var mot = document.getElementById('ctrlMotivo') ? document.getElementById('ctrlMotivo').value : '';
+    botones_('.btn-ctl', false);
     cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); invalidar_(); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); invalidar_(); botones_('.btn-ctl', true); errPausa_(e, cmsg); }).bndPausarControl({ motivo:mot, hora:horaAhora() });
   }
   function reanudarControl(){
     if (ocupado_('ctl')) return;
+    botones_('.btn-ctl', false);
     cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndReanudarControl({ hora:horaAhora() });
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); invalidar_(); renderControlLote(r); }).withFailureHandler(function(e){ libre_('ctl'); invalidar_(); botones_('.btn-ctl', true); errPausa_(e, cmsg); }).bndReanudarControl({ hora:horaAhora() });
   }
   function finalizarControlLote(){
     var res=document.getElementById('clRes')?document.getElementById('clRes').value:'';
     if(!res){ cmsg('Elegí el resultado (OK o Re-blastinar) antes de cerrar.', false); return; }
-    if (res === 'Re-blastinar') {
-      var rb = document.getElementById('clReblast') ? Number(document.getElementById('clReblast').value) || 0 : 0;
-      if (rb <= 0) { cmsg('Indicá cuántas piezas van a Re-blastinar.', false); return; }
+    function val(id){ var el=document.getElementById(id); var v = entero_(el ? el.value : ''); return v === null ? 0 : v; }
+    var rech = val('clRech'), perd = val('clPerd'), rb = (res === 'Re-blastinar') ? val('clReblast') : 0;
+    if (isNaN(rech) || isNaN(perd) || isNaN(rb)) { cmsg('Rechazadas, pérdidas y re-blastinar tienen que ser números enteros, 0 o más.', false); return; }
+    if (res === 'Re-blastinar' && rb <= 0) { cmsg('Indicá cuántas piezas van a Re-blastinar.', false); return; }
+    var total = CTRL_ACTUAL ? Number(CTRL_ACTUAL.cantidad) : NaN;
+    if (!isNaN(total) && total > 0 && rech + perd + rb > total) {
+      cmsg('Rechazadas + pérdidas + re-blastinar (' + (rech + perd + rb) + ') supera las ' + total + ' piezas del lote.', false); return;
     }
-    var p={ resultado:res, rechazadas:document.getElementById('clRech')?document.getElementById('clRech').value:0,
-      perdidas:document.getElementById('clPerd')?document.getElementById('clPerd').value:0,
-      cantidadReblast: document.getElementById('clReblast') ? document.getElementById('clReblast').value : 0,
+    var lote = CTRL_ACTUAL ? CTRL_ACTUAL.lote : '';
+    var resumen = '¿Finalizar el control' + (lote ? ' del lote ' + lote : '') + '?\n\n' +
+      'Resultado: ' + res + '\nRechazadas: ' + rech + '\nPérdidas: ' + perd +
+      (res === 'Re-blastinar' ? '\nRe-blastinar: ' + rb : '') +
+      (!isNaN(total) && total > 0 ? '\nSiguen como OK: ' + Math.max(0, total - rech - perd - rb) : '') +
+      '\n\nUna vez cerrado no se puede deshacer.';
+    if (!confirm(resumen)) return;
+    var p={ resultado:res, rechazadas:rech, perdidas:perd, cantidadReblast: rb,
       responsable:document.getElementById('clResp')?document.getElementById('clResp').value:'',
       observaciones:document.getElementById('clObs')?document.getElementById('clObs').value:'',
       hora: horaAhora() };
     if (ocupado_('ctl')) return;
+    botones_('.btn-ctl', false);
     cmsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); cmsg(r.msg,true); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('ctl'); errPausa_(e, cmsg); }).bndFinalizarControlLote(p);
+    google.script.run.withSuccessHandler(function(r){ libre_('ctl'); invalidar_(); cmsg((r && r.msg) || 'Control finalizado.', true); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('ctl'); invalidar_(); botones_('.btn-ctl', true); errPausa_(e, cmsg); }).bndFinalizarControlLote(p);
   }
 
 
  function marcar(paso) {
-    var obs = ''; 
+    var obs = '';
     var id = {finArmado: 'obsArmado', finBlast: 'obsBlast'}[paso];
     if (id && document.getElementById(id)) obs = document.getElementById(id).value || '';
-    
-    var resp = ''; 
+
+    var resp = '';
     var idr = {finArmado: 'respArmado', finBlast: 'respBlast'}[paso];
     if (idr && document.getElementById(idr)) resp = document.getElementById(idr).value || '';
 
-    
+
     var etiquetaFase = '';
     if (paso === 'finArmado') etiquetaFase = 'ARMADO FINALIZADO';
     if (paso === 'finBlast') etiquetaFase = 'BLASTINADO FINALIZADO';
-    
-    
+
+
     var observacionFinal = etiquetaFase + (obs ? ' - ' + obs : '');
 
     if (ocupado_('band')) return;
+    botones_('.btn-band', false);
     imsg('Guardando…', true);
     google.script.run
-        .withSuccessHandler(function(r) { 
-            libre_('band');
-            imsg((r && r.msg) || 'Guardado.', true); 
-            cargarBandejaActual(); 
+        .withSuccessHandler(function(r) {
+            libre_('band'); invalidar_();
+            imsg((r && r.msg) || 'Guardado.', true);
+            cargarBandejaActual();
         })
-        .withFailureHandler(function(e) { 
-            libre_('band');
-            errPausa_(e, imsg); 
+        .withFailureHandler(function(e) {
+            libre_('band'); invalidar_();
+            botones_('.btn-band', true);
+            errPausa_(e, imsg);
         })
-        .bndMarcar({ fila: CUR_FILA, 
-            paso: paso, 
-            hora: horaAhora(), 
-            obs: observacionFinal, 
-            resp: resp 
+        .bndMarcar({ fila: CUR_FILA,
+            paso: paso,
+            hora: horaAhora(),
+            obs: observacionFinal,
+            resp: resp
         });
 }
   function pausar(){
     if (ocupado_('band')) return;
     var mot=document.getElementById('eMotivo')?document.getElementById('eMotivo').value:'';
+    botones_('.btn-band', false);
     imsg('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('band'); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('band'); errPausa_(e, imsg); }).bndPausar({ fila: CUR_FILA, motivo:mot, hora:horaAhora() });
+    google.script.run.withSuccessHandler(function(r){ libre_('band'); invalidar_(); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('band'); invalidar_(); botones_('.btn-band', true); errPausa_(e, imsg); }).bndPausar({ fila: CUR_FILA, motivo:mot, hora:horaAhora() });
   }
   function reanudar(fila){
     if (ocupado_('band')) return;
+    botones_('.btn-band', false);
     pmsg_('Guardando…', true);
-    google.script.run.withSuccessHandler(function(r){ libre_('band'); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('band'); pmsg_(e.message, false); }).bndReanudar({ fila: fila || CUR_FILA, hora:horaAhora() });
+    google.script.run.withSuccessHandler(function(r){ libre_('band'); invalidar_(); cargarBandejaActual(); }).withFailureHandler(function(e){ libre_('band'); invalidar_(); botones_('.btn-band', true); pmsg_(errMsg_(e), false); }).bndReanudar({ fila: fila || CUR_FILA, hora:horaAhora() });
   }
 
 
   function cargarPanel(){
-    google.script.run.withSuccessHandler(renderPanel).withFailureHandler(function(e){ var c=document.getElementById('listaInd'); if(c) c.innerHTML='<p style="color:#b91c1c;font-size:12px;">Error: '+e.message+'</p>'; }).bndPanel();
+    google.script.run.withSuccessHandler(renderPanel).withFailureHandler(function(e){ var c=document.getElementById('listaInd'); if(c) c.innerHTML='<p style="color:#b91c1c;font-size:12px;">Error: '+esc_(errMsg_(e))+'</p>'; }).bndPanel();
   }
   function renderPanel(arr){
     var c=document.getElementById('listaInd'); if(!c) return;
@@ -891,14 +998,35 @@
       if(pedido>0 && hecho>=pedido && enProc===0){ estado='✅ 100% blastinado — pasa a Control'; color='#0369a1'; }
       else if(enProc>0){ estado='⏳ '+enProc+' en proceso'; color='#1d4ed8'; }
       else { estado='En blasting'; color='#64748b'; }
-      return '<tr><td>'+(L.lote||'')+'</td><td>'+(L.producto||'')+'</td><td>'+(L.medida||'')+'</td><td style="text-align:right;font-weight:700;">'+hecho+' / '+pedido+'</td><td style="color:'+color+';font-weight:600;">'+estado+'</td></tr>';
+      return '<tr><td>'+esc_(L.lote||'')+'</td><td>'+esc_(L.producto||'')+'</td><td>'+esc_(L.medida||'')+'</td><td style="text-align:right;font-weight:700;white-space:nowrap;">'+hecho+' / '+pedido+'</td><td style="color:'+color+';font-weight:600;">'+estado+'</td></tr>';
     }).join('');
-    c.innerHTML='<table><thead><tr><th>Lote</th><th>Producto</th><th>Medida</th><th>Blastinado</th><th>Estado del lote</th></tr></thead><tbody>'+filas+'</tbody></table>';
+    c.innerHTML='<div class="tabla-scroll"><table><thead><tr><th>Lote</th><th>Producto</th><th>Medida</th><th>Blastinado</th><th>Estado del lote</th></tr></thead><tbody>'+filas+'</tbody></table></div>';
   }
-  
 
 
-window.onload = actualizar;
+  /* ===== Actualización automática (cada 1 minuto) =====
+   * No se refresca: con la pestaña del navegador oculta, mientras se guarda algo,
+   * con el cursor en un campo, o si tocaste algo de la pantalla en los últimos 90 segundos
+   * (así no se pierde lo que estabas eligiendo o escribiendo). */
+  var ULTIMO_TOQUE = 0;
+  ['input', 'change', 'keydown'].forEach(function(ev){
+    document.addEventListener(ev, function(){ ULTIMO_TOQUE = Date.now(); }, true);
+  });
+  function escribiendo_(){
+    var a = document.activeElement;
+    return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+  }
+  function autoActualizar_(){
+    if (document.hidden || hayGuardando_() || escribiendo_()) return;
+    if (Date.now() - ULTIMO_TOQUE < 90000) return;
+    if (TAB === 'bla') actualizar(true);
+    else cargarBandejaActual(true);
+  }
+  setInterval(autoActualizar_, 60000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) autoActualizar_(); });
+
+
+window.onload = function(){ actualizar(); };
 
 
 </script>
