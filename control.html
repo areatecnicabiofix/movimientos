@@ -99,7 +99,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       med: c(['Medida']), lote: c(['Lote']), co: c(['Cantidad Original', 'Cantidad Asignada']),
       cant: c(['Cantidad ok', 'Cantidad OK', 'Cantidad']), rech: c(['Rechazadas']), resp: c(['Responsable']),
       obs: c(['Observaciones']), ini: c(['Inicio']), fin: c(['Fin']), pmin: c(['Pausa (min)']),
-      pdesde: c(['Pausa desde']), neto: c(['Tiempo neto (min)']), mot: c(['Motivos Pausa'])
+      pdesde: c(['Pausa desde']), neto: c(['Tiempo neto (min)']), mot: c(['Motivos Pausa']),
+      laser: c(['OF Grabado Laser', 'OF Grabado Láser'])
     };
     var out = [];
     (d.filas || []).forEach(function (f) {
@@ -122,7 +123,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         inicio: txt(g(C.ini)), fin: txt(g(C.fin)), pausaMin: num(g(C.pmin)),
         pausaDesde: pausaDesde, enPausa: !!pausaDesde,
         tiempoTxt: tiempo === '' ? '' : fmtMin(num(tiempo)),
-        motivos: txt(g(C.mot)), letrasCota: letrasHasta(limiteCota(producto, teton, medida)), coas: coas
+        motivos: txt(g(C.mot)), letrasCota: letrasHasta(limiteCota(producto, teton, medida)), coas: coas,
+        ofLaser: txt(g(C.laser))
       });
     });
     return out;
@@ -263,6 +265,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   .bloque-resp{ background:#f0f9ff; border:1px solid #93c5fd; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .bloque-resp label{ margin:0; white-space:nowrap; }
   .bloque-resp select{ max-width:220px; }
+  .bloque-laser{ background:#faf5ff; border:1px solid #d8b4fe; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .bloque-laser label{ margin:0; white-space:nowrap; color:#6b21a8; }
+  .bloque-laser input{ max-width:180px; font-weight:700; }
   #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:420px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
   #msg.show{ display:block; }
   #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
@@ -291,7 +296,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     <p class="hint">Abajo, en <b>Lotes en Control</b>, solo vas a ver y cargar <b>tus</b> lotes. La tablet se acuerda de quién sos.</p>
   </div>
 
-  
+
   <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
     <h2>1. Poner un lote En Control</h2>
     <p class="hint" style="margin-bottom:10px;">Elegí el lote y abrí el control. Los datos (cotas, responsables, cantidades) se cargan abajo, en <b>Lotes en Control</b>. El tiempo empieza a contar acá.</p>
@@ -323,7 +328,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     </div>
   </div>
 
-  
+
   <div class="card" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
     <h2><span id="tituloEnControl">Lotes en Control (borradores)</span> <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
     <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
@@ -335,23 +340,23 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   var LETRAS_COA = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
   var RESP_QC = ['Gabriela','Javier','Miguel','Marcos'];
   var DATA_CONTROL = [];
-  
-  var MUESTRAS = {};     
-  var TAM_MUESTRA = {};  
-  var SEL_IDX = {};      
-  var RESP_LOTE = {};    
-  var MANUAL = {};       
-  var CERRANDO = {};     
 
-  
+  var MUESTRAS = {};
+  var TAM_MUESTRA = {};
+  var SEL_IDX = {};
+  var RESP_LOTE = {};
+  var MANUAL = {};
+  var CERRANDO = {};
+
+
   var SAVE_EN_CURSO = {};
   var SAVE_PENDIENTE = {};
   var LOTES_SUCIOS = {};
 
   // Dos tablets en el mismo lote: se recuerda QUÉ muestras tocó esta tablet y se manda solo eso.
   var DIRTY = {};        // DIRTY[id][letra][indice] = true  -> muestra cambiada acá, todavía sin guardar
-  var DIRTY_EXTRA = {};  // DIRTY_EXTRA[id] = { rech: bool, obs: bool }
-  var LOCAL_RECH = {}, LOCAL_OBS = {};
+  var DIRTY_EXTRA = {};  // DIRTY_EXTRA[id] = { rech: bool, obs: bool, laser: bool }
+  var LOCAL_RECH = {}, LOCAL_OBS = {}, LOCAL_LASER = {};
   function marcarCelda_(f, l, idx) {
     if (!DIRTY[f]) DIRTY[f] = {};
     if (!DIRTY[f][l]) DIRTY[f][l] = {};
@@ -359,12 +364,43 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
   function hayCambios_(f) {
     var d = DIRTY[f] || {}, ex = DIRTY_EXTRA[f] || {};
-    return Object.keys(d).some(function (l) { return Object.keys(d[l]).length > 0; }) || !!ex.rech || !!ex.obs;
+    return Object.keys(d).some(function (l) { return Object.keys(d[l]).length > 0; }) || !!ex.rech || !!ex.obs || !!ex.laser;
   }
   function valRech_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? (LOCAL_RECH[f] || 0) : (b.rechazadas || 0); }
   function valObs_(f, b)  { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].obs) ? (LOCAL_OBS[f] || '') : (b.observaciones || ''); }
+  function valLaser_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].laser) ? (LOCAL_LASER[f] || '') : (b.ofLaser || ''); }
   function valCant_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? Math.max(0, (Number(b.cantidadOriginal) || 0) - (Number(LOCAL_RECH[f]) || 0)) : b.cantidad; }
   function escAttr_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  /* ---------- OF Grabado Láser: SOLO componentes / instrumental (no implantes) ---------- */
+  var PRODUCTOS_IMPLANTE = ['monopieza', 'monopieza basal', 'monopieza basal tratado', 'monopieza basal pulido',
+    'hexagono interno', 'hexagono externo', 'cono morse', 'compresivo multi-unit',
+    'compresivo multi-unit cuello largo', 'compresivo multi unit', 'cmu', 'cmu3'];
+  function esComponente_(b) {
+    var p = normT_(b && b.producto);
+    return !!p && PRODUCTOS_IMPLANTE.indexOf(p) < 0 && !/^implante/.test(p);
+  }
+  function marcarLaser(f) {
+    var el = document.getElementById('tlaser_'+f);
+    LOCAL_LASER[f] = el ? el.value.trim() : '';
+    if (!DIRTY_EXTRA[f]) DIRTY_EXTRA[f] = {};
+    DIRTY_EXTRA[f].laser = true;
+    marcarSucio(f);
+  }
+  // Guarda el OF de Grabado Láser (función aparte en el servidor). cb(ok)
+  function guardarLaser_(f, cb) {
+    var ex = DIRTY_EXTRA[f] || {};
+    if (!ex.laser) { cb(true); return; }
+    var valor = LOCAL_LASER[f] || '';
+    google.script.run
+      .withSuccessHandler(function () {
+        if ((LOCAL_LASER[f] || '') === valor && DIRTY_EXTRA[f]) DIRTY_EXTRA[f].laser = false;
+        if (!hayCambios_(f)) limpiarSucio(f);
+        cb(true);
+      })
+      .withFailureHandler(function (e) { msg('No se pudo guardar el OF de Grabado Láser: ' + e.message, false); cb(false); })
+      .ctlGuardarOFLaser(conPin_({ id: f, ofLaser: valor }));
+  }
 
   function horaAhoraCdc(){
     var d = new Date();
@@ -382,7 +418,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   var TOL_FILAS = null;   // filas leídas de la hoja
   var SPECS = {};         // SPECS[id][letra] = {tipo, nominal, tolMas, tolMenos, min, max, texto}
   var COTAS_OK_MONOPIEZA = ['G', 'H', 'I'];
-  function normT_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+  function normT_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
   function medidaClave_(v) {
     var m = String(v == null ? '' : v).replace(/,/g, '.').match(/(\d+(?:\.\d+)?)(?:\s*[xX]\s*(\d+(?:\.\d+)?))?/);
     return m ? { d: parseFloat(m[1]), l: m[2] ? parseFloat(m[2]) : null } : null;
@@ -510,7 +546,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     sel.options[idx].text = etiquetaMuestra_(idx + 1, arr[idx]);
   }
 
-   
+
   function llamarConReintento_(nombreFuncion, args, onSuccess, onError, intentosRestantes) {
     if (intentosRestantes === undefined) intentosRestantes = 2;
     google.script.run
@@ -691,7 +727,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (hint) hint.style.display = listo ? 'none' : '';
   }
 
-   
+
   function abrirControl() {
     var idx = document.getElementById('comboLotes').value;
     if (idx === '' || !DATA_CONTROL[idx]) { msg('Elegí un lote de la lista.', false); return; }
@@ -715,7 +751,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .ctlPinCrearBorrador(conPin_({ producto: it.producto, teton: it.teton || '', medida: it.medida, lote: it.lote, cantidad: it.disponible, hora: horaAhoraCdc(), productoOriginal: it.productoOriginal || '', responsable: resp }));
   }
 
-   
+
   function refrescarEnControl() {
     google.script.run
       .withSuccessHandler(renderEnControl)
@@ -753,7 +789,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     listaTodos = listaTodos || [];
     LAST_LISTA = listaTodos;
     var ae = document.activeElement;
-    var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|respLote_)/.test(ae.id);
+    var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|tlaser_|respLote_)/.test(ae.id);
 
     var tit = document.getElementById('tituloEnControl');
     if (!YO) {
@@ -809,6 +845,15 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<span class="hint" style="color:#b45309;">Elegilo antes de cargar valores de cotas.</span>'+
         '</div>';
       }
+
+      // OF de Grabado Láser: solo para componentes / instrumental
+      var bloqueLaser = esComponente_(b)
+        ? '<div class="bloque-laser">'+
+            '<label for="tlaser_'+f+'">OF Grabado Láser</label>'+
+            '<input type="text" id="tlaser_'+f+'" inputmode="numeric" placeholder="N° de OF" value="'+escAttr_(valLaser_(f, b))+'" oninput="marcarLaser(\''+f+'\')">'+
+            '<span class="hint">Solo componentes / instrumental. Se guarda con "Guardar avance" o "Marcar Controlada".</span>'+
+          '</div>'
+        : '';
 
       var filasCoa;
       if (cantidadVacia) {
@@ -870,6 +915,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<span class="badge-sub '+(b.enPausa?'badge-pausa':'badge-en-control')+'">'+(b.enPausa?'En pausa':'En control')+'</span>'+
         '</div>'+
         bloqueResponsable +
+        bloqueLaser +
         tiempos +
         '<div class="grid-3" style="margin-bottom:10px;">'+
           '<div><label>Con/Sin Tetón</label><input value="'+(b.teton||'—')+'" readonly style="background:#f1f5f9;"></div>'+
@@ -978,10 +1024,10 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (huboCambios) marcarSucio(f);
   }
 
-   
+
   function slotVacio_(m) { return !m || m.v === '' || m.v === null || m.v === undefined; }
 
-  
+
   function cargarMuestra(f, l, manual) {
     var sel = document.getElementById('qidx_'+l+'_'+f);
     var inp = document.getElementById('qval_'+l+'_'+f);
@@ -1005,9 +1051,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     cargarMuestra(f, l, false);
   }
 
-  
-  
-  
+
+
+
   function focoMuestra(f, l) {
     if (MANUAL[f+'|'+l]) return;
     var sel = document.getElementById('qidx_'+l+'_'+f);
@@ -1020,7 +1066,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
   function blurMuestra(f, l) { MANUAL[f+'|'+l] = false; avisarCero_(f, l); }
 
-  
+
   function cambioOk(f, l) {
     guardarMuestraLocal(f, l);
     var inp = document.getElementById('qval_'+l+'_'+f);
@@ -1044,8 +1090,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     else msg('Cota ' + l + ' completa (' + arr.length + '/' + arr.length + ').', true);
   }
 
-  
-  
+
+
   function guardarMuestraLocal(f, l) {
     var sel = document.getElementById('qidx_'+l+'_'+f);
     var inp = document.getElementById('qval_'+l+'_'+f);
@@ -1071,21 +1117,34 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (esCeroInvalido_(f, l, inp.value)) msg('Cota ' + l + ', muestra N°' + ((Number(sel.value) || 0) + 1) + ': cargaste 0. Una cota no puede medir 0, cargá el valor medido.', false);
   }
 
-   
+
   function encolarGuardado(f) {
     if (SAVE_EN_CURSO[f]) { SAVE_PENDIENTE[f] = true; return; }
     var d = datosCard(f);
+    var hayLaser = !!(DIRTY_EXTRA[f] && DIRTY_EXTRA[f].laser);
     if (!d.cambios.length && !('rechazadas' in d) && !('observaciones' in d)) {
+      if (hayLaser) {                                   // solo cambió el OF de Grabado Láser
+        SAVE_EN_CURSO[f] = true;
+        guardarLaser_(f, function (ok) {
+          SAVE_EN_CURSO[f] = false;
+          if (ok) msg('OF Grabado Láser guardado.', true);
+          var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
+          if (pend) encolarGuardado(f);
+        });
+        return;
+      }
       limpiarSucio(f); msg('No hay cambios para guardar.', true); return;
     }
     SAVE_EN_CURSO[f] = true;
     google.script.run
       .withSuccessHandler(function (r) {
-        SAVE_EN_CURSO[f] = false;
         limpiarEnviados_(f, d);
         if (r && r.msg) msg(r.msg, true);
-        var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
-        if (pend) encolarGuardado(f);
+        guardarLaser_(f, function () {
+          SAVE_EN_CURSO[f] = false;
+          var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
+          if (pend) encolarGuardado(f);
+        });
       })
       .withFailureHandler(function (e) {
         SAVE_EN_CURSO[f] = false;
@@ -1136,14 +1195,14 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     }
     if (!hayCambios_(f)) limpiarSucio(f);
   }
-  function olvidarLote_(f) { delete DIRTY[f]; delete DIRTY_EXTRA[f]; delete LOCAL_RECH[f]; delete LOCAL_OBS[f]; }
+  function olvidarLote_(f) { delete DIRTY[f]; delete DIRTY_EXTRA[f]; delete LOCAL_RECH[f]; delete LOCAL_OBS[f]; delete LOCAL_LASER[f]; }
   function actualizarEnControl(f) {
     if (CERRANDO[f]) return;
     encolarGuardado(f);
   }
 
   function esperarLoteLibre_(f, cb, intentos) {
-    if (intentos === undefined) intentos = 50; 
+    if (intentos === undefined) intentos = 50;
     if (!SAVE_EN_CURSO[f] || intentos <= 0) { cb(); return; }
     setTimeout(function () { esperarLoteLibre_(f, cb, intentos - 1); }, 200);
   }
@@ -1188,8 +1247,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .ctlPinReanudar(conPin_({ id: f, hora: horaAhoraCdc() }));
   }
 
-  
-  
+
+
   function cerrarControl(f, btn) {
     if (CERRANDO[f]) return;
     var ceros = cerosDe_(f);
@@ -1200,28 +1259,36 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (btn) { btn.disabled = true; btn.textContent = 'Cerrando…'; }
     msg('Marcando como Controlada… no cierres la pantalla.', true);
     esperarLoteLibre_(f, function () {
-      var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
-      google.script.run
-        .withSuccessHandler(function(r){
-          msg('Lote marcado como Controlada ✓', true);   // sin mostrar el tiempo: queda guardado y lo ve solo Supervisión
-          olvidarLote_(f);
-          delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
-          actualizarInventarios();
-        })
-        .withFailureHandler(function(e){
+      // Primero se guarda el OF de Grabado Láser (si se cambió); si falla, no se cierra.
+      guardarLaser_(f, function (okLaser) {
+        if (!okLaser) {
           delete CERRANDO[f];
-          if (yaHecho_(e)) {   // el cierre anterior SÍ se guardó (la respuesta tardó o se cortó)
-            msg('Este control ya estaba cerrado (se guardó en el intento anterior). Se actualizó la pantalla.', true);
-            olvidarLote_(f);
-            delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f];
-            actualizarInventarios();
-            return;
-          }
-          msg(e.message, false);
           if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
-          refrescarEnControl();
-        })
-        .ctlPinCerrarCambios(d);
+          return;
+        }
+        var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
+        google.script.run
+          .withSuccessHandler(function(r){
+            msg('Lote marcado como Controlada ✓', true);   // sin mostrar el tiempo: queda guardado y lo ve solo Supervisión
+            olvidarLote_(f);
+            delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
+            actualizarInventarios();
+          })
+          .withFailureHandler(function(e){
+            delete CERRANDO[f];
+            if (yaHecho_(e)) {   // el cierre anterior SÍ se guardó (la respuesta tardó o se cortó)
+              msg('Este control ya estaba cerrado (se guardó en el intento anterior). Se actualizó la pantalla.', true);
+              olvidarLote_(f);
+              delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f];
+              actualizarInventarios();
+              return;
+            }
+            msg(e.message, false);
+            if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
+            refrescarEnControl();
+          })
+          .ctlPinCerrarCambios(d);
+      });
     });
   }
   function eliminarBorrador(f) {
@@ -1268,7 +1335,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
   };
 
-  
+
   window.addEventListener('beforeunload', function (e) {
     var hayCambios = Object.keys(LOTES_SUCIOS).some(function (f) { return LOTES_SUCIOS[f]; });
     if (hayCambios) {
