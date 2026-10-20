@@ -373,12 +373,13 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   function escAttr_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
   /* ---------- OF Grabado Láser: SOLO componentes / instrumental (no implantes) ---------- */
+  // Nombres EXACTOS de los implantes (igual que en ControlLaser.gs). Todo lo demás es componente / instrumental.
   var PRODUCTOS_IMPLANTE = ['monopieza', 'monopieza basal', 'monopieza basal tratado', 'monopieza basal pulido',
-    'hexagono interno', 'hexagono externo', 'cono morse', 'compresivo multi-unit',
-    'compresivo multi-unit cuello largo', 'compresivo multi unit', 'cmu', 'cmu3'];
+    'monopieza b. no tratado ni pulido', 'hexagono interno', 'hexagono externo', 'cono morse',
+    'compresivo multi-unit', 'compresivo multi-unit cuello largo'];
   function esComponente_(b) {
     var p = normT_(b && b.producto);
-    return !!p && PRODUCTOS_IMPLANTE.indexOf(p) < 0 && !/^implante/.test(p);
+    return !!p && PRODUCTOS_IMPLANTE.indexOf(p) < 0;
   }
   function marcarLaser(f) {
     var el = document.getElementById('tlaser_'+f);
