@@ -24,12 +24,15 @@
   .panel-lote{ border-top:4px solid #64748b; }
   .panel-prim{ border-top:4px solid var(--acc); }
   .panel-sec{ border-top:4px solid #16a34a; }
+  .panel-dp{ border-top:4px solid #7c3aed; }
   .oculto{ display:none !important; }
   label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
   select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
   select:focus, input:focus{ border-color:var(--acc); outline:none; }
+  select:disabled{ background:#f1f5f9; }
   .btn{ color:#fff; border:none; padding:14px 18px; font-size:15px; font-weight:700; border-radius:8px; cursor:pointer; width:100%; background:#0f766e; }
   .btn:disabled{ opacity:0.5; cursor:default; }
+  .btn-dp{ background:#7c3aed; margin-top:10px; }
   .estado-guardado{ font-size:12px; color:var(--mut); margin:8px 0 0 0; min-height:16px; }
   .estado-guardado.ok{ color:#15803d; font-weight:600; }
   .estado-guardado.guardando{ color:#92400e; }
@@ -42,6 +45,9 @@
   .aviso-warn{ display:none; margin-top:8px; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; }
   .info-componentes{ display:none; background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:10px; }
   .tag-auto{ color:#15803d; font-weight:700; }
+  .dp-ok{ background:#f0fdf4; border:1px solid #86efac; color:#15803d; border-radius:8px; padding:8px 12px; font-size:13px; font-weight:600; }
+  .dp-fijo{ background:#e9ecef; font-weight:700; }
+  .dp-fuera{ border-color:#ef4444 !important; background:#fef2f2 !important; }
   #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:460px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
   #msg.show{ display:block; }
   #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
@@ -66,12 +72,31 @@
 <div class="container">
   <h1>Envasado Primario / Secundario</h1>
 
+  <!-- ===== F-PRO-018-01: Monitoreo de ENTRADA (diferenciales de presión) ===== -->
+  <div class="panel panel-dp" id="panelDpEntrada">
+    <h2>Diferenciales de presión — Monitoreo de entrada <span style="font-weight:400; color:var(--mut);">(F-PRO-018-01)</span></h2>
+    <div id="dpEntradaOk" class="dp-ok oculto"></div>
+    <div id="dpEntradaForm">
+      <p class="hint">Antes de arrancar el Envasado Primario del día. Criterio de aceptación: cascada entre 4 y 2 Pa.</p>
+      <div class="grid-fila">
+        <div><label>Entrada vestuario (Pa)</label><input id="dpE_vest" type="number" step="0.1" value="4" oninput="dpRevisar_('dpE')"></div>
+        <div><label>Entrada de lavado (Pa)</label><input id="dpE_lav" type="number" step="0.1" value="2" oninput="dpRevisar_('dpE')"></div>
+        <div><label>Entrada de envasado (Pa)</label><input id="dpE_env" type="number" step="0.1" value="2" oninput="dpRevisar_('dpE')"></div>
+        <div><label>Realizado por</label><input class="dp-fijo dp-realizado" value="Miguel Gomez" readonly></div>
+        <div><label>Verificado por</label><input class="dp-fijo dp-verificado" value="Lourdes Deasis" readonly></div>
+        <div style="grid-column:span 2;"><label>Observaciones</label><input id="dpE_obs" type="text" value="Sin anomalías"></div>
+      </div>
+      <div id="dpE_aviso" class="aviso-warn"></div>
+      <button class="btn btn-dp" id="dpE_btn" onclick="dpRegistrarEntrada()">Registrar monitoreo de entrada</button>
+    </div>
+  </div>
+
   <div class="panel panel-lote">
     <label>Lote</label>
-    <select id="loteSelect" onchange="cargarDetalle()">
+    <select id="loteSelect" onchange="cargarDetalle()" disabled>
       <option value="">Cargando lotes...</option>
     </select>
-    <p class="hint">Elegí el lote. Lo que vayas cargando se escribe solo en las hojas del sistema (Envasado Primario y Envasado Secundario "EN CURSO"). El lote se cierra recién al tocar "Finalizar lote", cuando está todo completo.</p>
+    <p class="hint" id="hintLote">Elegí el lote. Lo que vayas cargando se escribe solo en las hojas del sistema (Envasado Primario y Envasado Secundario "EN CURSO"). El lote se cierra recién al tocar "Finalizar lote", cuando está todo completo.</p>
   </div>
 
   <div class="panel panel-prim oculto" id="panelPrimario">
@@ -86,6 +111,19 @@
   </div>
 
   <div class="oculto" id="zonaAcciones">
+    <!-- ===== F-PRO-018-01: Monitoreo de SALIDA (se registra al finalizar el lote) ===== -->
+    <div class="panel panel-dp">
+      <h2>Diferenciales de presión — Monitoreo de salida <span style="font-weight:400; color:var(--mut);">(se registra al finalizar el lote)</span></h2>
+      <div class="grid-fila">
+        <div><label>Entrada vestuario (Pa)</label><input id="dpS_vest" type="number" step="0.1" value="4" oninput="dpRevisar_('dpS')"></div>
+        <div><label>Entrada de lavado (Pa)</label><input id="dpS_lav" type="number" step="0.1" value="2" oninput="dpRevisar_('dpS')"></div>
+        <div><label>Entrada de envasado (Pa)</label><input id="dpS_env" type="number" step="0.1" value="2" oninput="dpRevisar_('dpS')"></div>
+        <div><label>Realizado por</label><input class="dp-fijo dp-realizado" value="Miguel Gomez" readonly></div>
+        <div><label>Verificado por</label><input class="dp-fijo dp-verificado" value="Lourdes Deasis" readonly></div>
+        <div style="grid-column:span 2;"><label>Observaciones</label><input id="dpS_obs" type="text" value="Sin anomalías"></div>
+      </div>
+      <div id="dpS_aviso" class="aviso-warn"></div>
+    </div>
     <button class="btn" id="btnGuardar" onclick="finalizarLote()">Finalizar lote (Primario + Secundario)</button>
     <p class="estado-guardado" id="estadoGuardado"></p>
   </div>
@@ -134,6 +172,111 @@
     var el = document.getElementById('estadoGuardado');
     el.textContent = texto || '';
     el.className = 'estado-guardado' + (clase ? ' ' + clase : '');
+  }
+
+  /* =====================================================================
+   * F-PRO-018-01 — Diferenciales de presión
+   * Entrada: una vez por día, antes de poder elegir un lote.
+   * Salida: se registra junto con "Finalizar lote".
+   * ===================================================================== */
+  var DP_MIN = 2, DP_MAX = 4, DP_OBS_OK = 'Sin anomalías';
+  var DP_ENTRADA_FECHA = '';   // fecha (dd/MM/yyyy) en que se confirmó la entrada
+
+  function hoyTxt_() {
+    var d = new Date();
+    return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+  }
+  function dpEntradaOk_() { return DP_ENTRADA_FECHA === hoyTxt_(); }
+
+  // Lee los 3 valores de un bloque ('dpE' o 'dpS'). Devuelve { datos, error }
+  function dpLeer_(pref) {
+    var ids = [['vest', 'Entrada vestuario'], ['lav', 'Entrada de lavado'], ['env', 'Entrada de envasado']];
+    var vals = [], fuera = [], error = '';
+    ids.forEach(function (p) {
+      var el = document.getElementById(pref + '_' + p[0]);
+      var t = String(el.value).replace(',', '.').trim();
+      var n = Number(t);
+      if (t === '' || !isFinite(n)) { if (!error) error = 'Falta el valor de ' + p[1] + '.'; vals.push(''); return; }
+      if (n < DP_MIN || n > DP_MAX) fuera.push(p[1] + ' (' + n + ' Pa)');
+      vals.push(n);
+    });
+    var obs = document.getElementById(pref + '_obs').value.trim();
+    if (!error && fuera.length && (!obs || obs.toLowerCase() === DP_OBS_OK.toLowerCase())) {
+      error = 'Fuera de criterio (2 a 4 Pa): ' + fuera.join(', ') + '. Escribí en Observaciones qué pasó.';
+    }
+    return {
+      error: error,
+      datos: { vestuario: vals[0], lavado: vals[1], envasado: vals[2], observaciones: obs || DP_OBS_OK }
+    };
+  }
+
+  // Marca en rojo los valores fuera de 2–4 Pa y muestra el aviso
+  function dpRevisar_(pref) {
+    var fuera = [];
+    [['vest', 'Entrada vestuario'], ['lav', 'Entrada de lavado'], ['env', 'Entrada de envasado']].forEach(function (p) {
+      var el = document.getElementById(pref + '_' + p[0]);
+      var t = String(el.value).replace(',', '.').trim(), n = Number(t);
+      var mal = t !== '' && isFinite(n) && (n < DP_MIN || n > DP_MAX);
+      el.classList.toggle('dp-fuera', mal);
+      if (mal) fuera.push(p[1] + ' (' + n + ' Pa)');
+    });
+    var av = document.getElementById(pref + '_aviso');
+    av.style.display = fuera.length ? 'block' : 'none';
+    av.textContent = fuera.length ? '⚠ Fuera del criterio de aceptación (2 a 4 Pa): ' + fuera.join(', ') + '. Indicá el motivo en Observaciones.' : '';
+  }
+
+  function dpMostrarEntrada_(e) {
+    if (e) {
+      DP_ENTRADA_FECHA = e.fecha || hoyTxt_();
+      document.getElementById('dpEntradaForm').classList.add('oculto');
+      var ok = document.getElementById('dpEntradaOk');
+      ok.classList.remove('oculto');
+      ok.textContent = '✓ Monitoreo de entrada registrado hoy a las ' + e.hora + ' — Vestuario ' + e.vestuario +
+        ' Pa · Lavado ' + e.lavado + ' Pa · Envasado ' + e.envasado + ' Pa (' + (e.observaciones || DP_OBS_OK) + ')';
+      document.getElementById('loteSelect').disabled = false;
+    } else {
+      DP_ENTRADA_FECHA = '';
+      document.getElementById('dpEntradaForm').classList.remove('oculto');
+      document.getElementById('dpEntradaOk').classList.add('oculto');
+      document.getElementById('loteSelect').disabled = true;
+    }
+  }
+
+  function dpCargarEstado_(callback) {
+    google.script.run.withSuccessHandler(function (est) {
+      dpMostrarEntrada_(est && est.entrada);
+      if (est && est.realizadoPor) document.querySelectorAll('.dp-realizado').forEach(function (i) { i.value = est.realizadoPor; });
+      if (est && est.verificadoPor) document.querySelectorAll('.dp-verificado').forEach(function (i) { i.value = est.verificadoPor; });
+      if (callback) callback();
+    }).withFailureHandler(function (err) {
+      mostrarDiag('dpEstadoHoy -> Error: ' + textoError_(err));
+      dpMostrarEntrada_(null);
+      if (callback) callback();
+    }).dpEstadoHoy();
+  }
+
+  function dpRegistrarEntrada() {
+    var r = dpLeer_('dpE');
+    if (r.error) { mostrarMsg(r.error, false); return; }
+    var btn = document.getElementById('dpE_btn');
+    btn.disabled = true; btn.textContent = 'Registrando...';
+    google.script.run.withSuccessHandler(function (res) {
+      btn.disabled = false; btn.textContent = 'Registrar monitoreo de entrada';
+      dpMostrarEntrada_(res && res.estado && res.estado.entrada);
+      mostrarMsg((res && res.msg) || 'Monitoreo de entrada registrado.', true);
+    }).withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = 'Registrar monitoreo de entrada';
+      mostrarMsg(textoError_(err), false);
+    }).dpRegistrarEntrada(r.datos);
+  }
+
+  // Si la pantalla quedó abierta de un día a otro, vuelve a pedir la entrada
+  function dpExigirEntrada_() {
+    if (dpEntradaOk_()) return true;
+    dpCargarEstado_();
+    mostrarMsg('Primero registrá el monitoreo de entrada de hoy (diferenciales de presión).', false);
+    window.scrollTo(0, 0);
+    return false;
   }
 
   function buscarLotePorTexto_(lista, texto) {
@@ -194,6 +337,7 @@
     var clave = document.getElementById('loteSelect').value;
     limpiar();
     if (!clave) return;
+    if (!dpExigirEntrada_()) { document.getElementById('loteSelect').value = ''; return; }
     document.getElementById('panelPrimario').classList.remove('oculto');
     document.getElementById('pFilas').innerHTML = '<p class="vacio">Cargando...</p>';
     google.script.run.withSuccessHandler(function (det) {
@@ -323,7 +467,7 @@
   }
 
   /* ---------- Guardado en vivo en la planilla ---------- */
-  function programarGuardado() {
+  function programarGuardado(ev) {
     if (!CLAVE_ACTUAL || FINALIZANDO) return;
     clearTimeout(timerGuardado);
     estadoGuardado('Escribiendo en la planilla...', 'guardando');
@@ -375,6 +519,7 @@
   function finalizarLote() {
     var clave = document.getElementById('loteSelect').value;
     if (!clave) { mostrarMsg('Elegí un lote primero.', false); return; }
+    if (!dpExigirEntrada_()) return;
 
     var faltaPrim = false;
     var filasPrimario = leerPrimario().map(function (f) {
@@ -391,6 +536,12 @@
     if (!filasSecundario.length) { mostrarMsg('No hay medidas de Secundario para guardar.', false); return; }
     if (faltaSec) { mostrarMsg('Secundario: falta cantidad u operario. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
 
+    // Monitoreo de salida (F-PRO-018-01): se valida antes de cerrar el lote
+    var salida = dpLeer_('dpS');
+    if (salida.error) { mostrarMsg('Monitoreo de salida: ' + salida.error, false); return; }
+    var l = LOTES.filter(function (x) { return x.clave === clave; })[0];
+    salida.datos.lote = l ? (l.sistema + '-' + l.lote) : clave;
+
     clearTimeout(timerGuardado); timerGuardado = null;
     guardadoPendiente = null;
     FINALIZANDO = true;
@@ -399,13 +550,25 @@
     btn.disabled = true;
     btn.textContent = 'Finalizando...';
     google.script.run.withSuccessHandler(function (res) {
-      btn.disabled = false;
-      btn.textContent = 'Finalizar lote (Primario + Secundario)';
-      FINALIZANDO = false;
-      mostrarMsg(res, true);
-      document.getElementById('loteSelect').value = '';
-      limpiar();
-      cargarLotes();
+      btn.textContent = 'Registrando monitoreo de salida...';
+      google.script.run.withSuccessHandler(function (rs) {
+        btn.disabled = false;
+        btn.textContent = 'Finalizar lote (Primario + Secundario)';
+        FINALIZANDO = false;
+        mostrarMsg(res + ' · ' + ((rs && rs.msg) || 'Monitoreo de salida registrado.'), true);
+        document.getElementById('loteSelect').value = '';
+        limpiar();
+        cargarLotes();
+      }).withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = 'Finalizar lote (Primario + Secundario)';
+        FINALIZANDO = false;
+        mostrarMsg(res + ' — PERO no se pudo registrar el monitoreo de salida: ' + textoError_(err), false);
+        mostrarDiag('dpRegistrarSalida -> ' + textoError_(err) + ' (el lote SÍ quedó finalizado; avisá a técnica para cargar la salida a mano)');
+        document.getElementById('loteSelect').value = '';
+        limpiar();
+        cargarLotes();
+      }).dpRegistrarSalida(salida.datos);
     }).withFailureHandler(function (err) {
       btn.disabled = false;
       btn.textContent = 'Finalizar lote (Primario + Secundario)';
@@ -430,12 +593,14 @@
       }
     });
 
-    cargarLotes(function (lista) {
-      var m = buscarLotePorTexto_(lista, LOTE_INICIAL);
-      if (m) {
-        document.getElementById('loteSelect').value = m.clave;
-        cargarDetalle();
-      }
+    dpCargarEstado_(function () {
+      cargarLotes(function (lista) {
+        var m = buscarLotePorTexto_(lista, LOTE_INICIAL);
+        if (m && dpEntradaOk_()) {
+          document.getElementById('loteSelect').value = m.clave;
+          cargarDetalle();
+        }
+      });
     });
   };
 </script>
