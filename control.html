@@ -15,177 +15,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
 <script>
-/* ===== TOLERANCIAS DE COMPONENTES / INSTRUMENTAL (fijas) =====
- * Formato de cada cota:
- *   [letra, nominal, tol(+), tol(-)]   -> se mide (se marca en rojo si queda fuera)
- *   [letra, 'TEXTO', 'tolerancia']     -> se controla OK / NO OK (rosca 6g, existencia, sin juego, etc.)
- * La última letra de cada pieza es hasta dónde se controla (igual que TC_LETRA_LIMITE en TolComponentesQC.gs).
- */
-(function () {
-  var T = {
-    // Llave colocadora de implante CMU Larga 3-3.5-4 (instrumental)
-    LLAVE_CMU_LARGA: [
-      ['A', 4.000, 0.010, 0.030], ['B', 3.950, 0.030, 0.030], ['C', 18.000, 0.050, 0.050],
-      ['D', 2.800, 0.050, 0.050], ['E', 3.396, 0.005, 0.020], ['F', 1.500, 0.100, 0.100],
-      ['G', 3.700, 0.100, 0.050], ['H', 'OK', '- -'], ['I', 14.300, 0.100, 0.100], ['J', 'M2X0.40', '6g']
-    ],
-    // Tornillo M2 para llave colocadora CMU Larga (protésico)
-    TORN_LLAVE_CMU_LARGA: [
-      ['A', 1.930, 0.02, 0.01], ['B', 3.900, 0.01, 0.02], ['C', 'M2X0.40', '6g'],
-      ['D', 23.700, 0.050, 0.050], ['E', 'EXISTENCIA', '- -'], ['F', 1.230, 0.010, 0.010],
-      ['G', 1.500, 0.100, 0.050]
-    ],
-    // Llave colocadora de CMU Media 3-3.5-4 (instrumental)
-    LLAVE_CMU_MEDIA: [
-      ['A', 4.000, 0.010, 0.030], ['B', 3.950, 0.030, 0.030], ['C', 12.000, 0.050, 0.050],
-      ['D', 2.800, 0.050, 0.050], ['E', 3.396, 0.005, 0.020], ['F', 1.500, 0.100, 0.100],
-      ['G', 3.700, 0.100, 0.050], ['H', 'OK', '- -'], ['I', 8.300, 0.100, 0.100], ['J', 'M2X0.40', '6g']
-    ],
-    // Tornillo M2 para llave colocadora CMU Media (protésico)
-    TORN_LLAVE_CMU_MEDIA: [
-      ['A', 1.930, 0.02, 0.01], ['B', 3.900, 0.01, 0.02], ['C', 'M2X0.40', '6g'],
-      ['D', 17.700, 0.050, 0.050], ['E', 'EXISTENCIA', '- -'], ['F', 1.230, 0.010, 0.010],
-      ['G', 1.500, 0.100, 0.050]
-    ],
-    // Cicatrizal para CMU Hombro 4mm (protésico)
-    CIC_CMU_4: [
-      ['A', 4.000, 0.020, 0.020], ['B', 4.000, 0.050, 0.050], ['C', 3.400, 0.020, 0.020],
-      ['D', 2.950, 0.030, 0.030], ['E', 1.550, 0.050, 0.050], ['F', 2.250, 0.050, 0.050]
-    ],
-    // Tornillo para cicatrizal CMU Hombro 4mm (protésico)
-    TORN_CIC_CMU_4: [
-      ['A', 2.850, 0.030, 0.030], ['B', 1.930, 0.020, 0.010], ['C', 1.600, 0.030, 0.030],
-      ['D', 5.000, 0.050, 0.050], ['E', 1.230, 0.010, 0.010], ['F', 1.500, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 'SIN JUEGO', '- -'], ['I', 1.600, 0.050, 0.100], ['J', 2.000, 0.050, 0.050]
-    ],
-    // Cicatrizal para CMU Hombro 2mm (protésico) — tal cual se pasó
-    CIC_CMU_2: [
-      ['A', 2.850, 0.030, 0.030], ['B', 1.930, 0.020, 0.010], ['C', 1.600, 0.030, 0.030],
-      ['D', 3.000, 0.050, 0.050], ['E', 1.230, 0.010, 0.010], ['F', 1.500, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 'SIN JUEGO', '- -'], ['I', 1.600, 0.050, 0.100], ['J', 2.000, 0.050, 0.050]
-    ],
-    // Cicatrizal para CMU Hombro 3mm (protésico)
-    CIC_CMU_3: [
-      ['A', 4.000, 0.020, 0.020], ['B', 3.000, 0.050, 0.050], ['C', 3.400, 0.020, 0.020],
-      ['D', 2.950, 0.030, 0.030], ['E', 1.550, 0.050, 0.050], ['F', 1.250, 0.050, 0.050]
-    ],
-    // Tornillo para cicatrizal CMU Hombro 3mm (protésico)
-    TORN_CIC_CMU_3: [
-      ['A', 2.850, 0.030, 0.030], ['B', 1.930, 0.020, 0.010], ['C', 1.600, 0.030, 0.030],
-      ['D', 4.000, 0.050, 0.050], ['E', 1.230, 0.010, 0.010], ['F', 1.500, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 'SIN JUEGO', '- -'], ['I', 1.600, 0.050, 0.100], ['J', 2.000, 0.050, 0.050]
-    ],
-    // Pilar Ball Atachered para CMU Hombro 2mm (protésico)
-    BALL_CMU_2: [
-      ['A', 1.930, 0.03, 0.010], ['B', 2.200, 0.030, 0.030], ['C', 4.000, 0.030, 0.030],
-      ['D', 2.480, 0.020, 0.010], ['E', 3.400, 0.020, 0.020], ['F', 2.700, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 6.600, 0.050, 0.050], ['I', 2.000, 0.050, 0.050]
-    ],
-    // Pilar Ball Atachered para CMU Hombro 3mm (protésico)
-    BALL_CMU_3: [
-      ['A', 1.930, 0.03, 0.010], ['B', 2.200, 0.030, 0.030], ['C', 4.000, 0.030, 0.030],
-      ['D', 2.480, 0.020, 0.010], ['E', 3.400, 0.020, 0.020], ['F', 2.700, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 7.600, 0.050, 0.050], ['I', 3.000, 0.050, 0.050]
-    ],
-    // Pilar Ball Atachered para CMU Hombro 4mm (protésico)
-    BALL_CMU_4: [
-      ['A', 1.930, 0.03, 0.010], ['B', 2.200, 0.030, 0.030], ['C', 4.000, 0.030, 0.030],
-      ['D', 2.480, 0.020, 0.010], ['E', 3.400, 0.020, 0.020], ['F', 2.700, 0.100, 0.050],
-      ['G', 'M2X0.40', '6g'], ['H', 8.600, 0.050, 0.050], ['I', 4.000, 0.050, 0.050]
-    ],
-    // Tornillo M2 para CMU (protésico)
-    TORN_M2_CMU: [
-      ['A', 1.930, 0.02, 0.01], ['B', 2.500, 0.01, 0.02], ['C', 'M2X0.40', '6g'],
-      ['D', 6.200, 0.050, 0.050], ['E', 1.270, 0.010, 0.010], ['F', 1.200, 0.100, 0.050],
-      ['G', 1.800, 0.050, 0.050]
-    ],
-    // Tornillo para Mini Pilar M1.4 (protésico)
-    TORN_MINI_PILAR_M14: [
-      ['A', 1.400, 0.02, 0.01], ['B', 2.300, 0.01, 0.02], ['C', 'M1.4X0.30', '6g'],
-      ['D', 4.100, 0.050, 0.050], ['E', 1.230, 0.010, 0.010], ['F', 1.300, 0.030, 0.100],
-      ['G', 1.400, 0.050, 0.200], ['H', 'SIN VIRUTA', '- -'], ['I', 1.500, 0.100, 0.030]
-    ],
-    // Prolongador cuadrado a cuadrado Largo Ø6 (instrumental)
-    PROL_LARGO: [
-      ['A', 6.000, 0.030, 0.030], ['B', 3.950, 0.030, 0.030], ['C', 5.000, 0.050, 0.050],
-      ['D', 20.000, 0.100, 0.100], ['E', 4.000, 0.050, 0.010], ['F', 5.000, 0.100, 0.100],
-      ['G', 2.500, 0.040, 0.040]
-    ],
-    // Prolongador cuadrado a cuadrado Corto Ø6 (instrumental)
-    PROL_CORTO: [
-      ['A', 6.000, 0.030, 0.030], ['B', 3.950, 0.030, 0.030], ['C', 5.000, 0.050, 0.050],
-      ['D', 15.000, 0.100, 0.100], ['E', 4.000, 0.050, 0.010], ['F', 5.000, 0.100, 0.100],
-      ['G', 2.500, 0.040, 0.040]
-    ],
-    // Pilar T-Base CMU Ø4.5 rotacional (protésico)
-    TBASE_CMU_45: [
-      ['A', 4.500, 0.030, 0.030], ['B', 5.000, 0.050, 0.050], ['C', 1.700, 0.050, 0.050],
-      ['D', 2.100, 0.050, 0.010], ['E', 2.600, 0.100, 0.050], ['F', 3.450, 0, 0.100],
-      ['G', 'VER NOTA', '-']
-    ],
-    // Pilar para CMU Hombro 1mm (protésico)
-    PILAR_CMU_1: [
-      ['A', 4.800, 0.030, 0.030], ['B', 'EXISTENCIA', '- -'], ['C', 10.000, 0.100, 0.100],
-      ['D', 3.400, 0.020, 0.020], ['E', 2.100, 0.050, 0.050], ['F', 2.600, 0.100, 0.050],
-      ['G', 6.800, 0.100, 0.100]
-    ]
-  };
-
-  function norm(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
-
-  // MISMA lógica que tcClave_ en TolComponentesQC.gs (si se cambia una, cambiar la otra)
-  function clave(producto, medida) {
-    var s = norm(String(producto || '') + ' ' + String(medida || ''));
-    function has(w) { return s.indexOf(w) >= 0; }
-    var mh = s.match(/hombro\s*(\d+)/) || s.match(/(\d+)\s*mm\b/);
-    var h = mh ? mh[1] : '';
-    var larga = /\blarg/.test(s), media = /\bmedi|\bmeida/.test(s), corto = /\bcort/.test(s);
-
-    if (has('prolongador')) return larga ? 'PROL_LARGO' : (corto ? 'PROL_CORTO' : '');
-    if (has('llave') && has('cmu')) {
-      if (has('tornillo')) return larga ? 'TORN_LLAVE_CMU_LARGA' : (media ? 'TORN_LLAVE_CMU_MEDIA' : '');
-      return larga ? 'LLAVE_CMU_LARGA' : (media ? 'LLAVE_CMU_MEDIA' : '');
-    }
-    if (has('mini pilar') || has('minipilar')) return has('tornillo') ? 'TORN_MINI_PILAR_M14' : '';
-    if (!has('cmu')) return '';
-    if (has('cicatrizal')) {
-      if (has('tornillo')) return (h === '3' || h === '4') ? 'TORN_CIC_CMU_' + h : '';
-      return (h === '2' || h === '3' || h === '4') ? 'CIC_CMU_' + h : '';
-    }
-    if (has('ball') || has('atach')) return (h === '2' || h === '3' || h === '4') ? 'BALL_CMU_' + h : '';
-    if (/\bt\s*-?\s*base\b/.test(s)) return 'TBASE_CMU_45';
-    if (has('tornillo')) return has('m2') ? 'TORN_M2_CMU' : '';
-    if (has('pilar') && h === '1') return 'PILAR_CMU_1';
-    return '';
-  }
-
-  function r4(n) { return Math.round(n * 10000) / 10000; }
-  function spec(fila) {
-    if (typeof fila[1] === 'number') {
-      var nom = fila[1], mas = fila[2] || 0, menos = fila[3] || 0;
-      return { tipo: 'medida', nominal: nom, tolMas: mas, tolMenos: menos, min: r4(nom - menos), max: r4(nom + mas), texto: '' };
-    }
-    var tol = String(fila[2] || '').trim();
-    var conTol = tol && !/^[-\s]+$/.test(tol);
-    return { tipo: 'ok', nominal: null, tolMas: null, tolMenos: null, texto: fila[1] + (conTol ? ' · ' + tol : '') };
-  }
-
-  window.TC_clave = clave;
-  window.TC_letraLimite = function (producto, medida) {
-    var k = clave(producto, medida), t = k && T[k];
-    return t ? t[t.length - 1][0] : '';
-  };
-  window.TC_specs = function (producto, medida, letras) {
-    var k = clave(producto, medida);
-    if (!k || !T[k]) return null;
-    var out = {};
-    (letras || []).forEach(function (l) { out[l] = null; });
-    T[k].forEach(function (f) { out[f[0]] = spec(f); });
-    return out;
-  };
-})();
-</script>
-<script>
 /* ===== Lecturas rápidas desde Supabase (Control de Calidad) =====
  * ctlObtenerLotesParaControl y ctlListarEnControl se resuelven con UNA consulta a Supabase
  * (función control_datos) en vez de ir al Apps Script. Misma lógica que Codigo.gs.
@@ -233,9 +62,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return vals.map(function (v, i) { return { v: v, r: resps[i] || '' }; });
   }
   function limiteCota(producto, teton, medida) {   // = ctlLimiteCota_
-    // Componentes / instrumental con tolerancias fijas (bloque TOLERANCIAS DE COMPONENTES)
-    var tc = window.TC_letraLimite ? window.TC_letraLimite(producto, medida) : '';
-    if (tc) return tc;
     var p = norm(producto), conTeton = norm(teton).indexOf('con') >= 0;
     if (p.indexOf('hexagono interno') >= 0) return 'O';
     if (p.indexOf('cono morse') >= 0) return 'M';
@@ -599,18 +425,40 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return m ? { d: parseFloat(m[1]), l: m[2] ? parseFloat(m[2]) : null } : null;
   }
   function tetonClave_(t) { var n = normT_(t); return n.indexOf('con') >= 0 ? 'con' : (n.indexOf('sin') >= 0 ? 'sin' : ''); }
-  function specsDe_(producto, teton, medida, letras) {
-    // Componentes / instrumental con tolerancias fijas (bloque TOLERANCIAS DE COMPONENTES, arriba)
-    var tcs = window.TC_specs ? window.TC_specs(producto, medida, letras) : null;
-    if (tcs) return tcs;
-    var p = normT_(producto), t = tetonClave_(teton), mc = medidaClave_(medida);
-    var base = {}, exacta = {};
-    if (mc) (TOL_FILAS || []).forEach(function (f) {
-      if (!f || !f.med || f.prod !== p) return;
+  /* Nombre "plano" para comparar productos: sin tildes, Ø = o, sin paréntesis
+   * (igual que compNorm_ de ComponentesQC.gs). */
+  function normProd_(s) { return normT_(s).replace(/ø/g, 'o').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  /* Filas de "Tolerancias QC" que corresponden a este producto / tetón / medida.
+   * Medida con número (3.4, 4.0x10…): se compara el número.
+   * Medida sin número ("-"), como la mayoría de los componentes: se toman las filas
+   * de ese producto que tampoco tienen número de medida. */
+  function filasTolDe_(producto, teton, medida) {
+    var p = normProd_(producto), t = tetonClave_(teton), mc = medidaClave_(medida), out = [];
+    (TOL_FILAS || []).forEach(function (f) {
+      if (!f || normProd_(f.prod) !== p) return;
       if (f.teton && f.teton !== t) return;
-      if (Math.abs(f.med.d - mc.d) > 0.001) return;
-      if (f.med.l == null) base[f.cota] = f;
-      else if (mc.l != null && Math.abs(f.med.l - mc.l) < 0.001) exacta[f.cota] = f;
+      if (!mc) { if (!f.med) out.push({ f: f, exacta: false }); return; }
+      if (!f.med || Math.abs(f.med.d - mc.d) > 0.001) return;
+      if (f.med.l == null) out.push({ f: f, exacta: false });
+      else if (mc.l != null && Math.abs(f.med.l - mc.l) < 0.001) out.push({ f: f, exacta: true });
+    });
+    return out;
+  }
+  /* Componentes / instrumental: se muestran solo las cotas que tienen tolerancia cargada
+   * (A..última), igual que valida el servidor con compLetraLimite_. */
+  function letrasComponente_(b) {
+    if (!esComponente_(b)) return null;
+    var max = -1;
+    filasTolDe_(b.producto, b.teton, b.medida).forEach(function (x) {
+      var i = LETRAS_COA.indexOf(String(x.f.cota || '').toUpperCase());
+      if (i > max) max = i;
+    });
+    return max >= 0 ? LETRAS_COA.slice(0, max + 1) : null;
+  }
+  function specsDe_(producto, teton, medida, letras) {
+    var base = {}, exacta = {};
+    filasTolDe_(producto, teton, medida).forEach(function (x) {
+      if (x.exacta) exacta[x.f.cota] = x.f; else base[x.f.cota] = x.f;
     });
     var esMono = window.BF_esMonopiezaComun ? window.BF_esMonopiezaComun(producto) : false;
     var out = {};
@@ -996,7 +844,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       var tam = cantidadVacia ? 0 : tamanoMuestra(b.cantidadOriginal);
       TAM_MUESTRA[f] = tam;
 
-      var letrasDeEsteLote = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      var letrasDeEsteLote = letrasComponente_(b) || ((b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA);
       if (b.coas) {
         letrasDeEsteLote.forEach(function (l) {
           if (b.coas[l] && !Array.isArray(b.coas[l].muestras) && Array.isArray(b.coas[l].valores)) {
@@ -1123,7 +971,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     lista.forEach(function(b){
       var f = b.id;
       if (!(Number(b.cantidadOriginal) > 0)) return;
-      var letrasDeEsteLote = (b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA;
+      var letrasDeEsteLote = letrasComponente_(b) || ((b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA);
       letrasDeEsteLote.forEach(function(l){ cargarMuestra(f, l, false); });
     });
   }
