@@ -61,7 +61,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
   .toggle-parciales input { width:auto; }
 
 
-   
+
   table { width:100%; border-collapse:collapse; margin-top:10px; }
   th, td { padding:10px; text-align:left; border-bottom:1px solid #cbd5e1; }
   th { font-size:12px; text-transform:uppercase; color:var(--mut); }
@@ -179,7 +179,7 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
     <div class="grid-3" style="margin-top:12px;">
       <div>
         <label>Responsable del Proceso</label>
-        
+
         <input id="responsable" value="Javier" readonly style="background:#e2e8f0; font-weight:700;">
       </div>
       <div><label>Cantidad Procesada OK</label><input id="txtCantidadProcesar" type="number" min="1"></div>
@@ -250,14 +250,14 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
     <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;">
       <span id="msg" style="font-size:13px;"></span>
       <button class="btn-submit" id="btnBorrador" style="display:none;" onclick="guardarBorradorAbrillantado()">Agregar a abrillantado</button>
-      
+
       <button class="btn-submit" id="btnGrupo" style="background:#64748b;" onclick="agregarAlGrupo()">Agregar al Grupo de Lotes</button>
       <button class="btn-submit" id="btnGuardar" style="background:var(--acc);" onclick="guardarLavado()">Registrar Operación Solo</button>
     </div>
   </div>
 
 
-  
+
   <div class="card" id="seccionGrupo" style="display:none; border-color:#0284c7; background:#f0f9ff;">
     <h2 style="color:#0284c7; border-bottom:1px solid #bae6fd;">Grupo de Procesamiento (Lotes Agrupados para enviar)</h2>
     <div style="overflow-x:auto;">
@@ -291,15 +291,15 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
 <script>
   var DATA_LAVADO = { tieneQueEmpezar: [], tieneQueEmpezarParciales: [], paraAbrillantar: [], paraVaporeado: [], paraLavadoSecundario: [] };
   var PIEZAS_VAPOREADO = [];
-  var LISTA_ACTUAL = [];   
-  var LOTES_AGRUPADOS = []; 
+  var LISTA_ACTUAL = [];
+  var LOTES_AGRUPADOS = [];
 
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
   function esTaponLavado_(producto) {
     return /^tapon porta implante (mp|hi|he)$/i.test(String(producto || '').trim());
   }
@@ -308,9 +308,9 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
     return (item && item.teton) || 'Sin teton';
   }
 
-  
-  
-  
+
+
+
   function estaEnGrupo(item, tipoCola) {
     return LOTES_AGRUPADOS.some(function(g){
       return g.lote === item.lote && g.producto === item.producto && g.tipoCola === tipoCola;
@@ -387,7 +387,7 @@ function refrescarTodo(silencioso) {
     document.getElementById('cardBorradores').style.display = esAbr ? 'block' : 'none';
     if (esAbr) refrescarBorradores();
 
-    
+
     document.getElementById('responsable').value = "Javier";
 
 
@@ -397,7 +397,7 @@ function refrescarTodo(silencioso) {
       return;
     }
 
-    
+
     var opciones = lista.map(function(x, index) {
       if (estaEnGrupo(x, tipo)) return '';
       var tet = ' · ' + tetonMostrar_(x);
@@ -440,7 +440,7 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
+
   function agregarAlGrupo() {
     var producto = document.getElementById('txtProducto').value;
     if (!producto) { msg('Seleccioná un lote primero.', false); return; }
@@ -462,7 +462,7 @@ function refrescarTodo(silencioso) {
     }
 
 
-    
+
     var existe = LOTES_AGRUPADOS.find(function(x) { return x.lote === lote && x.producto === producto; });
     if (existe) {
       msg('Este lote ya está en el grupo de envío.', false);
@@ -491,8 +491,8 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
-  
+
+
   function itemsGrupoActual_() {
     var tipo = document.getElementById('filtroCola').value;
     var out = [];
@@ -589,7 +589,7 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
+
   function procesarGrupoSecuencial(items, index, totalExitos, totalErrores) {
     if (index >= items.length) {
       msg('Se procesaron ' + totalExitos + ' lotes con éxito.' + (totalErrores > 0 ? ' (' + totalErrores + ' errores)' : ''), totalErrores === 0);
@@ -642,7 +642,7 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
+
   function procesarBorradorSecuencial(items, index, totalExitos, totalErrores) {
     if (index >= items.length) {
       msg('Se agregaron ' + totalExitos + ' borradores de abrillantado.' + (totalErrores > 0 ? ' (' + totalErrores + ' errores)' : ''), totalErrores === 0);
@@ -713,7 +713,7 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
+
   function guardarLavado() {
     var tipoCola = document.getElementById('filtroCola').value;
     var responsable = document.getElementById('responsable').value;
@@ -769,7 +769,7 @@ function refrescarTodo(silencioso) {
   }
 
 
-  
+
   function registrarIngresoTapon() {
     var producto = document.getElementById('ingTipoTapon').value;
     var lote = document.getElementById('ingLote').value;
@@ -814,11 +814,20 @@ function refrescarTodo(silencioso) {
       ['Pilar base HE NO ROTACIONAL 3.4', '3.4'], ['Pilar base HE ROTACIONAL 3.4', '3.4'],
       ['Pilar base HE NO ROTACIONAL 4.1', '4.1'], ['Pilar base HE ROTACIONAL 4.1', '4.1'] ] },
     { grupo: 'Pilares Hi', items: [
-      ['Pilar base HE RECTO H1'], ['Pilar base HE RECTO H2'], ['Pilar base HE RECTO H3'], ['Pilar base HE RECTO H4'] ]},
+      ['Pilar base HE RECTO H1', '-'], ['Pilar base HE RECTO H2', '-'], ['Pilar base HE RECTO H3', '-'], ['Pilar base HE RECTO H4', '-'] ] },
     { grupo: 'Tapas de cierre', items: [
       ['Tapa de cierre HI', '-'], ['Tapa de cierre HE 3.4', '3.4'], ['Tapa de cierre HE 4.1', '4.1'], ['Tapa de cierre HE 5.0', '5.0'] ] },
     { grupo: 'Llaves', items: [
-      ['Llave MP larga', '-'], ['Llave MP corta', '-'], ['Llave colocadora CMU corta', '-'], ['Llave colocadora CMU larga', '-'] ] }
+      ['Llave MP larga', '-'], ['Llave MP corta', '-'], ['Llave colocadora CMU corta', '-'], ['Llave colocadora CMU larga', '-'] ] },
+    { grupo: 'Componentes CMU', items: [
+      ['Tornillo M2 para llave colocadora CMU Larga', '-'], ['Tornillo M2 para llave colocadora CMU Media', '-'],
+      ['Cicatrizal para CMU Hombro 2mm', '-'], ['Cicatrizal para CMU Hombro 3mm', '-'], ['Cicatrizal para CMU Hombro 4mm', '-'],
+      ['Tornillo para cicatrizal CMU Hombro 3mm', '-'], ['Tornillo para cicatrizal CMU Hombro 4mm', '-'],
+      ['Pilar Ball Atachered para CMU Hombro 2mm', '-'], ['Pilar Ball Atachered para CMU Hombro 3mm', '-'], ['Pilar Ball Atachered para CMU Hombro 4mm', '-'],
+      ['Pilar T-Base CMU Ø4.5 rotacional', '-'], ['Pilar para CMU Hombro 1mm', '-'],
+      ['Tornillo M2 para CMU', '-'], ['Tornillo para Mini Pilar M1.4', '-'] ] },
+    { grupo: 'Prolongadores', items: [
+      ['Prolongador cuadrado a cuadrado Largo Ø6', '-'], ['Prolongador cuadrado a cuadrado Corto Ø6', '-'] ] }
   ];
 
   function ingCompBuscar_(nombre) {
@@ -942,11 +951,11 @@ function refrescarTodo(silencioso) {
   }
 
 
-  var BOR_CRONOS = {}; 
-  var BOR_C2_CONSULTADO = {}; 
-  var BOR_SIN_CICLO3 = {};    
+  var BOR_CRONOS = {};
+  var BOR_C2_CONSULTADO = {};
+  var BOR_SIN_CICLO3 = {};
 
-  function cicloDuracionSeg(n){ return n===1 ? 3600 : 900; } 
+  function cicloDuracionSeg(n){ return n===1 ? 3600 : 900; }
   function cicloIdCrono(f,n){ return 'bccrono'+n+'_'+f; }
   function cicloIdBtn(f,n){ return 'bcbtn'+n+'_'+f; }
   function cicloFmt(seg){
@@ -994,15 +1003,15 @@ function refrescarTodo(silencioso) {
     localStorage.removeItem('crono_abs_' + f + '_' + n);
   }
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
   function bcTodosCiclosListos_(f) {
     for (var i = 1; i <= 3; i++) {
       var ini = document.getElementById('bc'+i+'i_'+f);
@@ -1013,33 +1022,33 @@ function refrescarTodo(silencioso) {
   }
   function bcAutoFinalizarSiCorresponde_(f) {
     if (!bcTodosCiclosListos_(f)) return;
-    
-    
-    
-    
+
+
+
+
     setTimeout(function () { finalizarBorrador(f); }, 300);
   }
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
+
+
+
+
   function bcConsultarCicloTres_(f) {
     if (BOR_C2_CONSULTADO[f] || BOR_SIN_CICLO3[f]) return;
     var ini3 = document.getElementById('bc3i_' + f);
     var fin3 = document.getElementById('bc3f_' + f);
-    if (!ini3 || !fin3) return; 
-    if (ini3.value || fin3.value) return; 
+    if (!ini3 || !fin3) return;
+    if (ini3.value || fin3.value) return;
     BOR_C2_CONSULTADO[f] = true;
     var haceFalta = confirm('¿Hace falta el Ciclo 3 de Abrillantado para este lote?');
-    if (haceFalta) return; 
+    if (haceFalta) return;
     BOR_SIN_CICLO3[f] = true;
     var elBtn = document.getElementById(cicloIdBtn(f, 3));
     if (elBtn) elBtn.style.display = 'none';
@@ -1050,7 +1059,7 @@ function refrescarTodo(silencioso) {
 
   function bcIniciarCiclo(f, n){
     var key = f+'_'+n;
-    if (BOR_CRONOS[key] && BOR_CRONOS[key].id) return; 
+    if (BOR_CRONOS[key] && BOR_CRONOS[key].id) return;
 
     var ini = document.getElementById('bc'+n+'i_'+f);
   if (ini && !ini.value) ini.value = horaAhoraLav_();
@@ -1061,7 +1070,7 @@ function refrescarTodo(silencioso) {
     var elBtn = document.getElementById(cicloIdBtn(f,n));
     if (elBtn) elBtn.style.display = 'none';
 
-    
+
     var storageKey = 'crono_abs_' + f + '_' + n;
     var tiempoInicioReal = new Date().getTime();
     localStorage.setItem(storageKey, tiempoInicioReal);
@@ -1088,16 +1097,16 @@ function refrescarTodo(silencioso) {
         if (iniEl && !iniEl.value && locI) iniEl.value = locI;   // por si la tarjeta se redibujó sin la hora de inicio
         calcTotalCard(f);
        bcMarcarListo_(f, n);
-       bcGuardarParcial_(f);   
+       bcGuardarParcial_(f);
       alert('¡Listo! Ya pasó el tiempo del Ciclo ' + n + '.');
-      bcAutoFinalizarSiCorresponde_(f); 
-      if (n === 2) bcConsultarCicloTres_(f); 
+      bcAutoFinalizarSiCorresponde_(f);
+      if (n === 2) bcConsultarCicloTres_(f);
       }
       }, 1000)
     };
   }
 
-  
+
   function bcResumir_(f, n, iniStr){
     var key = f+'_'+n;
     if (BOR_CRONOS[key] && BOR_CRONOS[key].id) return;
@@ -1112,8 +1121,8 @@ function refrescarTodo(silencioso) {
       var fin = document.getElementById('bc'+n+'f_'+f);
       if (fin && !fin.value) { fin.value = horaAhoraLav_(); cicloLocalSet_(f, n, 'fin', fin.value); calcTotalCard(f); }
       bcMarcarListo_(f, n);
-      bcAutoFinalizarSiCorresponde_(f); 
-      if (n === 2) bcConsultarCicloTres_(f); 
+      bcAutoFinalizarSiCorresponde_(f);
+      if (n === 2) bcConsultarCicloTres_(f);
       return;
     }
     BOR_CRONOS[key] = { seg: restante };
@@ -1131,10 +1140,10 @@ function refrescarTodo(silencioso) {
       if (iniEl2 && !iniEl2.value && locI2) iniEl2.value = locI2;
       calcTotalCard(f);
       bcMarcarListo_(f, n);
-      bcGuardarParcial_(f);   
+      bcGuardarParcial_(f);
       alert('¡Listo! Ya pasó el tiempo del Ciclo ' + n + '.');
-      bcAutoFinalizarSiCorresponde_(f); 
-      if (n === 2) bcConsultarCicloTres_(f); 
+      bcAutoFinalizarSiCorresponde_(f);
+      if (n === 2) bcConsultarCicloTres_(f);
     }
     }, 1000);
   }
@@ -1160,7 +1169,7 @@ function refrescarTodo(silencioso) {
   if (yaTermino) {
   textoInicial = 'Listo ✓';
   } else if (enCurso) {
-  
+
       var storageKey = 'crono_abs_' + f + '_' + n;
       var tiempoInicioReal = localStorage.getItem(storageKey);
       if (tiempoInicioReal) {
@@ -1200,7 +1209,7 @@ function refrescarTodo(silencioso) {
           '</div>'+
         '</div></div>';
     }).join('');
-    
+
     // lo que faltaba en la hoja (p. ej. la hora de inicio) se vuelve a guardar
     aReparar.forEach(function(f){
       calcTotalCard(f);
@@ -1213,10 +1222,10 @@ function refrescarTodo(silencioso) {
         var n = idx+1;
         if (c.ini && !c.fin) bcResumir_(f, n, c.ini);
       });
-      
-      
-      
-      
+
+
+
+
       var c1 = (b.ciclos||[])[0] || {}, c2 = (b.ciclos||[])[1] || {}, c3 = (b.ciclos||[])[2] || {};
       if (c1.ini && c1.fin && c2.ini && c2.fin && !c3.ini && !c3.fin) {
         bcConsultarCicloTres_(f);
@@ -1261,7 +1270,7 @@ function finalizarBorrador(f){
 
     google.script.run
       .withSuccessHandler(function(r){
-        
+
         for(var i=1; i<=3; i++) {
           localStorage.removeItem('crono_abs_' + f + '_' + i);
         }
@@ -1278,7 +1287,7 @@ function finalizarBorrador(f){
  function eliminarBorrador(f){
     google.script.run
       .withSuccessHandler(function(r){
-        
+
         for(var i=1; i<=3; i++) {
           localStorage.removeItem('crono_abs_' + f + '_' + i);
         }
