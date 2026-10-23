@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantenimiento — Bio-Fix</title>
+<!-- Panel ON / OFF de pantallas. Solo para el usuario técnico (admins de config.js). -->
+<script>window.BIOFIX_SOLO_ADMIN = true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --ok:#16a34a; --off:#dc2626; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; color:var(--tx); margin:0; padding:16px; }
+  .container{ max-width:720px; margin:0 auto; }
+  h1{ font-size:20px; color:#0369a1; margin:8px 0 4px; }
+  .sub{ font-size:13px; color:var(--mut); margin-bottom:16px; }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .acciones{ display:flex; gap:10px; flex-wrap:wrap; }
+  .btn{ flex:1 1 200px; padding:14px; border:0; border-radius:10px; font-size:15px; font-weight:bold; cursor:pointer; color:#fff; }
+  .btn.on{ background:var(--ok); } .btn.off{ background:var(--off); }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  label{ font-size:12px; color:var(--mut); display:block; margin-top:12px; }
+  textarea{ width:100%; min-height:60px; padding:8px; font-size:14px; border:1px solid #cbd5e1; border-radius:8px; margin-top:4px; }
+  .fila{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #f1f5f9; }
+  .fila:last-child{ border-bottom:0; }
+  .t{ font-weight:700; font-size:15px; } .d{ font-size:12px; color:var(--mut); margin-top:2px; }
+  .estado{ font-size:12px; font-weight:bold; margin-top:4px; }
+  .estado.on{ color:var(--ok); } .estado.off{ color:var(--off); }
+  /* interruptor */
+  .sw{ position:relative; width:64px; height:34px; flex:0 0 64px; }
+  .sw input{ opacity:0; width:0; height:0; }
+  .sl{ position:absolute; inset:0; background:var(--off); border-radius:34px; cursor:pointer; transition:.2s; }
+  .sl:before{ content:''; position:absolute; width:26px; height:26px; left:4px; top:4px; background:#fff; border-radius:50%; transition:.2s; }
+  .sw input:checked + .sl{ background:var(--ok); }
+  .sw input:checked + .sl:before{ transform:translateX(30px); }
+  .msg{ padding:10px 12px; border-radius:8px; margin-bottom:12px; display:none; font-size:14px; }
+  .msg.ok{ display:block; background:#dcfce7; color:#166534; } .msg.err{ display:block; background:#fee2e2; color:#991b1b; }
+  a.volver{ font-size:13px; color:#0369a1; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a class="volver" href="index.html">← Menú</a>
+  <h1>Mantenimiento de pantallas</h1>
+  <div class="sub">ON = la pantalla se usa normal. OFF = aparece "Pantalla en mantenimiento" y no se puede cargar nada.
+    Los cambios llegan al instante a las tablets que ya tienen la pantalla abierta.</div>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="card">
+    <div class="acciones">
+      <button class="btn on" id="btnTodasOn">Habilitar TODAS</button>
+      <button class="btn off" id="btnTodasOff">Pausar TODAS</button>
+    </div>
+    <label>Mensaje que ven en el cartel
+      <textarea id="mensaje" placeholder="Estamos actualizando el sistema. Volvé a intentar en unos minutos."></textarea>
+    </label>
+  </div>
+
+  <div class="card" id="lista">Cargando…</div>
+</div>
+
+<script>
+  /* Pantallas que se pueden pausar (nombre del archivo en el repo). Si sumás una pantalla nueva, agregala acá. */
+  var PANTALLAS = [
+    ['deposito.html',         'Depósito',                       'Semielaborado, Sala Blanca y Componentes'],
+    ['depositolf.html',       'Depósito — Lavado Final',        'Envío a Lavado Final'],
+    ['movimientos.html',      'Depósito — Ingreso y revisión',  'Pendientes Salida a Depósito / IPA'],
+    ['mecanizado.html',       'Mecanizado',                     'Máquina, cierres y control de piezas'],
+    ['lavado.html',           'Lavado',                         'Primario, Abrillantado, Vaporeado, Secundario'],
+    ['lavados.html',          'Lavados Grueso / Final',         'Lavado Grueso y Lavado Final'],
+    ['control.html',          'Control de Calidad',             'Control por cotas'],
+    ['blasting.html',         'Blasting',                       'Bandejas, blastinado y control'],
+    ['envasado.html',         'Envasado — Paso 1',              'Carga de lotes desde Sala Blanca'],
+    ['envasado-primsec.html', 'Envasado — Prim. / Sec.',        'Cierre del Primario y Secundario'],
+    ['envasado-anexo.html',   'Envasado — Anexo',               'Anexo, Orden de Fabricación y Registro Histórico'],
+    ['limpieza.html',         'Control de Limpieza',            'Instalaciones, Baños y registro de baño'],
+    ['supervision.html',      'Supervisión',                    'Auditoría e historia de lote'],
+    ['graficos.html',         'Gráficos',                       'Indicadores de todos los sectores']
+  ];
+  var MSG_DEFAULT = 'Estamos actualizando el sistema. Volvé a intentar en unos minutos.';
+
+  var sb = null, pausadas = [], ocupado = false;
+  var $ = function (id) { return document.getElementById(id); };
+  function aviso(t, ok) { var m = $('msg'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+
+  function pintar() {
+    $('lista').innerHTML = PANTALLAS.map(function (p) {
+      var on = pausadas.indexOf(p[0]) < 0;
+      return '<div class="fila"><div><div class="t">' + p[1] + '</div><div class="d">' + p[2] + '</div>' +
+        '<div class="estado ' + (on ? 'on' : 'off') + '">' + (on ? 'ON — habilitada' : 'OFF — en mantenimiento') + '</div></div>' +
+        '<label class="sw" style="margin:0"><input type="checkbox" data-p="' + p[0] + '"' + (on ? ' checked' : '') + '><span class="sl"></span></label></div>';
+    }).join('');
+  }
+
+  function guardar(nuevas) {
+    if (ocupado) return;
+    ocupado = true;
+    document.querySelectorAll('button, input').forEach(function (x) { x.disabled = true; });
+    var mensaje = $('mensaje').value.trim() || MSG_DEFAULT;
+    sb.from('mantenimiento')
+      .update({ activo: nuevas.length > 0, pantallas: nuevas, mensaje: mensaje, actualizado: new Date().toISOString() })
+      .eq('id', 1).select('activo,pantallas,mensaje')
+      .then(function (res) {
+        ocupado = false;
+        document.querySelectorAll('button, input').forEach(function (x) { x.disabled = false; });
+        if (res.error || !res.data || !res.data.length) {
+          aviso('No se pudo guardar' + (res.error ? ': ' + res.error.message : ' (sin permiso: entrá con el usuario técnico).') +
+            ' Si hace rato que tenés abierta esta pantalla, recargala.', false);
+          pintar();
+          return;
+        }
+        pausadas = res.data[0].pantallas || [];
+        pintar();
+        aviso(pausadas.length ? ('En mantenimiento: ' + pausadas.length + ' pantalla(s).') : 'Todas las pantallas habilitadas.', true);
+      });
+  }
+
+  $('lista').addEventListener('change', function (e) {
+    var p = e.target.getAttribute('data-p'); if (!p) return;
+    var nuevas = pausadas.filter(function (x) { return x !== p; });
+    if (!e.target.checked) nuevas.push(p);
+    guardar(nuevas);
+  });
+  $('btnTodasOn').onclick = function () { guardar([]); };
+  $('btnTodasOff').onclick = function () {
+    if (confirm('¿Pausar TODAS las pantallas?')) guardar(PANTALLAS.map(function (p) { return p[0]; }));
+  };
+
+  BIOFIX.sesion.then(function (session) {
+    // Cliente con la sesión del usuario técnico (Supabase solo le permite cambiar a él)
+    sb = window.supabase.createClient(BIOFIX_CFG.supabaseUrl, BIOFIX_CFG.supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'biofix-mant-panel' },
+      global: { headers: { Authorization: 'Bearer ' + session.access_token } }
+    });
+    sb.from('mantenimiento').select('activo,pantallas,mensaje').eq('id', 1).maybeSingle().then(function (res) {
+      if (res.error) { $('lista').textContent = 'Error leyendo el estado: ' + res.error.message + ' (¿corriste mantenimiento.sql en Supabase?)'; return; }
+      var r = res.data || {};
+      pausadas = r.activo ? (r.pantallas || []) : [];
+      $('mensaje').value = r.mensaje || '';
+      pintar();
+    });
+  });
+</script>
+</body>
+</html>
