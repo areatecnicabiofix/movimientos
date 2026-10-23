@@ -989,15 +989,14 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       var tarjetas = [];
       for (var i = 0; i < R.completas; i++) {
         var r = prcRespDeRonda_(f, i);
-        tarjetas.push('<button type="button" onclick="prcEditarRonda_('+f+','+i+')" title="Tocá para cambiar quién la midió" '+
-          'style="padding:8px 10px; border-radius:10px; cursor:pointer; text-align:left; '+
-          (r ? 'border:1px solid #86efac; background:#f0fdf4;' : 'border:2px solid #f59e0b; background:#fef3c7;')+'">'+
-          '<div style="font-size:11px; color:#64748b;">Ronda '+(i + 1)+'</div>'+
-          '<div style="font-size:14px; font-weight:700; color:'+(r ? '#15803d' : '#92400e')+';">'+(r ? '✔ '+esc_(r) : '¿quién?')+'</div>'+
+        tarjetas.push('<button type="button" onclick="prcEditarRonda_('+f+','+i+')" title="Ronda '+(i + 1)+' — tocá para cambiar quién la midió" '+
+          'style="padding:2px 7px; border-radius:999px; cursor:pointer; font-size:11px; line-height:16px; white-space:nowrap; '+
+          (r ? 'border:1px solid #86efac; background:#f0fdf4; color:#15803d;' : 'border:1px solid #f59e0b; background:#fef3c7; color:#92400e;')+'">'+
+          '<span style="color:#64748b;">'+(i + 1)+'</span> '+(r ? '<b>'+esc_(r)+'</b>' : '<b>¿?</b>')+
         '</button>');
       }
-      resumen = '<div style="margin-top:12px;"><div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Quién midió cada ronda</div>'+
-        '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px;">'+tarjetas.join('')+'</div></div>';
+      resumen = '<div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'+
+        '<span style="font-size:11px; font-weight:700; color:#475569; margin-right:4px;">Quién midió:</span>'+tarjetas.join('')+'</div>';
     }
 
     cont.innerHTML =
@@ -1155,7 +1154,6 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       google.script.run.withSuccessHandler(function(r){ if (PRC_M[f]) delete PRC_M[f]; delete PRC_EDIT[f]; prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcCerrar(d);
     });
   }
-  
    function prcEliminarBorrador(f){
     confirmarPersonalizado('¿Eliminar este control? El lote vuelve a la lista de espera.', function(ok){
       if (!ok) return;
