@@ -4,5 +4,6 @@ window.BIOFIX_CFG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbwZbH7r9_wVRRdbfrYEzELaqAuJXwhUIAJIYmeAhIe4kKYnHIME8prn_luXrUvgn9qu3w/exec',
   dominioUsuarios: 'biofix.com',  
   admins: ['tecnica'],   
-  titulo: 'Bio-Fix — Producción'
+  titulo: 'Bio-Fix — Producción',
+  (function(){ var s=document.createElement('script'); s.src='mantenimiento.js?v=1'; document.head.appendChild(s); })();
 };
