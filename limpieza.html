@@ -54,6 +54,10 @@
   th, td { border-bottom:1px solid #eee; padding:6px; text-align:left; }
   th { background:var(--teal2); }
   .oculto { display:none; }
+  .seg { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .seg b { font-size:14px; margin-right:4px; }
+  .seg button { flex:1 1 180px; padding:12px; font-size:15px; font-weight:bold; border:2px solid var(--teal); background:#fff; color:var(--teal); border-radius:8px; cursor:pointer; }
+  .seg button.on { background:var(--teal); color:#fff; }
   @media (max-width:520px){ .sn button { width:52px; padding:10px 0; } .item span { font-size:13px; } }
 </style>
 </head>
@@ -69,6 +73,13 @@
 </div>
 <main>
   <div id="msg" class="msg"></div>
+
+  <!-- Baños de arriba / de abajo (misma planilla, se guardan por separado) -->
+  <div id="selBano" class="card seg oculto">
+    <b>Baño:</b>
+    <button type="button" data-b="AR" class="on">Baños de arriba</button>
+    <button type="button" data-b="AB">Baños de abajo</button>
+  </div>
 
   <!-- CHECKLIST (Planta Alta / Baños) -->
   <section id="secCheck">
@@ -104,7 +115,7 @@
   <!-- REGISTRO DIARIO DE BAÑO -->
   <section id="secReg" class="oculto">
     <div class="card">
-      <div style="font-weight:bold;margin-bottom:8px">Control de Limpieza - Baño (registro diario)</div>
+      <div id="tituloReg" style="font-weight:bold;margin-bottom:8px">Control de Limpieza - Baño (registro diario)</div>
       <div class="fila">
         <label>Fecha <input type="date" id="rFecha"></label>
         <label>Hora <input type="time" id="rHora"></label>
@@ -129,7 +140,8 @@
 </main>
 
 <script>
-  var CFG = null, actual = 'PA', resultados = {};
+  var CFG = null, tab = 'PA', bano = 'AR', actual = 'PA', resultados = {};
+  var NOMBRE_BANO = { AR: 'Baños de arriba', AB: 'Baños de abajo' };
   var $ = function (id) { return document.getElementById(id); };
 
   function msg(t, ok) { var m = $('msg'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); window.scrollTo(0, 0); }
@@ -217,12 +229,14 @@
   /* ---------- registro baño ---------- */
   function cargarRegistro() {
     $('rEstado').textContent = '';
-    run('limpiezaRegistroDia', [$('rFecha').value], function (d) {
+    $('tituloReg').textContent = 'Control de Limpieza - ' + NOMBRE_BANO[bano] + ' (registro diario)';
+    $('tbReg').innerHTML = '';
+    run('limpiezaRegistroDia', [$('rFecha').value, bano], function (d) {
       if (!d) { $('rEstado').textContent = 'Sin limpiezas registradas ese día: se registra la Limpieza 1.'; return; }
       if (d.hora2) $('rEstado').textContent = 'Ese día ya tiene las 2 limpiezas (' + d.hora1 + ' y ' + d.hora2 + ').';
       else $('rEstado').textContent = 'Limpieza 1 a las ' + d.hora1 + ' (' + d.operaria + '). Ahora se registra la Limpieza 2.';
     });
-    run('limpiezaRegistroUltimos', [15], function (lista) {
+    run('limpiezaRegistroUltimos', [15, bano], function (lista) {
       $('tbReg').innerHTML = lista.map(function (r) {
         return '<tr><td>' + r.fecha + '</td><td>' + (r.hora1 || '') + '</td><td>' + (r.hora2 || '—') + '</td><td>' + (r.operaria || '') + '</td><td>' + (r.observaciones || '') + '</td></tr>';
       }).join('') || '<tr><td colspan="5">Sin registros todavía.</td></tr>';
@@ -231,27 +245,39 @@
   $('rFecha').onchange = cargarRegistro;
   $('btnRegistrar').onclick = function () {
     run('limpiezaRegistrarBano', [{
-      fecha: $('rFecha').value, hora: $('rHora').value, operaria: $('rOper').value,
+      ubicacion: bano, fecha: $('rFecha').value, hora: $('rHora').value, operaria: $('rOper').value,
       observaciones: $('rObs').value, firma: $('rFirma').checked
     }], function (t) { msg(t, true); $('rObs').value = ''; $('rFirma').checked = false; cargarRegistro(); }, this);
   };
   $('btnPdfMes').onclick = function () {
     msg('Generando PDF…', true);
-    run('limpiezaPdfRegistroMes', [$('rFecha').value], function (url) {
+    run('limpiezaPdfRegistroMes', [$('rFecha').value, bano], function (url) {
       $('msg').innerHTML = 'PDF generado: <a href="' + url + '" target="_blank">abrir</a>'; $('msg').className = 'msg ok';
     }, this);
   };
 
   /* ---------- pestañas ---------- */
+  function mostrar() {
+    limpiarMsg();
+    actual = tab === 'BA' ? 'BA_' + bano : tab;
+    var esReg = tab === 'REG';
+    $('selBano').classList.toggle('oculto', tab === 'PA');
+    $('secCheck').classList.toggle('oculto', esReg);
+    $('secReg').classList.toggle('oculto', !esReg);
+    if (esReg) cargarRegistro(); else cargarDia();
+  }
   document.querySelectorAll('.tab').forEach(function (t) {
     t.onclick = function () {
       document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('on', x === t); });
-      actual = t.getAttribute('data-t');
-      limpiarMsg();
-      var esReg = actual === 'REG';
-      $('secCheck').classList.toggle('oculto', esReg);
-      $('secReg').classList.toggle('oculto', !esReg);
-      if (esReg) cargarRegistro(); else cargarDia();
+      tab = t.getAttribute('data-t');
+      mostrar();
+    };
+  });
+  document.querySelectorAll('#selBano button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('#selBano button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      bano = b.getAttribute('data-b');
+      mostrar();
     };
   });
 
