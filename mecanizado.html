@@ -999,11 +999,41 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
         '<span style="font-size:11px; font-weight:700; color:#475569; margin-right:4px;">Quién midió:</span>'+tarjetas.join('')+'</div>';
     }
 
+    // Tabla con TODOS los valores: un renglón por ronda, una columna por cota (se abre/cierra)
+    var maxN = 0;
+    s.letras.forEach(function(l){ if (s.m[l].length > maxN) maxN = s.m[l].length; });
+    var tabla = '';
+    if (maxN > 0) {
+      var abierta = !!PRC_VER[f];
+      tabla = '<div style="margin-top:10px;">'+
+        '<button type="button" onclick="prcToggleTabla_('+f+')" style="padding:5px 12px; font-size:12px; border-radius:6px;">'+
+          (abierta ? '▾ Ocultar valores' : '▸ Ver todos los valores ('+maxN+' renglones)')+'</button>';
+      if (abierta) {
+        var th = 'padding:4px 6px; font-size:11px; background:#f1f5f9; border:1px solid #e2e8f0; position:sticky; top:0;';
+        var td = 'padding:3px 6px; font-size:12px; border:1px solid #e2e8f0; text-align:center; white-space:nowrap;';
+        var cab = '<tr><th style="'+th+'">#</th>'+s.letras.map(function(l){ return '<th style="'+th+'">'+l+'</th>'; }).join('')+
+          '<th style="'+th+'">Midió</th></tr>';
+        var cuerpo = '';
+        for (var k = 0; k < maxN; k++) {
+          var rk = prcRespDeRonda_(f, k);
+          cuerpo += '<tr><td style="'+td+' color:#64748b; font-weight:700;">'+(k + 1)+'</td>'+
+            s.letras.map(function(l){ var x = s.m[l][k]; return '<td style="'+td+'">'+(x ? esc_(x.v) : '<span style="color:#cbd5e1;">—</span>')+'</td>'; }).join('')+
+            '<td style="'+td+' font-weight:700; color:'+(rk ? '#15803d' : '#92400e')+';">'+(rk ? esc_(rk) : '¿?')+'</td></tr>';
+        }
+        tabla += '<div style="overflow:auto; max-height:360px; margin-top:6px; border:1px solid #e2e8f0; border-radius:8px;">'+
+          '<table style="border-collapse:collapse; width:100%; background:#fff;">'+cab+cuerpo+'</table></div>';
+      }
+      tabla += '</div>';
+    }
+
     cont.innerHTML =
       '<div style="font-size:13px; font-weight:700; color:#1e3a5f; margin-bottom:4px;">Rondas completas: '+R.completas+
         ' · Ronda actual: '+(R.completas + 1)+'</div>'+
-      filas + panel + resumen;
+      filas + panel + resumen + tabla;
   }
+
+  var PRC_VER = {};   // f -> true si la tabla de valores está abierta
+  function prcToggleTabla_(f){ PRC_VER[f] = !PRC_VER[f]; prcPintarCotas_(f); }
 
   function prcEditarRonda_(f, i){ PRC_EDIT[f] = i; prcPintarCotas_(f); }
   function prcCancelarEdit_(f){ delete PRC_EDIT[f]; prcPintarCotas_(f); }
