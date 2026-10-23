@@ -67,19 +67,15 @@
   <small>Grado Cuatro SRL — Bio-Fix</small>
 </header>
 <div class="tabs">
-  <button class="tab on" data-t="PA">Planta Alta</button>
+  <button class="tab on" data-t="INS">Instalaciones</button>
   <button class="tab" data-t="BA">Baños</button>
   <button class="tab" data-t="REG">Registro Baño</button>
 </div>
 <main>
   <div id="msg" class="msg"></div>
 
-  <!-- Baños de arriba / de abajo (misma planilla, se guardan por separado) -->
-  <div id="selBano" class="card seg oculto">
-    <b>Baño:</b>
-    <button type="button" data-b="AR" class="on">Baños de arriba</button>
-    <button type="button" data-b="AB">Baños de abajo</button>
-  </div>
+  <!-- Planta Alta / Planta Baja  ·  Baños de arriba / de abajo (se guardan por separado) -->
+  <div id="selSub" class="card seg"></div>
 
   <!-- CHECKLIST (Planta Alta / Baños) -->
   <section id="secCheck">
@@ -140,8 +136,14 @@
 </main>
 
 <script>
-  var CFG = null, tab = 'PA', bano = 'AR', actual = 'PA', resultados = {};
+  var CFG = null, tab = 'INS', actual = 'PA', resultados = {};
+  var SEL = { INS: 'PA', BA: 'AR' };   // lo elegido en cada selector (Baños y Registro Baño comparten el de baño)
+  var OPCIONES = {
+    INS: { titulo: 'Planta:', ops: [['PA', 'Planta Alta'], ['PB', 'Planta Baja']] },
+    BA:  { titulo: 'Baño:',   ops: [['AR', 'Baños de arriba'], ['AB', 'Baños de abajo']] }
+  };
   var NOMBRE_BANO = { AR: 'Baños de arriba', AB: 'Baños de abajo' };
+  var bano = 'AR';
   var $ = function (id) { return document.getElementById(id); };
 
   function msg(t, ok) { var m = $('msg'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); window.scrollTo(0, 0); }
@@ -257,11 +259,19 @@
   };
 
   /* ---------- pestañas ---------- */
+  function grupoSel() { return tab === 'INS' ? 'INS' : 'BA'; }
+  function pintarSelector() {
+    var g = grupoSel(), o = OPCIONES[g];
+    $('selSub').innerHTML = '<b>' + o.titulo + '</b>' + o.ops.map(function (op) {
+      return '<button type="button" data-v="' + op[0] + '" class="' + (SEL[g] === op[0] ? 'on' : '') + '">' + op[1] + '</button>';
+    }).join('');
+  }
   function mostrar() {
     limpiarMsg();
-    actual = tab === 'BA' ? 'BA_' + bano : tab;
+    bano = SEL.BA;
+    actual = tab === 'INS' ? SEL.INS : (tab === 'BA' ? 'BA_' + SEL.BA : 'REG');
+    pintarSelector();
     var esReg = tab === 'REG';
-    $('selBano').classList.toggle('oculto', tab === 'PA');
     $('secCheck').classList.toggle('oculto', esReg);
     $('secReg').classList.toggle('oculto', !esReg);
     if (esReg) cargarRegistro(); else cargarDia();
@@ -273,12 +283,10 @@
       mostrar();
     };
   });
-  document.querySelectorAll('#selBano button').forEach(function (b) {
-    b.onclick = function () {
-      document.querySelectorAll('#selBano button').forEach(function (x) { x.classList.toggle('on', x === b); });
-      bano = b.getAttribute('data-b');
-      mostrar();
-    };
+  $('selSub').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    SEL[grupoSel()] = b.getAttribute('data-v');
+    mostrar();
   });
 
   run('limpiezaInit', [], function (cfg) {
@@ -286,7 +294,7 @@
     opciones($('cResp'), cfg.operarias); opciones($('rOper'), cfg.operarias);
     $('cFecha').value = cfg.hoy; $('rFecha').value = cfg.hoy;
     $('cHora').value = cfg.hora; $('rHora').value = cfg.hora;
-    cargarDia();
+    mostrar();
   });
 </script>
 </body>
