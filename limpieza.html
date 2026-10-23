@@ -36,7 +36,8 @@
   .item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px solid #eee; }
   .item span { flex:1; font-size:14px; }
   .sn { display:flex; gap:4px; }
-  .sn button { width:46px; padding:8px 0; border:1px solid #bbb; background:#fff; border-radius:6px; cursor:pointer; font-weight:bold; color:#555; }
+  .sn { gap:8px; }
+  .sn button { width:90px; padding:12px 0; font-size:15px; border:1px solid #bbb; background:#fff; border-radius:6px; cursor:pointer; font-weight:bold; color:#555; }
   .sn button.on[data-v=SI] { background:#2e7d32; color:#fff; border-color:#2e7d32; }
   .sn button.on[data-v=NO] { background:var(--rojo); color:#fff; border-color:var(--rojo); }
   .sn button.on[data-v=NA] { background:#757575; color:#fff; border-color:#757575; }
@@ -53,7 +54,7 @@
   th, td { border-bottom:1px solid #eee; padding:6px; text-align:left; }
   th { background:var(--teal2); }
   .oculto { display:none; }
-  @media (max-width:520px){ .sn button { width:40px; } .item span { font-size:13px; } }
+  @media (max-width:520px){ .sn button { width:52px; padding:10px 0; } .item span { font-size:13px; } }
 </style>
 </head>
 <body>
