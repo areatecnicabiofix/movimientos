@@ -886,30 +886,66 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       .prcListarEnControl();
   }
 
-  /* ================= CONTROL DE PIEZAS (PRODUCCIÓN) — CARGA POR RONDAS =================
+/* ================= CONTROL DE PIEZAS (PRODUCCIÓN) — CARGA POR RONDAS =================
    * Como en Control de Calidad:
    *  - Cada cota tiene UN casillero. Escribís el valor, Enter (o pasás al siguiente) y el
    *    casillero se vacía para el próximo; al lado queda "✓ N cargados" y el último valor.
    *  - Una RONDA = un valor en cada cota. Cuando se completa la ronda, abajo aparece
-   *    "¿Quién la midió?" -> se marca el responsable de ESA ronda.
+   *    "¿Quién la midió?" -> se marca el responsable de ESA ronda (solo cuando está completa).
+   *  - Abajo, una tarjeta por ronda con quién la midió; tocándola se puede cambiar.
    *  - Después se sigue con la ronda 2 (otro responsable si corresponde), y así hasta
    *    "Guardar avance" / "Marcar Controlada".
    * En la hoja se guarda igual que antes (cota + N° muestra + valor + responsable):
    * el servidor (ControlPiezasMaquina.gs) NO cambia. */
 
-  var PRC_M = {};   // f -> { letras: [...], m: { A: [{v, r}], B: [...] }, sucio: bool }
+  var PRC_M = {};      // f -> { letras: [...], m: { A: [{v, r}], B: [...] }, sucio: bool }
+  var PRC_RESP = ['Matias', 'Javier', 'Gabriela', 'Miguel'];   // responsables de Control de Piezas (producción)
+  var PRC_EDIT = {};   // f -> índice de ronda cuyo responsable se está cambiando (o pidiendo)
+
+  /* Si una ronda tiene responsable en algunas cotas y en otras no (porque se marcó con la
+   * ronda a medias), se completa con ese mismo responsable. */
+  function prcNormalizar_(f){
+    var s = PRC_M[f], max = 0;
+    s.letras.forEach(function(l){ if (s.m[l].length > max) max = s.m[l].length; });
+    for (var i = 0; i < max; i++){
+      var r = '';
+      s.letras.forEach(function(l){ var x = s.m[l][i]; if (!r && x && String(x.r || '').trim()) r = x.r; });
+      if (r) s.letras.forEach(function(l){ var x = s.m[l][i]; if (x && !String(x.r || '').trim()) x.r = r; });
+    }
+  }
 
   function prcRonda_(f){
+    prcNormalizar_(f);
     var s = PRC_M[f], min = Infinity, max = 0;
     s.letras.forEach(function(l){ var n = s.m[l].length; if (n < min) min = n; if (n > max) max = n; });
     var completas = (min === Infinity) ? 0 : min;
-    var pend = -1;   // primera ronda con valores y sin responsable
-    for (var i = 0; i < max; i++){
-      var sinR = s.letras.some(function(l){ return s.m[l][i] && !String(s.m[l][i].r || '').trim(); });
-      if (sinR) { pend = i; break; }
-    }
+    var sinResp = function(i){ return s.letras.some(function(l){ return s.m[l][i] && !String(s.m[l][i].r || '').trim(); }); };
+    var pend = -1;          // primera ronda COMPLETA sin responsable
+    for (var i = 0; i < completas; i++) if (sinResp(i)) { pend = i; break; }
+    var parcialSinResp = (max > completas && sinResp(completas)) ? completas : -1;   // ronda a medias sin responsable
     var faltan = s.letras.filter(function(l){ return s.m[l].length <= completas; });
-    return { completas: completas, pend: pend, pendCompleta: (pend >= 0 && pend < completas), faltan: faltan };
+    return { completas: completas, pend: pend, pendCompleta: pend >= 0, parcialSinResp: parcialSinResp, faltan: faltan };
+  }
+  function prcRespDeRonda_(f, i){
+    var s = PRC_M[f], r = '';
+    s.letras.forEach(function(l){ var x = s.m[l][i]; if (!r && x && x.r) r = x.r; });
+    return r;
+  }
+
+  function prcPanelResp_(f, idx, titulo, amarillo, actual, conCancelar){
+    return '<div style="margin-top:12px; padding:14px; border-radius:12px; '+
+        (amarillo ? 'background:#fef3c7; border:2px solid #f59e0b;' : 'background:#eff6ff; border:2px solid #93c5fd;')+'">'+
+      '<div style="font-weight:700; font-size:15px; margin-bottom:10px; color:'+(amarillo ? '#92400e' : '#1e3a5f')+';">'+titulo+'</div>'+
+      '<div style="display:flex; gap:8px; flex-wrap:wrap;">'+
+        PRC_RESP.map(function(r){
+          var on = (r === actual);
+          return '<button type="button" onclick="prcRespRonda_('+f+','+idx+',\''+r+'\')" '+
+            'style="flex:1 1 110px; padding:13px; font-size:15px; font-weight:700; border-radius:10px; cursor:pointer; border:2px solid #2563eb; '+
+            'background:'+(on ? '#2563eb' : '#fff')+'; color:'+(on ? '#fff' : '#2563eb')+';">'+r+'</button>';
+        }).join('')+
+      '</div>'+
+      (conCancelar ? '<div style="text-align:right; margin-top:8px;"><button type="button" onclick="prcCancelarEdit_('+f+')" style="padding:5px 12px; font-size:12px; border-radius:6px;">Cancelar</button></div>' : '')+
+    '</div>';
   }
 
   function prcPintarCotas_(f){
@@ -935,33 +971,33 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     }).join('');
 
     var panel;
-    if (R.pend >= 0) {
-      var titulo = R.pendCompleta
-        ? '✔ Ronda '+(R.pend + 1)+' completa — ¿quién la midió?'
-        : 'Ronda '+(R.pend + 1)+' en curso (faltan: '+R.faltan.join(', ')+'). Responsable de esta ronda:';
-      panel = '<div style="margin-top:12px; padding:12px; border-radius:10px; '+
-          (R.pendCompleta ? 'background:#fef3c7; border:2px solid #f59e0b;' : 'background:#f8fafc; border:1px solid #e2e8f0;')+'">'+
-        '<div style="font-weight:700; font-size:14px; margin-bottom:8px; color:'+(R.pendCompleta ? '#92400e' : '#334155')+';">'+titulo+'</div>'+
-        '<div style="display:flex; gap:8px; flex-wrap:wrap;">'+
-          RESP_QC.map(function(r){
-            return '<button type="button" onclick="prcRespRonda_('+f+','+R.pend+',\''+r+'\')" '+
-              'style="flex:1 1 110px; padding:12px; font-size:14px; font-weight:700; border-radius:8px; cursor:pointer; border:2px solid #2563eb; background:#fff; color:#2563eb;">'+r+'</button>';
-          }).join('')+
-        '</div></div>';
+    var edit = (f in PRC_EDIT) ? PRC_EDIT[f] : -1;
+    if (R.pendCompleta) {
+      panel = prcPanelResp_(f, R.pend, '✔ Ronda '+(R.pend + 1)+' completa — ¿quién la midió?', true, '', false);
+    } else if (edit >= 0 && edit === R.parcialSinResp) {
+      panel = prcPanelResp_(f, edit, 'Ronda '+(edit + 1)+' incompleta (faltan: '+R.faltan.join(', ')+') — ¿quién la midió?', true, '', true);
+    } else if (edit >= 0) {
+      panel = prcPanelResp_(f, edit, 'Cambiar quién midió la ronda '+(edit + 1), false, prcRespDeRonda_(f, edit), true);
     } else {
       panel = '<div style="margin-top:12px; font-size:13px; color:#64748b;">Ronda '+(R.completas + 1)+
         ': cargá un valor en cada cota'+(R.faltan.length && R.faltan.length < s.letras.length ? ' (faltan: '+R.faltan.join(', ')+')' : '')+'.</div>';
     }
 
-    // Resumen de rondas con su responsable
+    // Resumen: una tarjeta por ronda completa con quién la midió (tocándola se puede cambiar)
     var resumen = '';
     if (R.completas > 0) {
-      var items = [];
+      var tarjetas = [];
       for (var i = 0; i < R.completas; i++) {
-        var r = s.m[s.letras[0]][i] ? s.m[s.letras[0]][i].r : '';
-        items.push('Ronda '+(i + 1)+': <b>'+(r ? esc_(r) : '—')+'</b>');
+        var r = prcRespDeRonda_(f, i);
+        tarjetas.push('<button type="button" onclick="prcEditarRonda_('+f+','+i+')" title="Tocá para cambiar quién la midió" '+
+          'style="padding:8px 10px; border-radius:10px; cursor:pointer; text-align:left; '+
+          (r ? 'border:1px solid #86efac; background:#f0fdf4;' : 'border:2px solid #f59e0b; background:#fef3c7;')+'">'+
+          '<div style="font-size:11px; color:#64748b;">Ronda '+(i + 1)+'</div>'+
+          '<div style="font-size:14px; font-weight:700; color:'+(r ? '#15803d' : '#92400e')+';">'+(r ? '✔ '+esc_(r) : '¿quién?')+'</div>'+
+        '</button>');
       }
-      resumen = '<div style="font-size:12px; color:#475569; margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;">'+items.join('')+'</div>';
+      resumen = '<div style="margin-top:12px;"><div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px;">Quién midió cada ronda</div>'+
+        '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px;">'+tarjetas.join('')+'</div></div>';
     }
 
     cont.innerHTML =
@@ -969,6 +1005,9 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
         ' · Ronda actual: '+(R.completas + 1)+'</div>'+
       filas + panel + resumen;
   }
+
+  function prcEditarRonda_(f, i){ PRC_EDIT[f] = i; prcPintarCotas_(f); }
+  function prcCancelarEdit_(f){ delete PRC_EDIT[f]; prcPintarCotas_(f); }
 
   function prcTecla_(ev, f, l){
     if (ev.key === 'Enter') { ev.preventDefault(); prcCargarValor_(f, l); }
@@ -980,7 +1019,8 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     var v = String(el.value || '').trim();
     if (!v) return;
     el.value = '';
-    s.m[l].push({ v: v, r: '' });
+    var idx = s.m[l].length;
+    s.m[l].push({ v: v, r: prcRespDeRonda_(f, idx) });   // si la ronda ya tiene responsable, lo hereda
     s.sucio = true;
     prcPintarCotas_(f);
     // foco a la siguiente cota que todavía no tiene el valor de esta ronda
@@ -1003,14 +1043,12 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
     var s = PRC_M[f]; if (!s) return;
     s.letras.forEach(function(l){ if (s.m[l][idx]) s.m[l][idx].r = r; });
     s.sucio = true;
-    var completa = s.letras.every(function(l){ return !!s.m[l][idx]; });
+    delete PRC_EDIT[f];
     prcPintarCotas_(f);
-    if (completa) {   // ronda cerrada con su responsable: se guarda sola
-      google.script.run
-        .withSuccessHandler(function(){ s.sucio = false; prcMsg('Ronda ' + (idx + 1) + ' guardada (' + r + ').', true); })
-        .withFailureHandler(function(e){ prcMsg('No se pudo guardar la ronda: ' + errMsg_(e), false); })
-        .prcActualizar(prcDatosCard(f));
-    }
+    google.script.run   // se guarda solo
+      .withSuccessHandler(function(){ s.sucio = false; prcMsg('Ronda ' + (idx + 1) + ': ' + r + ' (guardado).', true); })
+      .withFailureHandler(function(e){ prcMsg('No se pudo guardar: ' + errMsg_(e), false); })
+      .prcActualizar(prcDatosCard(f));
     var R = prcRonda_(f);
     if (!R.pendCompleta) setTimeout(function(){ var e = document.getElementById('pin_' + f + '_' + (R.faltan[0] || s.letras[0])); if (e) e.focus(); }, 0);
   }
@@ -1032,6 +1070,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
                     .map(function(x){ return { v: String(x.v), r: String(x.r || '') }; });
         });
         PRC_M[f] = { letras: letras, m: m, sucio: false };
+        prcNormalizar_(f);
       }
 
       var botonPausa = b.enPausa
@@ -1104,11 +1143,16 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
   function prcCerrarControl(f, btn){
     if (btn && btn.disabled) return;
     var R = PRC_M[f] ? prcRonda_(f) : null;
-    if (R && R.pend >= 0) { prcMsg('Falta marcar el responsable de la ronda ' + (R.pend + 1) + '.', false); return; }
+    if (R && R.pendCompleta) { prcMsg('Falta marcar quién midió la ronda ' + (R.pend + 1) + '.', false); return; }
+    if (R && R.parcialSinResp >= 0) {
+      PRC_EDIT[f] = R.parcialSinResp; prcPintarCotas_(f);
+      prcMsg('La ronda ' + (R.parcialSinResp + 1) + ' quedó a medias: marcá quién la midió (o borrá esos valores) y volvé a cerrar.', false);
+      return;
+    }
     confirmarPersonalizado('¿Marcar este lote como controlado? Después no se puede volver atrás.', function(ok){
       if (!ok || !btnOn_(btn)) return;
       var d = prcDatosCard(f); d.hora = prcHoraAhora();
-      google.script.run.withSuccessHandler(function(r){ if (PRC_M[f]) delete PRC_M[f]; prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcCerrar(d);
+      google.script.run.withSuccessHandler(function(r){ if (PRC_M[f]) delete PRC_M[f]; delete PRC_EDIT[f]; prcMsg(r.msg, true); prcActualizar(); }).withFailureHandler(function(e){ btnOff_(btn); prcMsg(errMsg_(e), false); }).prcCerrar(d);
     });
   }
   
