@@ -1,18 +1,20 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<meta charset="utf-8">
 <title>Control de Limpieza — Bio-Fix</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Esta pantalla habla con OTRO Apps Script (el de Control de Limpieza), no con el de Trazabilidad -->
 <script>
-  window.BIOFIX_API_URL = 'https://script.google.com/macros/s/AKfycbyqmpeX8x0imsfYtDySIEGveKRI_SSGvXKrLQj0yiUrKsfyTLSX4coe2aIFWNmqdase5g/exec';
+  window.BIOFIX_API_URL = 'PEGAR_ACA_LA_URL_DE_LIMPIEZA_/exec';
   window.BIOFIX_PANTALLA = 'limpieza';
+  // Funciones que NO son guardados: gas.js no las mete en la cola de "guardados en la tablet"
+  window.BIOFIX_LECTURAS = ['limpiezaInit', 'limpiezaCargar', 'limpiezaRegistroDia', 'limpiezaRegistroUltimos',
+                            'limpiezaPdfSemana', 'limpiezaPdfRegistroMes'];
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="gas.js"></script>
-<meta charset="utf-8">
 <style>
   :root { --teal:#2f7f86; --teal2:#cfe2e3; --verde:#e8f0d8; --rojo:#c62828; --gris:#f4f6f7; }
   * { box-sizing:border-box; }
