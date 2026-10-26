@@ -10,7 +10,7 @@
   window.BIOFIX_PANTALLA = 'limpieza';
   // Funciones que NO son guardados: gas.js no las mete en la cola de "guardados en la tablet"
   window.BIOFIX_LECTURAS = ['limpiezaInit', 'limpiezaCargar', 'limpiezaRegistroDia', 'limpiezaRegistroUltimos',
-                            'limpiezaPdfSemana', 'limpiezaPdfRegistroMes'];
+                            'limpiezaPdfSemana', 'limpiezaPdfRegistroMes', 'sbCargar', 'sbPdfSemana'];
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
 <script src="config.js"></script>
@@ -58,6 +58,13 @@
   .seg b { font-size:14px; margin-right:4px; }
   .seg button { flex:1 1 180px; padding:12px; font-size:15px; font-weight:bold; border:2px solid var(--teal); background:#fff; color:var(--teal); border-radius:8px; cursor:pointer; }
   .seg button.on { background:var(--teal); color:#fff; }
+  /* Sala Blanca */
+  .tabla-sb { min-width:640px; }
+  .tabla-sb th, .tabla-sb td { border:1px solid #ddd; vertical-align:middle; }
+  .tabla-sb tbody th { background:var(--verde); width:110px; }
+  .tabla-sb select { margin:0; min-width:150px; }
+  .tabla-sb select.falta { border-color:var(--rojo); background:#ffebee; }
+  .tabla-sb select.x { color:#757575; }
   @media (max-width:520px){ .sn button { width:52px; padding:10px 0; } .item span { font-size:13px; } }
 </style>
 </head>
@@ -70,6 +77,7 @@
   <button class="tab on" data-t="INS">Instalaciones</button>
   <button class="tab" data-t="BA">Baños</button>
   <button class="tab" data-t="REG">Registro Baño</button>
+  <button class="tab" data-t="SB">Sala Blanca</button>
 </div>
 <main>
   <div id="msg" class="msg"></div>
@@ -133,6 +141,31 @@
         <tbody id="tbReg"></tbody></table>
     </div>
   </section>
+
+  <!-- SALA BLANCA: SANITIZANTES UTILIZADOS (F-PRO-016-01) -->
+  <section id="secSB" class="oculto">
+    <div class="card">
+      <div id="tituloSB" style="font-weight:bold;margin-bottom:8px"></div>
+      <div class="fila">
+        <label>Fecha (lunes a viernes) <input type="date" id="sFecha"></label>
+        <label>Realizó (completa todas las filas) <select id="sRespTodos"></select></label>
+      </div>
+      <div id="avisoSB" class="aviso"></div>
+    </div>
+    <div class="card">
+      <div class="acciones" style="margin-top:0;margin-bottom:10px">
+        <button class="btn sec" type="button" id="btnSbHabitual">Usar productos habituales</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tabla-sb"><thead id="thSB"></thead><tbody id="tbSB"></tbody></table>
+      </div>
+      <div class="aviso">Elegí <b>X</b> donde no se realizó la limpieza.</div>
+      <div class="acciones">
+        <button class="btn" id="btnSbGuardar">Guardar</button>
+        <button class="btn sec" id="btnSbPdf">PDF de la semana</button>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -148,6 +181,7 @@
 
   function msg(t, ok) { var m = $('msg'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); window.scrollTo(0, 0); }
   function limpiarMsg() { $('msg').className = 'msg'; }
+  function escH(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function run(fn, args, ok, btn) {
     if (btn) btn.disabled = true;
     var r = google.script.run
@@ -258,6 +292,95 @@
     }, this);
   };
 
+  /* ---------- Sala Blanca: sanitizantes ---------- */
+  var sbCeldas = {}, sbRealizo = {};
+  function sbOpcionesProd(v) {
+    var p = CFG.salaBlanca;
+    return '<option value="">—</option>' +
+      p.productos.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + escH(x) + '</option>'; }).join('') +
+      '<option value="X"' + (v === 'X' ? ' selected' : '') + '>X (no se realizó)</option>';
+  }
+  function sbOpcionesResp(v) {
+    return '<option value="">—</option>' +
+      CFG.operarias.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + escH(x) + '</option>'; }).join('');
+  }
+  function pintarSB() {
+    var p = CFG.salaBlanca;
+    $('tituloSB').textContent = p.codigo + ' — ' + p.titulo + ' (Sala Blanca)';
+    $('thSB').innerHTML = '<tr><th></th>' + p.areas.map(function (a) { return '<th>' + escH(a) + '<br><small>Producto utilizado</small></th>'; }).join('') + '<th>Realizó</th></tr>';
+    $('tbSB').innerHTML = p.superficies.map(function (s) {
+      return '<tr><th>' + escH(s) + '</th>' +
+        p.areas.map(function (a) {
+          var k = s + '|' + a;
+          return '<td><select data-k="' + escH(k) + '"' + (sbCeldas[k] === 'X' ? ' class="x"' : '') + '>' + sbOpcionesProd(sbCeldas[k]) + '</select></td>';
+        }).join('') +
+        '<td><select data-r="' + escH(s) + '">' + sbOpcionesResp(sbRealizo[s]) + '</select></td></tr>';
+    }).join('');
+  }
+  $('tbSB').addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.hasAttribute('data-k')) {
+      sbCeldas[el.getAttribute('data-k')] = el.value;
+      el.classList.remove('falta');
+      el.classList.toggle('x', el.value === 'X');
+    } else if (el.hasAttribute('data-r')) {
+      sbRealizo[el.getAttribute('data-r')] = el.value;
+      el.classList.remove('falta');
+    }
+  });
+  $('sRespTodos').onchange = function () {
+    var v = this.value; if (!v) return;
+    CFG.salaBlanca.superficies.forEach(function (s) { sbRealizo[s] = v; });
+    pintarSB();
+  };
+  $('btnSbHabitual').onclick = function () {
+    var p = CFG.salaBlanca;
+    p.superficies.forEach(function (s) {
+      p.areas.forEach(function (a) { if (p.habituales[s]) sbCeldas[s + '|' + a] = p.habituales[s]; });
+    });
+    pintarSB();
+  };
+  function cargarSB() {
+    limpiarMsg();
+    sbCeldas = {}; sbRealizo = {}; $('sRespTodos').value = ''; $('avisoSB').textContent = '';
+    pintarSB();
+    run('sbCargar', [$('sFecha').value], function (d) {
+      if (!d) return;
+      sbCeldas = d.celdas || {}; sbRealizo = d.realizo || {};
+      $('avisoSB').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.';
+      pintarSB();
+    });
+  }
+  $('sFecha').onchange = cargarSB;
+  $('btnSbGuardar').onclick = function () {
+    var p = CFG.salaBlanca, faltan = 0, sinResp = 0;
+    p.superficies.forEach(function (s) {
+      var hecho = false;
+      p.areas.forEach(function (a) {
+        var v = sbCeldas[s + '|' + a];
+        if (!v) faltan++; else if (v !== 'X') hecho = true;
+      });
+      if (hecho && !sbRealizo[s]) sinResp++;
+    });
+    document.querySelectorAll('#tbSB select[data-k]').forEach(function (el) { el.classList.toggle('falta', !sbCeldas[el.getAttribute('data-k')]); });
+    document.querySelectorAll('#tbSB select[data-r]').forEach(function (el) {
+      var s = el.getAttribute('data-r');
+      var hecho = p.areas.some(function (a) { var v = sbCeldas[s + '|' + a]; return v && v !== 'X'; });
+      el.classList.toggle('falta', hecho && !sbRealizo[s]);
+    });
+    if (faltan) { msg('Falta elegir el producto en ' + faltan + ' casillero(s) (en rojo). Si no se hizo, elegí X.', false); return; }
+    if (sinResp) { msg('Falta elegir quién lo realizó (en rojo).', false); return; }
+    run('sbGuardar', [{ fecha: $('sFecha').value, celdas: sbCeldas, realizo: sbRealizo }], function (t) {
+      msg(t, true); $('avisoSB').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.';
+    }, this);
+  };
+  $('btnSbPdf').onclick = function () {
+    msg('Generando PDF…', true);
+    run('sbPdfSemana', [$('sFecha').value], function (url) {
+      $('msg').innerHTML = 'PDF generado: <a href="' + url + '" target="_blank">abrir</a>'; $('msg').className = 'msg ok';
+    }, this);
+  };
+
   /* ---------- pestañas ---------- */
   function grupoSel() { return tab === 'INS' ? 'INS' : 'BA'; }
   function pintarSelector() {
@@ -269,12 +392,14 @@
   function mostrar() {
     limpiarMsg();
     bano = SEL.BA;
-    actual = tab === 'INS' ? SEL.INS : (tab === 'BA' ? 'BA_' + SEL.BA : 'REG');
-    pintarSelector();
-    var esReg = tab === 'REG';
-    $('secCheck').classList.toggle('oculto', esReg);
+    var esReg = tab === 'REG', esSB = tab === 'SB';
+    actual = tab === 'INS' ? SEL.INS : (tab === 'BA' ? 'BA_' + SEL.BA : tab);
+    $('selSub').style.display = esSB ? 'none' : '';
+    if (!esSB) pintarSelector();
+    $('secCheck').classList.toggle('oculto', esReg || esSB);
     $('secReg').classList.toggle('oculto', !esReg);
-    if (esReg) cargarRegistro(); else cargarDia();
+    $('secSB').classList.toggle('oculto', !esSB);
+    if (esSB) cargarSB(); else if (esReg) cargarRegistro(); else cargarDia();
   }
   document.querySelectorAll('.tab').forEach(function (t) {
     t.onclick = function () {
@@ -291,8 +416,8 @@
 
   run('limpiezaInit', [], function (cfg) {
     CFG = cfg;
-    opciones($('cResp'), cfg.operarias); opciones($('rOper'), cfg.operarias);
-    $('cFecha').value = cfg.hoy; $('rFecha').value = cfg.hoy;
+    opciones($('cResp'), cfg.operarias); opciones($('rOper'), cfg.operarias); opciones($('sRespTodos'), cfg.operarias);
+    $('cFecha').value = cfg.hoy; $('rFecha').value = cfg.hoy; $('sFecha').value = cfg.hoy;
     $('cHora').value = cfg.hora; $('rHora').value = cfg.hora;
     mostrar();
   });
