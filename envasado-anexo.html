@@ -114,15 +114,15 @@
         <fieldset>
           <legend>Contramuestras</legend>
           <div id="contUnico">
-            <label>Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <label id="lblContUnico">Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
             <select id="contramuestrasRegistro">
               <option value="">Seleccione primero un lote...</option>
             </select>
           </div>
           <div id="contCMU" class="oculto">
-            <label>Contramuestras CMU (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <label>Contramuestra CMU (1 (UNA) CONTRAMUESTRA: Ø ___ mm.):</label>
             <select id="contramuestrasCMU"><option value="">Cargando...</option></select>
-            <label>Contramuestras CMU3 (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):</label>
+            <label>Contramuestra CMU3 (1 (UNA) CONTRAMUESTRA: Ø ___ mm.):</label>
             <select id="contramuestrasCMU3"><option value="">Cargando...</option></select>
           </div>
         </fieldset>
@@ -317,6 +317,11 @@
 
       function alCambiarLoteRegistro() {
         var comb = esCombinado_();
+        var it = loteSeleccionado_();
+        var unaSola = !!(it && (it.sistema === 'CMU' || it.sistema === 'CMU3'));
+        document.getElementById('lblContUnico').innerText = unaSola
+          ? 'Contramuestra (1 (UNA) CONTRAMUESTRA: Ø ___ mm.):'
+          : 'Contramuestras (2 (DOS) CONTRAMUESTRAS: Ø ___ mm.):';
         document.getElementById('avisoCMU').style.display = comb ? 'block' : 'none';
         document.getElementById('contUnico').classList.toggle('oculto', comb);
         document.getElementById('contCMU').classList.toggle('oculto', !comb);
