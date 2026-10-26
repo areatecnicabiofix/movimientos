@@ -73,7 +73,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       return (d != null && d >= 5.5) ? 'K' : 'J';
     }
     if (p.indexOf('monopieza') >= 0) {
-      // Monopieza común 3.0 / 3.5 / 4.0 / 4.5: con tetón hasta L, sin tetón hasta J
+      // Monopieza común 3.0 / 3.5 / 4.0 / 4.5 / 5.0 / 5.5: con tetón hasta L, sin tetón hasta J
       if (esMonopiezaComun(producto)) {
         var mm = String(medida || '').match(/(\d+(?:[.,]\d+)?)/);
         var dm = mm ? parseFloat(mm[1].replace(',', '.')) : null;
@@ -265,13 +265,20 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   .bloque-resp{ background:#f0f9ff; border:1px solid #93c5fd; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .bloque-resp label{ margin:0; white-space:nowrap; }
   .bloque-resp select{ max-width:220px; }
-  .bloque-laser{ background:#faf5ff; border:1px solid #d8b4fe; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .bloque-laser label{ margin:0; white-space:nowrap; color:#6b21a8; }
-  .bloque-laser input{ max-width:180px; font-weight:700; }
   #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:420px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
   #msg.show{ display:block; }
   #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
   #msg.err{ background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
+  /* ---- Pestañas Control / Pendiente de grabado ---- */
+  .tabs-qc{ display:flex; gap:6px; margin:0 0 14px 0; flex-wrap:wrap; }
+  .tabs-qc button{ flex:1 1 200px; padding:12px; font-size:15px; font-weight:700; border:2px solid #0284c7; background:#fff; color:#0284c7; border-radius:10px; cursor:pointer; }
+  .tabs-qc button.on{ background:#0284c7; color:#fff; }
+  .tabs-qc .cnt{ display:inline-block; min-width:22px; padding:1px 7px; border-radius:10px; background:#ede9fe; color:#6b21a8; font-size:12px; margin-left:6px; }
+  .grab-item{ border:1px solid #d8b4fe; background:#fff; border-radius:10px; padding:12px; margin-bottom:10px; }
+  .grab-tit{ font-weight:700; font-size:14px; color:#4c1d95; margin-bottom:4px; }
+  .grab-sub{ font-size:12px; color:var(--mut); margin-bottom:8px; }
+  .grab-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; align-items:end; }
+  .grab-grid .btn{ margin:0; width:100%; background:#7c3aed; }
   @media (max-width: 1024px) {
     body { padding: 12px; }
     .container { padding: 0 12px; }
@@ -296,8 +303,13 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     <p class="hint">Abajo, en <b>Lotes en Control</b>, solo vas a ver y cargar <b>tus</b> lotes. La tablet se acuerda de quién sos.</p>
   </div>
 
+  <!-- Pestañas -->
+  <div class="tabs-qc" id="tabsQc">
+    <button type="button" data-t="control" class="on">Control</button>
+    <button type="button" data-t="grabado">Pendiente de grabado <span class="cnt" id="grabCnt">0</span></button>
+  </div>
 
-  <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
+  <div class="card vista-control" style="border-color:#93c5fd; background:#f0f9ff;">
     <h2>1. Poner un lote En Control</h2>
     <p class="hint" style="margin-bottom:10px;">Elegí el lote y abrí el control. Los datos (cotas, responsables, cantidades) se cargan abajo, en <b>Lotes en Control</b>. El tiempo empieza a contar acá.</p>
     <div class="grid-3">
@@ -329,10 +341,27 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   </div>
 
 
-  <div class="card" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
+  <div class="card vista-control" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
     <h2><span id="tituloEnControl">Lotes en Control (borradores)</span> <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
     <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
     <div id="listaEnControl"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
+  </div>
+
+  <!-- PENDIENTE DE GRABADO -->
+  <div class="card" id="cardGrabado" style="display:none; border-color:#d8b4fe; background:#faf5ff;">
+    <h2>Pendiente de grabado</h2>
+    <p class="hint" style="margin-bottom:10px;">Lotes ya controlados que tienen que pasar por grabado láser (fresas lanza, expansores, llaves, contra ángulo MP, torquímetro, mangos, cuerpo de escaneo CMU).
+      Marcá <b>SI</b> cuando se grabó, el N° de OF (es el mismo del lote), el responsable y las rechazadas. La fecha, sistema, producto, medida y lote se completan solos. Las rechazadas van a <b>WORKSHOP</b>.</p>
+    <div id="grabLista"><p class="hint">Cargando…</p></div>
+    <div class="grab-item" style="border-style:dashed;">
+      <div class="grab-tit">Ingreso directo de mangos (no pasan por Control)</div>
+      <div class="grab-grid">
+        <div><label>Producto</label><select id="gmProd"><option value="">— Elegir —</option><option>Mango rígido</option><option>Mango de angulación</option></select></div>
+        <div><label>Lote</label><input id="gmLote" inputmode="numeric" placeholder="N° de lote"></div>
+        <div><label>Cantidad</label><input id="gmCant" type="number" min="1"></div>
+        <div><button class="btn" id="gmBtn" onclick="grabIngresarMango()">Ingresar a grabado</button></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -355,8 +384,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 
   // Dos tablets en el mismo lote: se recuerda QUÉ muestras tocó esta tablet y se manda solo eso.
   var DIRTY = {};        // DIRTY[id][letra][indice] = true  -> muestra cambiada acá, todavía sin guardar
-  var DIRTY_EXTRA = {};  // DIRTY_EXTRA[id] = { rech: bool, obs: bool, laser: bool }
-  var LOCAL_RECH = {}, LOCAL_OBS = {}, LOCAL_LASER = {};
+  var DIRTY_EXTRA = {};  // DIRTY_EXTRA[id] = { rech: bool, obs: bool }
+  var LOCAL_RECH = {}, LOCAL_OBS = {};
   function marcarCelda_(f, l, idx) {
     if (!DIRTY[f]) DIRTY[f] = {};
     if (!DIRTY[f][l]) DIRTY[f][l] = {};
@@ -364,43 +393,21 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
   function hayCambios_(f) {
     var d = DIRTY[f] || {}, ex = DIRTY_EXTRA[f] || {};
-    return Object.keys(d).some(function (l) { return Object.keys(d[l]).length > 0; }) || !!ex.rech || !!ex.obs || !!ex.laser;
+    return Object.keys(d).some(function (l) { return Object.keys(d[l]).length > 0; }) || !!ex.rech || !!ex.obs;
   }
   function valRech_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? (LOCAL_RECH[f] || 0) : (b.rechazadas || 0); }
   function valObs_(f, b)  { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].obs) ? (LOCAL_OBS[f] || '') : (b.observaciones || ''); }
-  function valLaser_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].laser) ? (LOCAL_LASER[f] || '') : (b.ofLaser || ''); }
   function valCant_(f, b) { return (DIRTY_EXTRA[f] && DIRTY_EXTRA[f].rech) ? Math.max(0, (Number(b.cantidadOriginal) || 0) - (Number(LOCAL_RECH[f]) || 0)) : b.cantidad; }
   function escAttr_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
-  /* ---------- OF Grabado Láser: SOLO componentes / instrumental (no implantes) ---------- */
-  // Nombres EXACTOS de los implantes (igual que en ControlLaser.gs). Todo lo demás es componente / instrumental.
+  /* ---------- Componentes / instrumental (no implantes) ---------- */
+  // Nombres EXACTOS de los implantes. Todo lo demás es componente / instrumental.
   var PRODUCTOS_IMPLANTE = ['monopieza', 'monopieza basal', 'monopieza basal tratado', 'monopieza basal pulido',
     'monopieza b. no tratado ni pulido', 'hexagono interno', 'hexagono externo', 'cono morse',
     'compresivo multi-unit', 'compresivo multi-unit cuello largo'];
   function esComponente_(b) {
     var p = normT_(b && b.producto);
     return !!p && PRODUCTOS_IMPLANTE.indexOf(p) < 0;
-  }
-  function marcarLaser(f) {
-    var el = document.getElementById('tlaser_'+f);
-    LOCAL_LASER[f] = el ? el.value.trim() : '';
-    if (!DIRTY_EXTRA[f]) DIRTY_EXTRA[f] = {};
-    DIRTY_EXTRA[f].laser = true;
-    marcarSucio(f);
-  }
-  // Guarda el OF de Grabado Láser (función aparte en el servidor). cb(ok)
-  function guardarLaser_(f, cb) {
-    var ex = DIRTY_EXTRA[f] || {};
-    if (!ex.laser) { cb(true); return; }
-    var valor = LOCAL_LASER[f] || '';
-    google.script.run
-      .withSuccessHandler(function () {
-        if ((LOCAL_LASER[f] || '') === valor && DIRTY_EXTRA[f]) DIRTY_EXTRA[f].laser = false;
-        if (!hayCambios_(f)) limpiarSucio(f);
-        cb(true);
-      })
-      .withFailureHandler(function (e) { msg('No se pudo guardar el OF de Grabado Láser: ' + e.message, false); cb(false); })
-      .ctlGuardarOFLaser(conPin_({ id: f, ofLaser: valor }));
   }
 
   function horaAhoraCdc(){
@@ -428,10 +435,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   /* Nombre "plano" para comparar productos: sin tildes, Ø = o, sin paréntesis
    * (igual que compNorm_ de ComponentesQC.gs). */
   function normProd_(s) { return normT_(s).replace(/ø/g, 'o').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim(); }
-  /* Filas de "Tolerancias QC" que corresponden a este producto / tetón / medida.
-   * Medida con número (3.4, 4.0x10…): se compara el número.
-   * Medida sin número ("-"), como la mayoría de los componentes: se toman las filas
-   * de ese producto que tampoco tienen número de medida. */
+  /* Filas de "Tolerancias QC" que corresponden a este producto / tetón / medida. */
   function filasTolDe_(producto, teton, medida) {
     var p = normProd_(producto), t = tetonClave_(teton), mc = medidaClave_(medida), out = [];
     (TOL_FILAS || []).forEach(function (f) {
@@ -444,8 +448,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     });
     return out;
   }
-  /* Componentes / instrumental: se muestran solo las cotas que tienen tolerancia cargada
-   * (A..última), igual que valida el servidor con compLetraLimite_. */
+  /* Componentes / instrumental: se muestran solo las cotas que tienen tolerancia cargada. */
   function letrasComponente_(b) {
     if (!esComponente_(b)) return null;
     var max = -1;
@@ -493,7 +496,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return /^-?\d*\.?\d+$/.test(s) ? parseFloat(s) : NaN;
   }
   function specDe_(f, l) { return (SPECS[f] && SPECS[f][l]) || null; }
-  /* NUEVO: una cota que se MIDE no puede valer 0 (casi siempre es una muestra sin medir).
+  /* Una cota que se MIDE no puede valer 0 (casi siempre es una muestra sin medir).
    * Se acepta 0 solo si la tolerancia de esa cota lo permite (mínimo <= 0). */
   function esCeroInvalido_(f, l, v) {
     var s = specDe_(f, l);
@@ -638,10 +641,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     sel.disabled = !!persona;                    // una persona abre lotes solo a su nombre
   }
 
-  /* ---------- Cada persona ve y carga SOLO sus lotes ----------
-   * Todos ven el paso 1 (abrir un lote). En "Lotes en Control" cada tablet muestra solo los
-   * lotes cuyo responsable es la persona elegida arriba; los de los demás aparecen como
-   * una lista chica, sin casilleros para cargar. "tecnica" puede elegir "Ver todos". */
+  /* ---------- Cada persona ve y carga SOLO sus lotes ---------- */
   var YO_KEY = 'bf_control_yo', PIN_KEY = 'bf_control_pin', YO_TODOS = '__todos';
   var YO = '', PIN = '';
   try { YO = localStorage.getItem(YO_KEY) || ''; PIN = localStorage.getItem(PIN_KEY) || ''; } catch (e) { YO = ''; PIN = ''; }
@@ -786,8 +786,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
 
   // Junta lo que viene del servidor (incluye lo que cargó la OTRA tablet) con lo que esta
-  // tablet cambió y todavía no guardó: las muestras tocadas acá se respetan, el resto se
-  // toma del servidor.
+  // tablet cambió y todavía no guardó.
   function prepararMuestras(id, letrasDeEsteLote, coas, tam) {
     if (!MUESTRAS[id]) MUESTRAS[id] = {};
     letrasDeEsteLote.forEach(function (l) {
@@ -815,7 +814,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     listaTodos = listaTodos || [];
     LAST_LISTA = listaTodos;
     var ae = document.activeElement;
-    var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|tlaser_|respLote_)/.test(ae.id);
+    var editando = ae && ae.id && /^(qval_|qidx_|trech_|tobs_|respLote_)/.test(ae.id);
 
     var tit = document.getElementById('tituloEnControl');
     if (!YO) {
@@ -871,15 +870,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<span class="hint" style="color:#b45309;">Elegilo antes de cargar valores de cotas.</span>'+
         '</div>';
       }
-
-      // OF de Grabado Láser: solo para componentes / instrumental
-      var bloqueLaser = esComponente_(b)
-        ? '<div class="bloque-laser">'+
-            '<label for="tlaser_'+f+'">OF Grabado Láser</label>'+
-            '<input type="text" id="tlaser_'+f+'" inputmode="numeric" placeholder="N° de OF" value="'+escAttr_(valLaser_(f, b))+'" oninput="marcarLaser(\''+f+'\')">'+
-            '<span class="hint">Solo componentes / instrumental. Se guarda con "Guardar avance" o "Marcar Controlada".</span>'+
-          '</div>'
-        : '';
 
       var filasCoa;
       if (cantidadVacia) {
@@ -941,7 +931,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<span class="badge-sub '+(b.enPausa?'badge-pausa':'badge-en-control')+'">'+(b.enPausa?'En pausa':'En control')+'</span>'+
         '</div>'+
         bloqueResponsable +
-        bloqueLaser +
         tiempos +
         '<div class="grid-3" style="margin-bottom:10px;">'+
           '<div><label>Con/Sin Tetón</label><input value="'+(b.teton||'—')+'" readonly style="background:#f1f5f9;"></div>'+
@@ -1035,8 +1024,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     var huboCambios = false;
     if (MUESTRAS[f]) {
       Object.keys(MUESTRAS[f]).forEach(function(l){
-        // Solo completa el responsable de muestras que no tienen ninguno
-        // (no pisa el de las muestras que cargó otra persona / la otra tablet).
+        // Solo completa el responsable de muestras que no tienen ninguno.
         MUESTRAS[f][l].forEach(function(m, i){
           if (m && m.v !== '' && m.v !== null && m.v !== undefined && !String(m.r || '').trim()) {
             m.r = RESP_LOTE[f];
@@ -1077,9 +1065,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     cargarMuestra(f, l, false);
   }
 
-
-
-
   function focoMuestra(f, l) {
     if (MANUAL[f+'|'+l]) return;
     var sel = document.getElementById('qidx_'+l+'_'+f);
@@ -1116,8 +1101,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     else msg('Cota ' + l + ' completa (' + arr.length + '/' + arr.length + ').', true);
   }
 
-
-
   function guardarMuestraLocal(f, l) {
     var sel = document.getElementById('qidx_'+l+'_'+f);
     var inp = document.getElementById('qval_'+l+'_'+f);
@@ -1135,8 +1118,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     actualizarContadorCota_(f, l);
     marcarSucio(f);
   }
-  // NUEVO: el aviso de "0" sale al terminar de escribir (al salir del casillero o con Enter),
-  // no mientras se tipea (así "0,040" no avisa en el primer 0).
+  // El aviso de "0" sale al terminar de escribir (al salir del casillero o con Enter).
   function avisarCero_(f, l) {
     var sel = document.getElementById('qidx_'+l+'_'+f), inp = document.getElementById('qval_'+l+'_'+f);
     if (!sel || !inp || inp.tagName === 'SELECT') return;
@@ -1147,18 +1129,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   function encolarGuardado(f) {
     if (SAVE_EN_CURSO[f]) { SAVE_PENDIENTE[f] = true; return; }
     var d = datosCard(f);
-    var hayLaser = !!(DIRTY_EXTRA[f] && DIRTY_EXTRA[f].laser);
     if (!d.cambios.length && !('rechazadas' in d) && !('observaciones' in d)) {
-      if (hayLaser) {                                   // solo cambió el OF de Grabado Láser
-        SAVE_EN_CURSO[f] = true;
-        guardarLaser_(f, function (ok) {
-          SAVE_EN_CURSO[f] = false;
-          if (ok) msg('OF Grabado Láser guardado.', true);
-          var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
-          if (pend) encolarGuardado(f);
-        });
-        return;
-      }
       limpiarSucio(f); msg('No hay cambios para guardar.', true); return;
     }
     SAVE_EN_CURSO[f] = true;
@@ -1166,11 +1137,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .withSuccessHandler(function (r) {
         limpiarEnviados_(f, d);
         if (r && r.msg) msg(r.msg, true);
-        guardarLaser_(f, function () {
-          SAVE_EN_CURSO[f] = false;
-          var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
-          if (pend) encolarGuardado(f);
-        });
+        SAVE_EN_CURSO[f] = false;
+        var pend = SAVE_PENDIENTE[f]; SAVE_PENDIENTE[f] = false;
+        if (pend) encolarGuardado(f);
       })
       .withFailureHandler(function (e) {
         SAVE_EN_CURSO[f] = false;
@@ -1182,8 +1151,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .ctlPinActualizarCambios(d);
   }
 
-  // Arma lo que se manda al servidor: SOLO las muestras que cambió esta tablet
-  // (y rechazadas / observaciones solo si se tocaron acá).
+  // Arma lo que se manda al servidor: SOLO las muestras que cambió esta tablet.
   function datosCard(f) {
     var cambios = [];
     var dl = DIRTY[f] || {};
@@ -1221,7 +1189,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     }
     if (!hayCambios_(f)) limpiarSucio(f);
   }
-  function olvidarLote_(f) { delete DIRTY[f]; delete DIRTY_EXTRA[f]; delete LOCAL_RECH[f]; delete LOCAL_OBS[f]; delete LOCAL_LASER[f]; }
+  function olvidarLote_(f) { delete DIRTY[f]; delete DIRTY_EXTRA[f]; delete LOCAL_RECH[f]; delete LOCAL_OBS[f]; }
   function actualizarEnControl(f) {
     if (CERRANDO[f]) return;
     encolarGuardado(f);
@@ -1233,8 +1201,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     setTimeout(function () { esperarLoteLibre_(f, cb, intentos - 1); }, 200);
   }
 
-  // Pausa / Reanudar: un solo toque (el botón queda "Guardando…" hasta que responde) y la tarjeta
-  // muestra enseguida lo que respondió el Apps Script, sin esperar a que se actualice la copia.
+  // Pausa / Reanudar: un solo toque y la tarjeta muestra enseguida lo que respondió el Apps Script.
   var PAUSA_EN_CURSO = {};
   function marcarPausaLocal_(f, en, desde) { window.BF_PAUSA_OVR[f] = { en: en, desde: desde || '', t: Date.now() }; }
   function botonesPausa_(f, texto) {
@@ -1274,7 +1241,6 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   }
 
 
-
   function cerrarControl(f, btn) {
     if (CERRANDO[f]) return;
     var ceros = cerosDe_(f);
@@ -1285,36 +1251,29 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (btn) { btn.disabled = true; btn.textContent = 'Cerrando…'; }
     msg('Marcando como Controlada… no cierres la pantalla.', true);
     esperarLoteLibre_(f, function () {
-      // Primero se guarda el OF de Grabado Láser (si se cambió); si falla, no se cierra.
-      guardarLaser_(f, function (okLaser) {
-        if (!okLaser) {
+      var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
+      google.script.run
+        .withSuccessHandler(function(r){
+          msg('Lote marcado como Controlada ✓', true);   // sin mostrar el tiempo: queda guardado y lo ve solo Supervisión
+          olvidarLote_(f);
+          delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
+          actualizarInventarios();
+          grabCargar();   // si el producto se graba, aparece en "Pendiente de grabado"
+        })
+        .withFailureHandler(function(e){
           delete CERRANDO[f];
-          if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
-          return;
-        }
-        var d = datosCard(f); d.cerrar = true; d.hora = horaAhoraCdc();
-        google.script.run
-          .withSuccessHandler(function(r){
-            msg('Lote marcado como Controlada ✓', true);   // sin mostrar el tiempo: queda guardado y lo ve solo Supervisión
+          if (yaHecho_(e)) {   // el cierre anterior SÍ se guardó (la respuesta tardó o se cortó)
+            msg('Este control ya estaba cerrado (se guardó en el intento anterior). Se actualizó la pantalla.', true);
             olvidarLote_(f);
-            delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f]; delete CERRANDO[f];
+            delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f];
             actualizarInventarios();
-          })
-          .withFailureHandler(function(e){
-            delete CERRANDO[f];
-            if (yaHecho_(e)) {   // el cierre anterior SÍ se guardó (la respuesta tardó o se cortó)
-              msg('Este control ya estaba cerrado (se guardó en el intento anterior). Se actualizó la pantalla.', true);
-              olvidarLote_(f);
-              delete MUESTRAS[f]; delete SEL_IDX[f]; delete RESP_LOTE[f]; delete LOTES_SUCIOS[f];
-              actualizarInventarios();
-              return;
-            }
-            msg(e.message, false);
-            if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
-            refrescarEnControl();
-          })
-          .ctlPinCerrarCambios(d);
-      });
+            return;
+          }
+          msg(e.message, false);
+          if (btn) { btn.disabled = false; btn.textContent = 'Marcar Controlada ✓'; }
+          refrescarEnControl();
+        })
+        .ctlPinCerrarCambios(d);
     });
   }
   function eliminarBorrador(f) {
@@ -1326,8 +1285,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .ctlPinEliminarBorrador(conPin_({ id: f }));
   }
 
-  // Respuestas que significan "eso ya estaba hecho": pasa cuando el guardado anterior SÍ se hizo
-  // pero la respuesta tardó o se cortó y se volvió a tocar. No es un error: se actualiza la pantalla.
+  // Respuestas que significan "eso ya estaba hecho": no es un error, se actualiza la pantalla.
   function yaHecho_(e) {
     return /ya fue cerrado|ya no existe|ya no est[aá] esperando control/i.test((e && e.message) || String(e || ''));
   }
@@ -1338,8 +1296,94 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     m.className = 'show ' + (ok ? 'ok' : 'err');
     if (ok) setTimeout(function(){ if (m.textContent === t) m.className = ''; }, 4000);
   }
+
+
+  /* =====================================================================
+   * PENDIENTE DE GRABADO
+   * Lotes ya controlados de productos que se graban (GrabadoPendiente.gs).
+   * Se registra: SI · N° OF (= lote) · Responsable · Cantidad · Rechazadas (-> WORKSHOP).
+   * ===================================================================== */
+  var GRAB_PEND = [], TAB_ACTUAL = 'control';
+  function grabEsc_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function grabQuien_() { return (YO && YO !== YO_TODOS) ? YO : ''; }
+  function grabOpcionesResp_() {
+    var yo = grabQuien_();
+    return '<option value="">— Elegir —</option>' + RESP_QC.map(function (r) {
+      return '<option' + (r === yo ? ' selected' : '') + '>' + r + '</option>';
+    }).join('');
+  }
+  function mostrarTab(t) {
+    TAB_ACTUAL = t;
+    document.querySelectorAll('#tabsQc button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === t); });
+    document.querySelectorAll('.vista-control').forEach(function (c) { c.style.display = (t === 'control') ? '' : 'none'; });
+    document.getElementById('cardGrabado').style.display = (t === 'grabado') ? '' : 'none';
+    if (t === 'grabado') grabCargar();
+  }
+  document.getElementById('tabsQc').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (b) mostrarTab(b.getAttribute('data-t'));
+  });
+
+  function grabPintar_() {
+    document.getElementById('grabCnt').textContent = GRAB_PEND.length;
+    var box = document.getElementById('grabLista');
+    var ae = document.activeElement;
+    if (ae && /^g[sorcx]_/.test(ae.id || '')) return;   // no pisa lo que se está escribiendo
+    if (!GRAB_PEND.length) { box.innerHTML = '<p class="hint">No hay lotes pendientes de grabado.</p>'; return; }
+    box.innerHTML = GRAB_PEND.map(function (it, i) {
+      return '<div class="grab-item">' +
+        '<div class="grab-tit">' + grabEsc_(it.producto) + (it.medida && it.medida !== '-' ? ' · ' + grabEsc_(it.medida) : '') + ' · ' + grabEsc_(it.lote) + '</div>' +
+        '<div class="grab-sub">Sistema: <b>' + grabEsc_(it.sistema) + '</b> · Pendiente: <b>' + it.cantidad + ' u.</b>' + (it.desde ? ' · desde ' + grabEsc_(it.desde) : '') + '</div>' +
+        '<div class="grab-grid">' +
+          '<div><label>¿Se grabó?</label><select id="gs_' + i + '"><option value="">—</option><option value="SI">SI</option></select></div>' +
+          '<div><label>N° OF grabado</label><input id="go_' + i + '" value="' + grabEsc_(it.of) + '" inputmode="numeric"></div>' +
+          '<div><label>Responsable</label><select id="gr_' + i + '">' + grabOpcionesResp_() + '</select></div>' +
+          '<div><label>Cantidad grabada</label><input id="gc_' + i + '" type="number" min="1" max="' + it.cantidad + '" value="' + it.cantidad + '"></div>' +
+          '<div><label>Rechazadas</label><input id="gx_' + i + '" type="number" min="0" value="0"></div>' +
+          '<div><button class="btn" id="gb_' + i + '" onclick="grabRegistrar(' + i + ')">Registrar grabado</button></div>' +
+        '</div></div>';
+    }).join('');
+  }
+  function grabCargar() {
+    google.script.run
+      .withSuccessHandler(function (r) { GRAB_PEND = r || []; grabPintar_(); })
+      .withFailureHandler(function (e) { document.getElementById('grabLista').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + grabEsc_(e.message) + '</p>'; })
+      .grabObtenerPendientes();
+  }
+  function grabRegistrar(i) {
+    var it = GRAB_PEND[i]; if (!it) return;
+    function v(p) { var el = document.getElementById(p + i); return el ? el.value : ''; }
+    if (v('gs_') !== 'SI') { msg('Marcá "SI" en ¿Se grabó?.', false); return; }
+    if (!v('go_')) { msg('Falta el N° de OF de grabado.', false); return; }
+    if (!v('gr_')) { msg('Elegí el responsable.', false); return; }
+    var rech = Number(v('gx_')) || 0;
+    if (rech > 0 && !confirm(rech + ' pieza(s) rechazada(s) van a WORKSHOP. ¿Confirmar?')) return;
+    var b = document.getElementById('gb_' + i); if (b) { b.disabled = true; b.textContent = 'Guardando…'; }
+    google.script.run
+      .withSuccessHandler(function (r) { msg(r.msg, true); grabCargar(); })
+      .withFailureHandler(function (e) { msg(e.message, false); if (b) { b.disabled = false; b.textContent = 'Registrar grabado'; } })
+      .grabRegistrarGrabado({ producto: it.producto, medida: it.medida, lote: it.lote, grabado: 'SI',
+                              of: v('go_'), responsable: v('gr_'), cantidad: v('gc_'), rechazadas: rech });
+  }
+  function grabIngresarMango() {
+    var b = document.getElementById('gmBtn');
+    var d = { producto: document.getElementById('gmProd').value, lote: document.getElementById('gmLote').value,
+              cantidad: document.getElementById('gmCant').value, responsable: grabQuien_() };
+    if (!d.producto || !d.lote || !(Number(d.cantidad) > 0)) { msg('Completá producto, lote y cantidad.', false); return; }
+    b.disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        b.disabled = false; msg(r.msg, true);
+        document.getElementById('gmProd').value = ''; document.getElementById('gmLote').value = ''; document.getElementById('gmCant').value = '';
+        grabCargar();
+      })
+      .withFailureHandler(function (e) { b.disabled = false; msg(e.message, false); })
+      .grabIngresarDirecto(d);
+  }
+
+
   function refrescarTodo(silencioso) {
     actualizarInventarios();
+    grabCargar();
   }
 
   window.onload = function() {
@@ -1357,6 +1401,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     cargarTolerancias_();
     setInterval(cargarTolerancias_, 10 * 60000);
     actualizarInventarios();
+    grabCargar();
     validarBtnAbrir();
     setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
   };
