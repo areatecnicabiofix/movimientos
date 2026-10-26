@@ -351,7 +351,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   <div class="card" id="cardGrabado" style="display:none; border-color:#d8b4fe; background:#faf5ff;">
     <h2>Pendiente de grabado</h2>
     <p class="hint" style="margin-bottom:10px;">Lotes ya controlados que tienen que pasar por grabado láser (fresas lanza, expansores, llaves, contra ángulo MP, torquímetro, mangos, cuerpo de escaneo CMU).
-      Marcá <b>SI</b> cuando se grabó, el N° de OF (es el mismo del lote), el responsable y las rechazadas. La fecha, sistema, producto, medida y lote se completan solos. Las rechazadas van a <b>WORKSHOP</b>.</p>
+      Marcá <b>SI</b>, el N° de OF (es el mismo del lote), la responsable (Gabriela o Marita), <b>cuántas se grabaron hoy</b> y las rechazadas. Si no se grabó todo, lo que falta queda pendiente para otro día. La fecha, sistema, producto, medida y lote se completan solos. Las rechazadas van a <b>WORKSHOP</b>.</p>
     <div id="grabLista"><p class="hint">Cargando…</p></div>
     <div class="grab-item" style="border-style:dashed;">
       <div class="grab-tit">Ingreso directo de mangos (no pasan por Control)</div>
@@ -1306,9 +1306,10 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   var GRAB_PEND = [], TAB_ACTUAL = 'control';
   function grabEsc_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
   function grabQuien_() { return (YO && YO !== YO_TODOS) ? YO : ''; }
+  var RESP_GRABADO = ['Gabriela', 'Marita'];   // únicas responsables de grabado
   function grabOpcionesResp_() {
     var yo = grabQuien_();
-    return '<option value="">— Elegir —</option>' + RESP_QC.map(function (r) {
+    return '<option value="">— Elegir —</option>' + RESP_GRABADO.map(function (r) {
       return '<option' + (r === yo ? ' selected' : '') + '>' + r + '</option>';
     }).join('');
   }
@@ -1337,10 +1338,12 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<div><label>¿Se grabó?</label><select id="gs_' + i + '"><option value="">—</option><option value="SI">SI</option></select></div>' +
           '<div><label>N° OF grabado</label><input id="go_' + i + '" value="' + grabEsc_(it.of) + '" inputmode="numeric"></div>' +
           '<div><label>Responsable</label><select id="gr_' + i + '">' + grabOpcionesResp_() + '</select></div>' +
-          '<div><label>Cantidad grabada</label><input id="gc_' + i + '" type="number" min="1" max="' + it.cantidad + '" value="' + it.cantidad + '"></div>' +
-          '<div><label>Rechazadas</label><input id="gx_' + i + '" type="number" min="0" value="0"></div>' +
+          '<div><label>Cantidad que se grabó hoy (máx. ' + it.cantidad + ')</label><input id="gc_' + i + '" type="number" min="1" max="' + it.cantidad + '" step="1" placeholder="Ej: ' + Math.min(it.cantidad, 20) + '" oninput="grabQueda_(' + i + ')"></div>' +
+          '<div><label>Rechazadas (de lo grabado hoy)</label><input id="gx_' + i + '" type="number" min="0" value="0" oninput="grabQueda_(' + i + ')"></div>' +
           '<div><button class="btn" id="gb_' + i + '" onclick="grabRegistrar(' + i + ')">Registrar grabado</button></div>' +
-        '</div></div>';
+        '</div>' +
+        '<div class="grab-sub" id="gq_' + i + '" style="margin:8px 0 0;">Cargá cuántas se grabaron hoy: lo que falte queda pendiente para otro día.</div>' +
+        '</div>';
     }).join('');
   }
   function grabCargar() {
@@ -1349,20 +1352,36 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       .withFailureHandler(function (e) { document.getElementById('grabLista').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + grabEsc_(e.message) + '</p>'; })
       .grabObtenerPendientes();
   }
+  // Muestra cuánto queda pendiente después de registrar lo de hoy
+  function grabQueda_(i) {
+    var it = GRAB_PEND[i], el = document.getElementById('gq_' + i); if (!it || !el) return;
+    var c = Math.floor(Number(document.getElementById('gc_' + i).value) || 0);
+    var r = Math.floor(Number(document.getElementById('gx_' + i).value) || 0);
+    if (!(c > 0)) { el.innerHTML = 'Cargá cuántas se grabaron hoy: lo que falte queda pendiente para otro día.'; el.style.color = ''; return; }
+    if (c > it.cantidad) { el.innerHTML = 'No podés grabar más de lo pendiente (' + it.cantidad + ').'; el.style.color = '#b91c1c'; return; }
+    if (r > c) { el.innerHTML = 'Las rechazadas no pueden ser más que lo grabado hoy (' + c + ').'; el.style.color = '#b91c1c'; return; }
+    el.style.color = '';
+    el.innerHTML = 'Hoy: <b>' + (c - r) + '</b> grabadas OK' + (r ? ' + <b>' + r + '</b> a WORKSHOP' : '') +
+      ' · Quedan pendientes: <b>' + (it.cantidad - c) + '</b>' + (it.cantidad - c > 0 ? ' (siguen en esta lista)' : ' (se completa el lote)');
+  }
   function grabRegistrar(i) {
     var it = GRAB_PEND[i]; if (!it) return;
     function v(p) { var el = document.getElementById(p + i); return el ? el.value : ''; }
     if (v('gs_') !== 'SI') { msg('Marcá "SI" en ¿Se grabó?.', false); return; }
     if (!v('go_')) { msg('Falta el N° de OF de grabado.', false); return; }
-    if (!v('gr_')) { msg('Elegí el responsable.', false); return; }
-    var rech = Number(v('gx_')) || 0;
+    if (RESP_GRABADO.indexOf(v('gr_')) < 0) { msg('Elegí el responsable (Gabriela o Marita).', false); return; }
+    var cant = Math.floor(Number(v('gc_')) || 0);
+    if (!(cant > 0)) { msg('Cargá la cantidad que se grabó hoy.', false); return; }
+    if (cant > it.cantidad) { msg('La cantidad (' + cant + ') supera lo pendiente (' + it.cantidad + ').', false); return; }
+    var rech = Math.floor(Number(v('gx_')) || 0);
+    if (rech < 0 || rech > cant) { msg('Las rechazadas tienen que estar entre 0 y ' + cant + '.', false); return; }
     if (rech > 0 && !confirm(rech + ' pieza(s) rechazada(s) van a WORKSHOP. ¿Confirmar?')) return;
     var b = document.getElementById('gb_' + i); if (b) { b.disabled = true; b.textContent = 'Guardando…'; }
     google.script.run
       .withSuccessHandler(function (r) { msg(r.msg, true); grabCargar(); })
       .withFailureHandler(function (e) { msg(e.message, false); if (b) { b.disabled = false; b.textContent = 'Registrar grabado'; } })
       .grabRegistrarGrabado({ producto: it.producto, medida: it.medida, lote: it.lote, grabado: 'SI',
-                              of: v('go_'), responsable: v('gr_'), cantidad: v('gc_'), rechazadas: rech });
+                              of: v('go_'), responsable: v('gr_'), cantidad: cant, rechazadas: rech });
   }
   function grabIngresarMango() {
     var b = document.getElementById('gmBtn');
