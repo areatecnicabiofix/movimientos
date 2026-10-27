@@ -505,7 +505,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (String(v == null ? '' : v).trim() === '' || num_(v) !== 0) return false;
     return !(s && s.min != null && s.min <= 0);
   }
-    function letrasDeLote_(f) { return LETRAS_LOTE[f] || Object.keys(MUESTRAS[f] || {}); }
+   function letrasDeLote_(f) {
+    return LETRAS_COA.filter(function (l) { return !!document.getElementById('qval_' + l + '_' + f); });
+  }
   function cerosDe_(f) {
     var det = [];
     letrasDeLote_(f).forEach(function (l) {
