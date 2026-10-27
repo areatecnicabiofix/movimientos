@@ -425,6 +425,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   /* ---------- Tolerancias por cota (hoja "Tolerancias QC", vía ctlObtenerTolerancias) ---------- */
   var TOL_FILAS = null;   // filas leídas de la hoja
   var SPECS = {};         // SPECS[id][letra] = {tipo, nominal, tolMas, tolMenos, min, max, texto}
+  var LETRAS_LOTE = {};   // LETRAS_LOTE[id] = cotas que se muestran para ese lote
   var COTAS_OK_MONOPIEZA = ['G', 'H', 'I'];
   function normT_(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
   function medidaClave_(v) {
@@ -504,10 +505,11 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     if (String(v == null ? '' : v).trim() === '' || num_(v) !== 0) return false;
     return !(s && s.min != null && s.min <= 0);
   }
+    function letrasDeLote_(f) { return LETRAS_LOTE[f] || Object.keys(MUESTRAS[f] || {}); }
   function cerosDe_(f) {
     var det = [];
-    Object.keys(MUESTRAS[f] || {}).forEach(function (l) {
-      (MUESTRAS[f][l] || []).forEach(function (m, i) { if (m && esCeroInvalido_(f, l, m.v)) det.push(l + ' N°' + (i + 1)); });
+    letrasDeLote_(f).forEach(function (l) {
+      ((MUESTRAS[f] && MUESTRAS[f][l]) || []).forEach(function (m, i) { if (m && esCeroInvalido_(f, l, m.v)) det.push(l + ' N°' + (i + 1)); });
     });
     return det;
   }
@@ -557,11 +559,11 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       if (e) inp.classList.add('val-' + e);
     }
   }
-  function contarFuera_(f) {
+    function contarFuera_(f) {
     var n = 0, det = [];
-    Object.keys(MUESTRAS[f] || {}).forEach(function (l) {
+    letrasDeLote_(f).forEach(function (l) {
       var s = specDe_(f, l);
-      (MUESTRAS[f][l] || []).forEach(function (m, i) {
+      ((MUESTRAS[f] && MUESTRAS[f][l]) || []).forEach(function (m, i) {
         if (estadoValor_(s, m && m.v) === 'fuera') { n++; if (det.length < 8) det.push(l + ' N°' + (i + 1)); }
       });
     });
@@ -844,6 +846,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       TAM_MUESTRA[f] = tam;
 
       var letrasDeEsteLote = letrasComponente_(b) || ((b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA);
+      LETRAS_LOTE[f] = letrasDeEsteLote;
       if (b.coas) {
         letrasDeEsteLote.forEach(function (l) {
           if (b.coas[l] && !Array.isArray(b.coas[l].muestras) && Array.isArray(b.coas[l].valores)) {
