@@ -371,56 +371,97 @@
   }
 
   /* ============ HISTORIAL DE CONTADORES POR LOTE ============ */
-function toggleHistorialGenerico_(idPrefix, f, lote) {
-  var cont = document.getElementById(idPrefix + f);
-  if (!cont) return;
-  if (cont.className.indexOf('hide') < 0) { cont.className = 'hide'; return; }
-  cont.className = '';
-  cont.innerHTML = '<p class="empty">Cargando historial...</p>';
-  google.script.run
-    .withSuccessHandler(function (lista) { mecRenderHistorial_(idPrefix, f, lista); })
-    .withFailureHandler(function (e) { cont.innerHTML = '<p style="color:#b91c1c;font-size:12px;">Error: ' + errMsg_(e) + '</p>'; })
-    .mecHistorialLote(lote);
-}
-function mecToggleHistorial(f, lote) { toggleHistorialGenerico_('hist_', f, lote); } // se mantiene para no romper la lista principal
+  // Guarda qué historiales están abiertos, para que el refresco automático no los cierre.
+  var HIST_ABIERTO = {}; // 'hist_12' -> { lote: 'Lote 0931', lista: [...] | null }
 
-function mecRenderHistorial_(idPrefix, f, lista) {
-  var cont = document.getElementById(idPrefix + f);
-  if (!cont) return;
-  if (!lista || !lista.length) {
-    cont.innerHTML = '<p class="empty">Todavía no hay cierres registrados para este lote.</p>';
-    return;
+  function histCargar_(idPrefix, f, lote) {
+    var key = idPrefix + f;
+    google.script.run
+      .withSuccessHandler(function (lista) {
+        var st = HIST_ABIERTO[key];
+        if (!st || st.lote !== lote) return; // lo cerraron mientras cargaba
+        st.lista = lista || [];
+        mecRenderHistorial_(idPrefix, f, st.lista);
+      })
+      .withFailureHandler(function (e) {
+        var cont = document.getElementById(key);
+        if (cont && HIST_ABIERTO[key]) cont.innerHTML = '<p style="color:#b91c1c;font-size:12px;">Error: ' + esc_(errMsg_(e)) + '</p>';
+      })
+      .mecHistorialLote(lote);
   }
-  var filas = lista.map(function (h) {
-    return '<tr>' +
-      '<td>' + h.fecha + '</td>' +
-      '<td>' + h.tipoCierre + '</td>' +
-      '<td style="text-align:center;">' + h.contadorInicio + ' → ' + h.contadorFin + '</td>' +
-      '<td style="text-align:center;">' + h.buenas + '</td>' +
-      '<td style="text-align:center;">' + h.rechazadas + '</td>' +
-      '<td style="text-align:center;">' + h.perdidas + '</td>' +
-      '<td style="text-align:center;">' + h.setup + '</td>' +
-      '<td style="text-align:center;">' + (h.excedente || 0) + '</td>' +
-      '<td>' + h.responsable + '</td>' +
-    '</tr>';
-  }).join('');
-  cont.innerHTML =
-    '<div class="hist-wrap"><table class="hist-table">' +
-      '<thead><tr>' +
-        '<th style="text-align:left;">Fecha</th>' +
-        '<th style="text-align:left;">Tipo</th>' +
-        '<th>Contador (inicio → fin)</th>' +
-        '<th>Buenas</th>' +
-        '<th>Rech.</th>' +
-        '<th>Perd.</th>' +
-        '<th>Setup</th>' +
-        '<th>Excedente</th>' +
-        '<th style="text-align:left;">Responsable</th>' +
-      '</tr></thead>' +
-      '<tbody>' + filas + '</tbody>' +
-    '</table></div>';
-}
 
+  function toggleHistorialGenerico_(idPrefix, f, lote) {
+    var key = idPrefix + f;
+    var cont = document.getElementById(key);
+    if (!cont) return;
+    if (HIST_ABIERTO[key]) {               // estaba abierto -> se cierra
+      delete HIST_ABIERTO[key];
+      cont.className = 'hide';
+      cont.innerHTML = '';
+      return;
+    }
+    HIST_ABIERTO[key] = { lote: String(lote), lista: null };
+    cont.className = '';
+    cont.innerHTML = '<p class="empty">Cargando historial...</p>';
+    histCargar_(idPrefix, f, String(lote));
+  }
+  function mecToggleHistorial(f, lote) { toggleHistorialGenerico_('hist_', f, lote); }
+
+  // Después de redibujar una lista, vuelve a abrir los historiales que estaban abiertos.
+  function histRestaurar_(idPrefix, items) {
+    var vigentes = {};
+    (items || []).forEach(function (it) { vigentes[idPrefix + it.fila] = String(it.lote); });
+    Object.keys(HIST_ABIERTO).forEach(function (key) {
+      if (key.indexOf(idPrefix) !== 0) return;
+      var st = HIST_ABIERTO[key];
+      if (vigentes[key] !== st.lote) { delete HIST_ABIERTO[key]; return; } // el lote ya no está o la fila es de otro lote
+      var f = key.slice(idPrefix.length);
+      var cont = document.getElementById(key);
+      if (!cont) return;
+      cont.className = '';
+      if (st.lista) mecRenderHistorial_(idPrefix, f, st.lista);
+      else cont.innerHTML = '<p class="empty">Cargando historial...</p>';
+      histCargar_(idPrefix, f, st.lote); // trae datos frescos por si hubo un cierre nuevo
+    });
+  }
+
+  function mecRenderHistorial_(idPrefix, f, lista) {
+    var cont = document.getElementById(idPrefix + f);
+    if (!cont) return;
+    cont.className = '';
+    if (!lista || !lista.length) {
+      cont.innerHTML = '<p class="empty">Todavía no hay cierres registrados para este lote.</p>';
+      return;
+    }
+    var filas = lista.map(function (h) {
+      return '<tr>' +
+        '<td>' + esc_(h.fecha) + '</td>' +
+        '<td>' + esc_(h.tipoCierre) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.contadorInicio) + ' → ' + esc_(h.contadorFin) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.buenas) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.rechazadas) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.perdidas) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.setup) + '</td>' +
+        '<td style="text-align:center;">' + esc_(h.excedente || 0) + '</td>' +
+        '<td>' + esc_(h.responsable) + '</td>' +
+      '</tr>';
+    }).join('');
+    cont.innerHTML =
+      '<div class="hist-wrap"><table class="hist-table">' +
+        '<thead><tr>' +
+          '<th style="text-align:left;">Fecha</th>' +
+          '<th style="text-align:left;">Tipo</th>' +
+          '<th>Contador (inicio → fin)</th>' +
+          '<th>Buenas</th>' +
+          '<th>Rech.</th>' +
+          '<th>Perd.</th>' +
+          '<th>Setup</th>' +
+          '<th>Excedente</th>' +
+          '<th style="text-align:left;">Responsable</th>' +
+        '</tr></thead>' +
+        '<tbody>' + filas + '</tbody>' +
+      '</table></div>';
+  }
 
   function render(list){
     document.getElementById('cntPend').textContent = list.length + (list.length===1?' lote activo':' lotes activos');
@@ -519,6 +560,8 @@ function mecRenderHistorial_(idPrefix, f, lista) {
       '</div>';
     }).join('');
     list.forEach(function(p){ if (p.controlPruebaOk) mecRecalcContador_(p.fila); });
+    histRestaurar_('hist_', list);
+  }
   }
 
   function mecNormalizarLote_(v){
@@ -1317,8 +1360,9 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
             '<button class="total" style="margin:0;padding:7px 14px;font-size:12px;" onclick="pcpCerrarControl('+f+', this)">Marcar Controlada ✓</button>'+
           '</div>'+
         '</div>'+
-      '</div>';
+            '</div>';
     }).join('');
+    histRestaurar_('histq_', lista);
   }
   function pcpDatosCard(f){
   var coas = {};
