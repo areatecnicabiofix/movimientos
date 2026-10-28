@@ -1351,11 +1351,23 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         '</div>';
     }).join('');
   }
+  /* Pendiente de grabado se pide a Apps Script (tarda ~7 s). Antes se pedía en CADA refresco
+   * (cada minuto y con cada cambio en tiempo real): ~500 veces por día. Ahora:
+   *   - siempre que se abre la pestaña "Pendiente de grabado" o se registra algo,
+   *   - y en el refresco automático solo si esa pestaña está abierta o pasaron 10 min
+   *     (para que el número de la pestaña no quede muy viejo).
+   * Nunca se piden dos a la vez. */
+  var GRAB_ULT = 0, GRAB_EN_CURSO = false, GRAB_OTRA = false;
   function grabCargar() {
+    if (GRAB_EN_CURSO) { GRAB_OTRA = true; return; }   // al terminar la que está en curso, se pide otra
+    GRAB_EN_CURSO = true; GRAB_ULT = Date.now();
     google.script.run
-      .withSuccessHandler(function (r) { GRAB_PEND = r || []; grabPintar_(); })
-      .withFailureHandler(function (e) { document.getElementById('grabLista').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + grabEsc_(e.message) + '</p>'; })
+      .withSuccessHandler(function (r) { GRAB_EN_CURSO = false; GRAB_PEND = r || []; grabPintar_(); if (GRAB_OTRA) { GRAB_OTRA = false; grabCargar(); } })
+      .withFailureHandler(function (e) { GRAB_EN_CURSO = false; GRAB_OTRA = false; document.getElementById('grabLista').innerHTML = '<p style="color:#b91c1c;font-size:13px;">' + grabEsc_(e.message) + '</p>'; })
       .grabObtenerPendientes();
+  }
+  function grabCargarSiHaceFalta_() {
+    if (TAB_ACTUAL === 'grabado' || Date.now() - GRAB_ULT > 10 * 60000) grabCargar();
   }
   // Muestra cuánto queda pendiente después de registrar lo de hoy
   function grabQueda_(i) {
@@ -1407,7 +1419,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 
   function refrescarTodo(silencioso) {
     actualizarInventarios();
-    grabCargar();
+    grabCargarSiHaceFalta_();
   }
 
   window.onload = function() {
