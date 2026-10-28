@@ -1282,7 +1282,11 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var tiempos = f_tiemposVariables();
     if (!F_PASOS.some(function (p) { return tiempos[p] > 0; })) { msg('f_msg', 'Cargá el tiempo de al menos un paso del Proceso químico.', false); return; }
 
+    // Hora inicio y hora fin del proceso: las dos obligatorias
     var hIni = val_('f_horaIni'), hFin = val_('f_horaFin');
+    if (!hIni) { msg('f_msg', 'Falta la Hora inicio del proceso.', false); document.getElementById('f_horaIni').focus(); return; }
+    if (!hFin) { msg('f_msg', 'Falta la Hora fin del proceso.', false); document.getElementById('f_horaFin').focus(); return; }
+
     var msIni = f_horaAMs_(hIni);
     var msFin = f_horaAMs_(hFin);
     if (msIni && msFin && msFin < msIni) msFin += 24 * 60 * 60 * 1000;
@@ -1292,6 +1296,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var comunes = {
       cantidadesPasos: f_cantidadesPasosPara_(f_totalCantidadGrupo_(), tiempos),
       tiemposVariables: tiempos,
+      horaInicioTxt: hIni,          // NUEVO: la hora tal cual se escribió (HH:mm)
+      horaFinTxt: hFin,             // NUEVO
       horaInicioMs: msIni || '',
       horaFinMs: msFin || '',
       conductimetro: f_datosConductimetro()
