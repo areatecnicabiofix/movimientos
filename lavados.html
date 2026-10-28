@@ -300,8 +300,8 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     <div class="card" id="f_cardPasos" style="border-color:#c4b5fd; background:#faf5ff;">
       <h2 style="color:#6d28d9;">3. Proceso químico</h2>
       <div class="grid-3" style="margin-bottom:12px;">
-        <div><label>Hora inicio del proceso</label><input type="time" id="f_horaIni" onchange="lfGuardarEstado()"></div>
-        <div><label>Hora fin del proceso</label><input type="time" id="f_horaFin" onchange="lfGuardarEstado()"></div>
+        <div><label>Inicio del proceso (fecha y hora)</label><input type="datetime-local" id="f_horaIni" onchange="lfGuardarEstado()"></div>
+        <div><label>Fin del proceso (fecha y hora)</label><input type="datetime-local" id="f_horaFin" onchange="lfGuardarEstado()"></div>
         <div></div>
       </div>
       <p class="empty" style="margin-bottom:8px;">Escribí cuánto duró cada paso</p>
@@ -1265,6 +1265,16 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     f_enviarEnSegundoPlano_([d], {}, null);
   }
 
+    /* Fecha y hora del proceso (input datetime-local: "2026-10-27T13:00") */
+  function f_dtParse_(v) {
+    var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])) : null;
+  }
+  function f_dtTxt_(v) {   // -> "27/10/2026 13:00"
+    var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5]) : '';
+  }
+
   function f_registrarGrupo() {
     if (!F_AGRUPADOS.length) { msg('f_msg','Agregá lotes al grupo antes de registrar.', false); return; }
     var sinLote = F_AGRUPADOS.filter(function(x){ return !x.loteLavado; });
@@ -1282,24 +1292,22 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     var tiempos = f_tiemposVariables();
     if (!F_PASOS.some(function (p) { return tiempos[p] > 0; })) { msg('f_msg', 'Cargá el tiempo de al menos un paso del Proceso químico.', false); return; }
 
-    // Hora inicio y hora fin del proceso: las dos obligatorias
+    // Inicio y fin del proceso: fecha + hora, los dos obligatorios
     var hIni = val_('f_horaIni'), hFin = val_('f_horaFin');
-    if (!hIni) { msg('f_msg', 'Falta la Hora inicio del proceso.', false); document.getElementById('f_horaIni').focus(); return; }
-    if (!hFin) { msg('f_msg', 'Falta la Hora fin del proceso.', false); document.getElementById('f_horaFin').focus(); return; }
-
-    var msIni = f_horaAMs_(hIni);
-    var msFin = f_horaAMs_(hFin);
-    if (msIni && msFin && msFin < msIni) msFin += 24 * 60 * 60 * 1000;
+    var dIni = f_dtParse_(hIni), dFin = f_dtParse_(hFin);
+    if (!dIni) { msg('f_msg', 'Falta la fecha y hora de inicio del proceso.', false); document.getElementById('f_horaIni').focus(); return; }
+    if (!dFin) { msg('f_msg', 'Falta la fecha y hora de fin del proceso.', false); document.getElementById('f_horaFin').focus(); return; }
+    if (dFin <= dIni) { msg('f_msg', 'El fin del proceso tiene que ser posterior al inicio.', false); return; }
 
     var items = F_AGRUPADOS.slice();
     var proceso = f_capturarProceso_();
     var comunes = {
       cantidadesPasos: f_cantidadesPasosPara_(f_totalCantidadGrupo_(), tiempos),
       tiemposVariables: tiempos,
-      horaInicioTxt: hIni,          // NUEVO: la hora tal cual se escribió (HH:mm)
-      horaFinTxt: hFin,             // NUEVO
-      horaInicioMs: msIni || '',
-      horaFinMs: msFin || '',
+      horaInicioTxt: f_dtTxt_(hIni),   // "27/10/2026 13:00"
+      horaFinTxt: f_dtTxt_(hFin),      // "28/10/2026 11:00"
+      horaInicioMs: dIni.getTime(),
+      horaFinMs: dFin.getTime(),
       conductimetro: f_datosConductimetro()
     };
 
@@ -1309,10 +1317,6 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'asignaciones', 'hoja:Lavado Final', 'ho
     lfLimpiarEstado();
     f_enviarEnSegundoPlano_(items, comunes, proceso);
   }
-
-
-
-
   function refrescarTodo() {
     actualizarFecha_();
     if (document.hidden) return;
