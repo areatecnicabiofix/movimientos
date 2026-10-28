@@ -763,7 +763,7 @@ function mecRenderHistorial_(idPrefix, f, lista) {
 
   function renderMuestraFila_(prefix, f, l, idx, val, resp){
     return '<div class="muestra-fila" style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">'+
-      '<input type="text" id="'+prefix+'c_'+l+'_'+f+'_'+idx+'" value="'+esc_(val==null?'':val)+'" placeholder="Valor" inputmode="decimal">'+
+      '<input type="text" id="'+prefix+'c_'+l+'_'+f+'_'+idx+'" value="'+esc_(val==null?'':val)+'" placeholder="Valor" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false">'+
       '<input type="hidden" id="'+prefix+'r_'+l+'_'+f+'_'+idx+'" value="'+esc_(resp||'')+'">'+
       botonesCotaResp_(prefix, f, l, idx, resp)+
     '</div>';
@@ -959,7 +959,7 @@ function renderCotaUnicaBloque_(prefix, f, l, muestra){
       var adelantada = n > R.completas;   // ya tiene el valor de esta ronda
       return '<div style="display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid #eef2f7; flex-wrap:wrap;">'+
         '<div style="width:24px; font-weight:700; color:#0369a1; font-size:15px;">'+l+'</div>'+
-        '<input id="pin_'+f+'_'+l+'" type="text" inputmode="decimal" placeholder="Valor" autocomplete="off" '+
+        '<input id="pin_'+f+'_'+l+'" type="text" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="Valor" autocomplete="off" '+
           'style="width:130px; padding:9px; font-size:15px;'+(adelantada ? ' background:#f0fdf4;' : '')+'" '+
           (bloqueado ? 'disabled ' : '')+
           'onkeydown="prcTecla_(event,'+f+',\''+l+'\')" onchange="prcCargarValor_('+f+',\''+l+'\')">'+
