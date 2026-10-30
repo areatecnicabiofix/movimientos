@@ -193,6 +193,52 @@
     sel.innerHTML = '<option value="">Elegí…</option>' + lista.map(function (n) { return '<option>' + n + '</option>'; }).join('');
   }
 
+  /* ---------- FECHA Y HORA SIEMPRE AL DÍA (NUEVO 30/10) ----------
+   * Antes la fecha y la hora se ponían UNA sola vez al abrir la pantalla. Si la tablet quedaba
+   * abierta, la 2ª limpieza salía con la hora (y a veces la fecha) de cuando se abrió.
+   * Ahora se actualizan solas (cada 30 s, al volver a la pantalla, al cambiar de pestaña y al
+   * tocar Registrar), SALVO que la operaria las haya cambiado a mano. */
+  var TOCADO = {};   // campos de fecha/hora que se cambiaron a mano
+  ['cFecha', 'cHora', 'rFecha', 'rHora', 'sFecha'].forEach(function (id) {
+    $(id).addEventListener('input', function () { TOCADO[id] = true; });
+    $(id).addEventListener('change', function () { TOCADO[id] = true; });
+  });
+  function ahoraAR() {
+    var o = {};
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date()).forEach(function (x) { o[x.type] = x.value; });
+    return { fecha: o.year + '-' + o.month + '-' + o.day, hora: (o.hour === '24' ? '00' : o.hour) + ':' + o.minute };
+  }
+  // forzar = true al cambiar de pestaña (no hay nada a medio cargar que se pueda perder).
+  // Devuelve true si cambió la fecha de la pestaña que se está viendo.
+  function refrescarFechaHora(forzar) {
+    if (!CFG) return false;
+    var a = ahoraAR(), cambio = false;
+    var hayChecklist = Object.keys(resultados).length > 0;
+    var haySB = Object.keys(sbCeldas).length > 0;
+    function poner(id, v, puede) {
+      if (TOCADO[id] || !puede || $(id).value === v) return false;
+      $(id).value = v; return true;
+    }
+    var cF = poner('cFecha', a.fecha, forzar || !hayChecklist);
+    var rF = poner('rFecha', a.fecha, true);
+    var sF = poner('sFecha', a.fecha, forzar || !haySB);
+    poner('rHora', a.hora, true);
+    poner('cHora', a.hora, forzar);   // la del checklist solo al entrar (después la pone el día cargado)
+    if (tab === 'REG') cambio = rF;
+    else if (tab === 'SB') cambio = sF;
+    else cambio = cF;
+    return cambio;
+  }
+  function tick() {
+    if (document.hidden || !CFG) return;
+    if (refrescarFechaHora(false)) mostrar();   // pasó la medianoche: se recarga el día nuevo
+  }
+  setInterval(tick, 30000);
+  document.addEventListener('visibilitychange', tick);
+
   /* ---------- checklist ---------- */
   function pintarChecklist() {
     var p = CFG.planillas[actual];
@@ -232,8 +278,9 @@
     limpiarMsg();
     resultados = {}; $('cCond').value = ''; $('cFuera').value = ''; $('avisoCarga').textContent = '';
     pintarChecklist();
-    run('limpiezaCargar', [actual, $('cFecha').value], function (d) {
-      if (!d) return;
+    var fechaPedida = $('cFecha').value;
+    run('limpiezaCargar', [actual, fechaPedida], function (d) {
+      if (!d || $('cFecha').value !== fechaPedida) return;
       resultados = d.resultados || {};
       if (d.hora) $('cHora').value = d.hora;
       if (d.responsable) $('cResp').value = d.responsable;
@@ -253,7 +300,10 @@
     run('limpiezaGuardar', [{
       planilla: actual, fecha: $('cFecha').value, hora: $('cHora').value, responsable: $('cResp').value,
       fueraServicio: $('cFuera').value, condiciones: $('cCond').value, resultados: resultados
-    }], function (t) { msg(t, true); $('avisoCarga').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.'; }, this);
+    }], function (t) {
+      msg(t, true); $('avisoCarga').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.';
+      TOCADO.cFecha = false; TOCADO.cHora = false;
+    }, this);
   };
   $('btnPdfSemana').onclick = function () {
     msg('Generando PDF…', true);
@@ -267,12 +317,15 @@
     $('rEstado').textContent = '';
     $('tituloReg').textContent = 'Control de Limpieza - ' + NOMBRE_BANO[bano] + ' (registro diario)';
     $('tbReg').innerHTML = '';
-    run('limpiezaRegistroDia', [$('rFecha').value, bano], function (d) {
+    var fechaPedida = $('rFecha').value, banoPedido = bano;
+    run('limpiezaRegistroDia', [fechaPedida, banoPedido], function (d) {
+      if ($('rFecha').value !== fechaPedida || bano !== banoPedido) return;   // llegó tarde: ya se cambió el día o el baño
       if (!d) { $('rEstado').textContent = 'Sin limpiezas registradas ese día: se registra la Limpieza 1.'; return; }
       if (d.hora2) $('rEstado').textContent = 'Ese día ya tiene las 2 limpiezas (' + d.hora1 + ' y ' + d.hora2 + ').';
       else $('rEstado').textContent = 'Limpieza 1 a las ' + d.hora1 + ' (' + d.operaria + '). Ahora se registra la Limpieza 2.';
     });
-    run('limpiezaRegistroUltimos', [15, bano], function (lista) {
+    run('limpiezaRegistroUltimos', [15, banoPedido], function (lista) {
+      if (bano !== banoPedido) return;
       $('tbReg').innerHTML = lista.map(function (r) {
         return '<tr><td>' + r.fecha + '</td><td>' + (r.hora1 || '') + '</td><td>' + (r.hora2 || '—') + '</td><td>' + (r.operaria || '') + '</td><td>' + (r.observaciones || '') + '</td></tr>';
       }).join('') || '<tr><td colspan="5">Sin registros todavía.</td></tr>';
@@ -280,10 +333,17 @@
   }
   $('rFecha').onchange = cargarRegistro;
   $('btnRegistrar').onclick = function () {
+    // Fecha y hora de AHORA (si no se cambiaron a mano)
+    if (refrescarFechaHora(false)) cargarRegistro();
     run('limpiezaRegistrarBano', [{
       ubicacion: bano, fecha: $('rFecha').value, hora: $('rHora').value, operaria: $('rOper').value,
       observaciones: $('rObs').value, firma: $('rFirma').checked
-    }], function (t) { msg(t, true); $('rObs').value = ''; $('rFirma').checked = false; cargarRegistro(); }, this);
+    }], function (t) {
+      msg(t, true); $('rObs').value = ''; $('rFirma').checked = false;
+      TOCADO.rFecha = false; TOCADO.rHora = false;   // la próxima vuelve a tomar fecha y hora del momento
+      refrescarFechaHora(false);
+      cargarRegistro();
+    }, this);
   };
   $('btnPdfMes').onclick = function () {
     msg('Generando PDF…', true);
@@ -344,8 +404,9 @@
     limpiarMsg();
     sbCeldas = {}; sbRealizo = {}; $('sRespTodos').value = ''; $('avisoSB').textContent = '';
     pintarSB();
-    run('sbCargar', [$('sFecha').value], function (d) {
-      if (!d) return;
+    var fechaPedida = $('sFecha').value;
+    run('sbCargar', [fechaPedida], function (d) {
+      if (!d || $('sFecha').value !== fechaPedida) return;
       sbCeldas = d.celdas || {}; sbRealizo = d.realizo || {};
       $('avisoSB').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.';
       pintarSB();
@@ -372,6 +433,7 @@
     if (sinResp) { msg('Falta elegir quién lo realizó (en rojo).', false); return; }
     run('sbGuardar', [{ fecha: $('sFecha').value, celdas: sbCeldas, realizo: sbRealizo }], function (t) {
       msg(t, true); $('avisoSB').textContent = 'Este día ya estaba cargado: si guardás, se reemplaza.';
+      TOCADO.sFecha = false;
     }, this);
   };
   $('btnSbPdf').onclick = function () {
@@ -391,6 +453,7 @@
   }
   function mostrar() {
     limpiarMsg();
+    refrescarFechaHora(true);   // al entrar a una pestaña: fecha y hora de ahora (salvo que se hayan cambiado a mano)
     bano = SEL.BA;
     var esReg = tab === 'REG', esSB = tab === 'SB';
     actual = tab === 'INS' ? SEL.INS : (tab === 'BA' ? 'BA_' + SEL.BA : tab);
