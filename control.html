@@ -92,6 +92,19 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   function letrasHasta(l) { var i = LET.indexOf(l); return i >= 0 ? LET.slice(0, i + 1) : LET.slice(); }
   function fmtMin(min) { if (min === '' || min == null || isNaN(min)) return ''; var h = Math.floor(min / 60), m = min % 60; return h + 'h ' + ('0' + m).slice(-2) + 'min'; }
 
+  /* 03/11/2026: TODAS LAS LLAVES se controlan al 100% de las piezas (no al 15%).
+   * Mismos productos que tienen "controlTotal: true" en ComponentesQC.gs: si se agrega
+   * una llave nueva allá, agregarla también acá (en minúsculas y sin tildes). */
+  var CONTROL_TOTAL = ['llave mp larga', 'llave mp corta', 'llave colocadora cmu corta', 'llave colocadora cmu larga'];
+  function esControlTotal(producto) { return CONTROL_TOTAL.indexOf(norm(producto)) >= 0; }
+  function tamMuestra(cantidadOriginal, producto) {   // = ctlTamanoMuestra_(cantidad, producto)
+    var c = Number(cantidadOriginal) || 0;
+    if (esControlTotal(producto)) return Math.max(1, c);
+    return Math.max(1, Math.ceil(c * 0.15));
+  }
+  window.BF_esControlTotal = esControlTotal;
+  window.BF_tamMuestra = tamMuestra;
+
   function listarEnControl(d) {                     // = ctlListarEnControl
     var h = d.h, c = function (n) { return colDe(h, n); };
     var C = {
@@ -118,7 +131,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
       out.push({
         id: id, fila: f.fila, producto: producto, teton: teton, medida: medida, lote: g(C.lote),
         subestado: g(C.sub), cantidadOriginal: co, cantidad: num(g(C.cant)),
-        tamMuestra: Math.max(1, Math.ceil(co * 0.15)), rechazadas: num(g(C.rech)),
+        tamMuestra: tamMuestra(co, producto), rechazadas: num(g(C.rech)),
         responsable: g(C.resp) || '', observaciones: g(C.obs) || '',
         inicio: txt(g(C.ini)), fin: txt(g(C.fin)), pausaMin: num(g(C.pmin)),
         pausaDesde: pausaDesde, enPausa: !!pausaDesde,
@@ -343,7 +356,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
 
   <div class="card vista-control" id="cardEnControl" style="border-color:#bfdbfe; background:#eff6ff;">
     <h2><span id="tituloEnControl">Lotes en Control (borradores)</span> <span id="cntEnControl" style="font-size:12px; background:#dbeafe; color:#1d4ed8; padding:2px 10px; border-radius:8px;">0</span></h2>
-    <p class="hint" style="margin-bottom:10px;">Siempre se controla el 15% de la Cantidad del lote (redondeado para arriba). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
+    <p class="hint" style="margin-bottom:10px;">Se controla el 15% de la Cantidad del lote (redondeado para arriba); las <b>llaves</b> se controlan todas (100%). Al tocar el casillero de valor pasa solo a la primera muestra vacía; con <b>Enter</b> pasa a la siguiente. Los valores fuera de tolerancia se marcan en rojo y al lado de cada cota se ve el promedio. Para corregir una muestra ya cargada, elegila en el combo "Muestra N°". Los valores se registran en la hoja recién al apretar "Guardar avance" o "Marcar Controlada".</p>
     <div id="listaEnControl"><p style="color:var(--mut); font-size:13px;">Cargando...</p></div>
   </div>
 
@@ -417,7 +430,9 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return pad(ba.getUTCDate())+'/'+pad(ba.getUTCMonth()+1)+'/'+ba.getUTCFullYear()+' '+pad(ba.getUTCHours())+':'+pad(ba.getUTCMinutes());
   }
 
-  function tamanoMuestra(cantidad) {
+  // 03/11/2026: recibe también el producto -> las llaves se controlan al 100% (ver CONTROL_TOTAL arriba)
+  function tamanoMuestra(cantidad, producto) {
+    if (window.BF_tamMuestra) return window.BF_tamMuestra(cantidad, producto);
     var c = Number(cantidad) || 0;
     return Math.max(1, Math.ceil(c * 0.15));
   }
@@ -844,7 +859,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
         RESP_LOTE[f] = String(b.responsable || '').split(',')[0].trim();
       }
       var cantidadVacia = !(Number(b.cantidadOriginal) > 0);
-      var tam = cantidadVacia ? 0 : tamanoMuestra(b.cantidadOriginal);
+      var tam = cantidadVacia ? 0 : tamanoMuestra(b.cantidadOriginal, b.producto);   // llaves: 100%
+      var controlTotal = !!(window.BF_esControlTotal && window.BF_esControlTotal(b.producto));
       TAM_MUESTRA[f] = tam;
 
       var letrasDeEsteLote = letrasComponente_(b) || ((b.letrasCota && b.letrasCota.length) ? b.letrasCota : LETRAS_COA);
@@ -942,7 +958,8 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
           '<div><label>Cantidad (fija)</label><input type="number" id="tcant_'+f+'" value="'+valCant_(f, b)+'" readonly style="background:#f1f5f9; font-weight:700;"></div>'+
           '<div><label>Rechazadas</label><input type="number" min="0" id="trech_'+f+'" value="'+valRech_(f, b)+'" oninput="recalcCantidadFija(\''+f+'\')"><input type="hidden" id="torig_'+f+'" value="'+(b.cantidadOriginal||0)+'"></div>'+
         '</div>'+
-        (cantidadVacia ? '' : '<div class="hint" style="margin-bottom:6px;">Muestra a controlar: <b>'+tam+'</b> por cota (15% de '+b.cantidadOriginal+', redondeado para arriba).</div>')+
+        (cantidadVacia ? '' : '<div class="hint" style="margin-bottom:6px;">Muestra a controlar: <b>'+tam+'</b> por cota ('+
+          (controlTotal ? 'llave: se controlan todas, 100% de '+b.cantidadOriginal : '15% de '+b.cantidadOriginal+', redondeado para arriba')+').</div>')+
         '<div class="tabla-scroll"><table class="coas-table">'+
           '<thead><tr><th style="width:40px;">Cota</th><th>Muestra</th><th>Nominal / Tolerancia</th><th>Valor</th><th>Cargadas</th><th>Promedio</th></tr></thead>'+
           '<tbody>'+filasCoa+'</tbody>'+
