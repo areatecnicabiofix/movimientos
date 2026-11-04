@@ -113,7 +113,9 @@
   <div class="oculto" id="zonaAcciones">
     <!-- ===== F-PRO-018-01: Monitoreo de SALIDA (se registra al finalizar el lote) ===== -->
     <div class="panel panel-dp">
-      <h2>Diferenciales de presión — Monitoreo de salida <span style="font-weight:400; color:var(--mut);">(se registra al finalizar el lote)</span></h2>
+      <h2>Diferenciales de presión — Monitoreo de salida <span style="font-weight:400; color:var(--mut);">(una vez por día, al finalizar el primer lote)</span></h2>
+      <div id="dpSalidaOk" class="dp-ok oculto"></div>
+      <div id="dpSalidaForm">
       <div class="grid-fila">
         <div><label>Entrada vestuario (Pa)</label><input id="dpS_vest" type="number" step="0.1" value="4" oninput="dpRevisar_('dpS')"></div>
         <div><label>Entrada de lavado (Pa)</label><input id="dpS_lav" type="number" step="0.1" value="2" oninput="dpRevisar_('dpS')"></div>
@@ -123,6 +125,7 @@
         <div style="grid-column:span 2;"><label>Observaciones</label><input id="dpS_obs" type="text" value="Sin anomalías"></div>
       </div>
       <div id="dpS_aviso" class="aviso-warn"></div>
+      </div>
     </div>
     <button class="btn" id="btnGuardar" onclick="finalizarLote()">Finalizar lote (Primario + Secundario)</button>
     <p class="estado-guardado" id="estadoGuardado"></p>
@@ -177,10 +180,13 @@
   /* =====================================================================
    * F-PRO-018-01 — Diferenciales de presión
    * Entrada: una vez por día, antes de poder elegir un lote.
-   * Salida: se registra junto con "Finalizar lote".
+   * Salida: UNA vez por día, junto con el primer "Finalizar lote" del día.
+   *   04/11/2026: si ya se registró hoy no se vuelve a pedir; los lotes que se
+   *   finalizan después solo se suman a la columna "Lotes" de la salida de hoy.
    * ===================================================================== */
   var DP_MIN = 2, DP_MAX = 4, DP_OBS_OK = 'Sin anomalías';
   var DP_ENTRADA_FECHA = '';   // fecha (dd/MM/yyyy) en que se confirmó la entrada
+  var DP_SALIDA = null;        // salida de hoy ya registrada ({fecha, hora, ...}) o null
 
   function hoyTxt_() {
     var d = new Date();
@@ -242,9 +248,26 @@
     }
   }
 
+  // Salida de hoy: si ya está, se muestra como registrada y no se vuelve a pedir
+  function dpSalidaOk_() { return !!(DP_SALIDA && DP_SALIDA.fecha === hoyTxt_()); }
+  function dpMostrarSalida_(s) {
+    DP_SALIDA = (s && s.fecha === hoyTxt_()) ? s : null;
+    var ok = document.getElementById('dpSalidaOk'), form = document.getElementById('dpSalidaForm');
+    if (DP_SALIDA) {
+      form.classList.add('oculto');
+      ok.classList.remove('oculto');
+      ok.textContent = '✓ Monitoreo de salida de hoy ya registrado a las ' + s.hora + ' — Vestuario ' + s.vestuario +
+        ' Pa · Lavado ' + s.lavado + ' Pa · Envasado ' + s.envasado + ' Pa. No hace falta cargarlo de nuevo: este lote se suma solo.';
+    } else {
+      form.classList.remove('oculto');
+      ok.classList.add('oculto');
+    }
+  }
+
   function dpCargarEstado_(callback) {
     google.script.run.withSuccessHandler(function (est) {
       dpMostrarEntrada_(est && est.entrada);
+      dpMostrarSalida_(est && est.salida);
       if (est && est.realizadoPor) document.querySelectorAll('.dp-realizado').forEach(function (i) { i.value = est.realizadoPor; });
       if (est && est.verificadoPor) document.querySelectorAll('.dp-verificado').forEach(function (i) { i.value = est.verificadoPor; });
       if (callback) callback();
@@ -536,9 +559,15 @@
     if (!filasSecundario.length) { mostrarMsg('No hay medidas de Secundario para guardar.', false); return; }
     if (faltaSec) { mostrarMsg('Secundario: falta cantidad u operario. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
 
-    // Monitoreo de salida (F-PRO-018-01): se valida antes de cerrar el lote
-    var salida = dpLeer_('dpS');
-    if (salida.error) { mostrarMsg('Monitoreo de salida: ' + salida.error, false); return; }
+    // Monitoreo de salida (F-PRO-018-01): una vez por día. Si ya está registrado hoy,
+    // no se piden los valores de nuevo: solo se suma este lote a la salida de hoy.
+    var salida;
+    if (dpSalidaOk_()) {
+      salida = { datos: { soloLote: true } };
+    } else {
+      salida = dpLeer_('dpS');
+      if (salida.error) { mostrarMsg('Monitoreo de salida: ' + salida.error, false); return; }
+    }
     var l = LOTES.filter(function (x) { return x.clave === clave; })[0];
     salida.datos.lote = l ? (l.sistema + '-' + l.lote) : clave;
 
@@ -558,6 +587,7 @@
         mostrarMsg(res + ' · ' + ((rs && rs.msg) || 'Monitoreo de salida registrado.'), true);
         document.getElementById('loteSelect').value = '';
         limpiar();
+        dpCargarEstado_();   // la salida de hoy queda como registrada (no se vuelve a pedir)
         cargarLotes();
       }).withFailureHandler(function (err) {
         btn.disabled = false;
