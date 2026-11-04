@@ -1,638 +1,659 @@
+html:
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="utf-8">
-    <title>Envasado Primario / Secundario</title>
+  <head>
+    <meta charset="utf-8">
+    <title>Envasado - Paso 1 (carga)</title>
     <!-- GitHub: login del puesto + puente al Apps Script de ENVASADOS (reemplaza google.script.run) -->
     <script>window.BIOFIX_PANTALLA = 'envasado';</script>
     <script src="envasados-config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="gas.js"></script>
-    <!-- La URL del Apps Script de ENVASADOS sale SOLO de envasados-config.js. Se vuelve a cargar acá,
-         DESPUÉS de config.js y gas.js, para que ningún otro archivo la pise. -->
+    <!-- La URL del Apps Script de ENVASADOS sale SOLO de envasados-config.js. Se vuelve a cargar acá, DESPUÉS de config.js y gas.js, para que ningún otro archivo la pise. -->
     <script src="envasados-config.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --acc:#0284c7; --ok:#15803d; }
-  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
-  body{ background:#f8fafc; padding:16px; color:var(--tx); margin:0; }
-  .container{ max-width:1400px; width:100%; margin:0 auto; padding:0 12px; }
-  h1{ font-size:18px; margin:0 0 16px 0; color:#0369a1; font-weight:600; }
-  h2{ font-size:14px; margin:0 0 12px 0; color:#1e293b; border-bottom:1px solid #f1f5f9; padding-bottom:6px; }
-  .panel{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:16px; margin-bottom:16px; min-width:0; }
-  .panel-lote{ border-top:4px solid #64748b; }
-  .panel-prim{ border-top:4px solid var(--acc); }
-  .panel-sec{ border-top:4px solid #16a34a; }
-  .panel-dp{ border-top:4px solid #7c3aed; }
-  .oculto{ display:none !important; }
-  label{ font-size:12px; color:var(--mut); display:block; margin-bottom:4px; font-weight:600; }
-  select, input, textarea{ width:100%; padding:8px; font-size:13px; border:1px solid var(--bx); border-radius:6px; }
-  select:focus, input:focus{ border-color:var(--acc); outline:none; }
-  select:disabled{ background:#f1f5f9; }
-  .btn{ color:#fff; border:none; padding:14px 18px; font-size:15px; font-weight:700; border-radius:8px; cursor:pointer; width:100%; background:#0f766e; }
-  .btn:disabled{ opacity:0.5; cursor:default; }
-  .btn-dp{ background:#7c3aed; margin-top:10px; }
-  .estado-guardado{ font-size:12px; color:var(--mut); margin:8px 0 0 0; min-height:16px; }
-  .estado-guardado.ok{ color:#15803d; font-weight:600; }
-  .estado-guardado.guardando{ color:#92400e; }
-  .estado-guardado.err{ color:#b91c1c; font-weight:600; }
-  .hint{ font-size:11px; color:var(--mut); margin:4px 0 10px 0; }
-  .fila-cierre{ border:1px solid var(--bx); border-radius:10px; padding:12px; margin-bottom:10px; background:#fafafa; }
-  .fila-cierre .med{ font-weight:700; font-size:13px; margin-bottom:8px; color:#1e293b; }
-  .fila-cierre .med .cant{ font-weight:400; color:var(--mut); font-size:12px; }
-  .grid-fila{ display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; }
-  .aviso-warn{ display:none; margin-top:8px; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; }
-  .info-componentes{ display:none; background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:10px; }
-  .tag-auto{ color:#15803d; font-weight:700; }
-  .dp-ok{ background:#f0fdf4; border:1px solid #86efac; color:#15803d; border-radius:8px; padding:8px 12px; font-size:13px; font-weight:600; }
-  .dp-fijo{ background:#e9ecef; font-weight:700; }
-  .dp-fuera{ border-color:#ef4444 !important; background:#fef2f2 !important; }
-  #msg{ position:fixed; top:14px; right:14px; z-index:9999; max-width:460px; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,0.18); display:none; }
-  #msg.show{ display:block; }
-  #msg.ok{ background:#dcfce7; color:#15803d; border:1px solid #86efac; }
-  #msg.err{ background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; }
-  #diag{ display:none; margin-top:12px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; border-radius:8px; padding:10px 12px; font-size:13px; font-weight:600; white-space:pre-wrap; }
-  .vacio{ font-size:13px; color:var(--mut); padding:8px 0; }
-  @media (max-width: 700px){
-    body{ padding:8px; }
-    .container{ padding:0 4px; }
-    .panel{ padding:10px; }
-    .grid-fila{ grid-template-columns:1fr 1fr; }
+    <style>
+  body {
+    font-family: Arial, sans-serif;
+    background: 
+#f4f6f9;
+    padding: 20px;
+    color: #333;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 800px;
+    margin: auto;
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  }
+  h2 {
+    color: 
+#1a73e8;
+    text-align: center;
+    margin-bottom: 25px;
+    font-size: 26px;
+  }
+  fieldset {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  legend {
+    font-weight: bold;
+    color: 
+#1a73e8;
+    padding: 0 5px;
+    font-size: 18px;
+  }
+  label {
+    font-weight: bold;
+    display: block;
+    margin-top: 15px;
+    font-size: 16px;
+  }
+  input, select {
+    width: 100%;
+    padding: 12px;
+    margin-top: 6px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+  }
+  .grupo-medida {
+    margin-top: 10px;
+  }
+  .fila-medida {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .fila-medida select { flex: 3; }
+  .fila-medida input { flex: 1; }
+
+  .panel-disponibilidad { margin-top: 6px; }
+  .aviso-disp { font-size: 13px; color: #555; margin-bottom: 6px; }
+  .aviso-vacio { font-style: italic; color: #888; }
+  .fila-disp {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    background: 
+#eef6ff;
+    border: 1px solid 
+#bcdfff;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+  .fila-disp span { flex: 1; }
+  .fila-disp .in-tomar { width: 80px; padding: 6px; margin-top: 0; flex: none; }
+
+  .btn-add {
+    background: 
+#34a853;
+    color: white;
+    border: none;
+    padding: 12px 18px;
+    margin-top: 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .btn-eliminar {
+    background: 
+#ea4335;
+    color: white;
+    border: none;
+    padding: 12px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 15px;
+  }
+  button.enviar {
+    background: 
+#1a73e8;
+    color: white;
+    border: none;
+    padding: 16px;
+    width: 100%;
+    margin-top: 15px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 18px;
+    cursor: pointer;
   }
 </style>
-</head>
-<body>
-<div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
-  <b style="color:#0369a1">Envasados:</b>
-  <a class="bf-solo-admin" href="envasado.html">Paso 1 (carga)</a>
-  <a href="envasado-primsec.html">Primario / Secundario</a>
-  <a class="bf-solo-admin" href="envasado-anexo.html">Anexo · Orden Fab. · Registro Histórico</a>
-</div>
-<div class="container">
-  <h1>Envasado Primario / Secundario</h1>
-
-  <!-- ===== F-PRO-018-01: Monitoreo de ENTRADA (diferenciales de presión) ===== -->
-  <div class="panel panel-dp" id="panelDpEntrada">
-    <h2>Diferenciales de presión — Monitoreo de entrada <span style="font-weight:400; color:var(--mut);">(F-PRO-018-01)</span></h2>
-    <div id="dpEntradaOk" class="dp-ok oculto"></div>
-    <div id="dpEntradaForm">
-      <p class="hint">Antes de arrancar el Envasado Primario del día. Criterio de aceptación: cascada entre 4 y 2 Pa.</p>
-      <div class="grid-fila">
-        <div><label>Entrada vestuario (Pa)</label><input id="dpE_vest" type="number" step="0.1" value="4" oninput="dpRevisar_('dpE')"></div>
-        <div><label>Entrada de lavado (Pa)</label><input id="dpE_lav" type="number" step="0.1" value="2" oninput="dpRevisar_('dpE')"></div>
-        <div><label>Entrada de envasado (Pa)</label><input id="dpE_env" type="number" step="0.1" value="2" oninput="dpRevisar_('dpE')"></div>
-        <div><label>Realizado por</label><input class="dp-fijo dp-realizado" value="Miguel Gomez" readonly></div>
-        <div><label>Verificado por</label><input class="dp-fijo dp-verificado" value="Lourdes Deasis" readonly></div>
-        <div style="grid-column:span 2;"><label>Observaciones</label><input id="dpE_obs" type="text" value="Sin anomalías"></div>
-      </div>
-      <div id="dpE_aviso" class="aviso-warn"></div>
-      <button class="btn btn-dp" id="dpE_btn" onclick="dpRegistrarEntrada()">Registrar monitoreo de entrada</button>
+  </head>
+  <body>
+    <div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
+      <b>Envasados:</b>
+      <a href="envasado.html" class="bf-solo-admin">Paso 1 (carga)</a>
+      <a href="envasado-primsec.html">Primario / Secundario</a>
+      <a href="envasado-anexo.html" class="bf-solo-admin">Anexo · Orden Fab. · Registro Histórico</a>
     </div>
-  </div>
+    <div class="container">
+      <h2>Tabla de Envasados</h2>
+      <fieldset>
+        <legend>Datos Iniciales, Lote y Medidas</legend>
 
-  <div class="panel panel-lote">
-    <label>Lote</label>
-    <select id="loteSelect" onchange="cargarDetalle()" disabled>
-      <option value="">Cargando lotes...</option>
-    </select>
-    <p class="hint" id="hintLote">Elegí el lote. Lo que vayas cargando se escribe solo en las hojas del sistema (Envasado Primario y Envasado Secundario "EN CURSO"). El lote se cierra recién al tocar "Finalizar lote", cuando está todo completo.</p>
-  </div>
+        <label>Sistema:</label>
+        <select id="sistema" onchange="actualizarSistema()">
+          <option value="MP">MP (Monopieza)</option>
+          <option value="IBT">IBT (Monopieza Basal Tratado)</option>
+          <option value="IB">IB (Monopieza Basal Pulido)</option>
+          <option value="HI">HI (Hexágono Interno - Sin Tetón)</option>
+          <option value="HI-A">HI-A (Hexágono Interno - Con Tetón)</option>
+          <option value="HE">HE (Hexágono Externo)</option>
+          <option value="CMU">CMU (Compresivo Multi-Unit)</option>
+          <option value="CMU3">CMU3 (Compresivo Multi-Unit C3)</option>
+          <option value="CMHI">CMHI (Cono Morse)</option>
+        </select>
 
-  <div class="panel panel-prim oculto" id="panelPrimario">
-    <h2>Envasado Primario</h2>
-    <div id="pFilas"></div>
-  </div>
+        <label>Número de Lote (solo números):</label>
+        <input type="text" id="loteMp" inputmode="numeric" pattern="[0-9]*"
+               oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+               placeholder="Ej: 1023" required>
 
-  <div class="panel panel-sec oculto" id="panelSecundario">
-    <h2>Envasado Secundario</h2>
-    <div id="sInfoComponentes" class="info-componentes"></div>
-    <div id="sFilas"></div>
-  </div>
+        <label>Producto:</label>
+        <input type="text" id="producto" value="Monopieza" required readonly style="background-color: 
+#e9ecef;">
 
-  <div class="oculto" id="zonaAcciones">
-    <!-- ===== F-PRO-018-01: Monitoreo de SALIDA (se registra al finalizar el lote) ===== -->
-    <div class="panel panel-dp">
-      <h2>Diferenciales de presión — Monitoreo de salida <span style="font-weight:400; color:var(--mut);">(una vez por día, al finalizar el primer lote)</span></h2>
-      <div id="dpSalidaOk" class="dp-ok oculto"></div>
-      <div id="dpSalidaForm">
-      <div class="grid-fila">
-        <div><label>Entrada vestuario (Pa)</label><input id="dpS_vest" type="number" step="0.1" value="4" oninput="dpRevisar_('dpS')"></div>
-        <div><label>Entrada de lavado (Pa)</label><input id="dpS_lav" type="number" step="0.1" value="2" oninput="dpRevisar_('dpS')"></div>
-        <div><label>Entrada de envasado (Pa)</label><input id="dpS_env" type="number" step="0.1" value="2" oninput="dpRevisar_('dpS')"></div>
-        <div><label>Realizado por</label><input class="dp-fijo dp-realizado" value="Miguel Gomez" readonly></div>
-        <div><label>Verificado por</label><input class="dp-fijo dp-verificado" value="Lourdes Deasis" readonly></div>
-        <div style="grid-column:span 2;"><label>Observaciones</label><input id="dpS_obs" type="text" value="Sin anomalías"></div>
-      </div>
-      <div id="dpS_aviso" class="aviso-warn"></div>
-      </div>
+        <label>Medidas y Cantidades:</label>
+        <div id="estadoStock" style="font-size:13px;margin-top:6px;color:#555">
+        </div>
+        <button type="button" class="btn-add" style="background:
+#64748b;padding:8px 12px;font-size:13px" onclick="cargarDisponibilidadSistema(document.getElementById('sistema').value)">↻ Recargar stock</button>
+        <div id="contenedorMedidas">
+          <div class="grupo-medida">
+            <div class="fila-medida">
+              <select class="medida" required onchange="onMedidaChange(this)">
+                <option value="">Seleccione una medida...</option>
+              </select>
+              <input type="number" class="cantidad" placeholder="Cant." min="1" required>
+            </div>
+            <div class="panel-disponibilidad"></div>
+          </div>
+        </div>
+        <button type="button" class="btn-add" onclick="agregarFilaMedida()">+ Añadir otra medida</button>
+
+        <!-- Sección Dinámica para Componentes -->
+        <div id="seccionComponentes" class="seccion-componentes">
+          <label>Componentes (se autocompletan con el total de implantes, sin Ref):</label>
+          <div id="contenedorComponentes"></div>
+          <button type="button" class="btn-add" style="background:
+#0b57d0;" onclick="agregarFilaComponente()">+ Añadir componente</button>
+        </div>
+      </fieldset>
+      <button type="button" class="enviar" id="btnEnviar" onclick="enviarPaso1()">Guardar carga</button>
+      <div id="mensaje"></div>
     </div>
-    <button class="btn" id="btnGuardar" onclick="finalizarLote()">Finalizar lote (Primario + Secundario)</button>
-    <p class="estado-guardado" id="estadoGuardado"></p>
-  </div>
 
-  <div id="diag"></div>
-</div>
+    <script>
+      var listaMedidasPorSistema = {
+        "MP": [
+          "IMPLANTE MONOPIEZA Ø3.0 X 6mm", "IMPLANTE MONOPIEZA Ø3.0 X 8mm", "IMPLANTE MONOPIEZA Ø3.0 X 10mm", "IMPLANTE MONOPIEZA Ø3.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø3.0 X 13mm", "IMPLANTE MONOPIEZA Ø3.0 X 15mm", "IMPLANTE MONOPIEZA Ø3.0 X 18mm", "IMPLANTE MONOPIEZA Ø3.0 X 20mm",
+          "IMPLANTE MONOPIEZA Ø3.5 X 6mm", "IMPLANTE MONOPIEZA Ø3.5 X 8mm", "IMPLANTE MONOPIEZA Ø3.5 X 10mm", "IMPLANTE MONOPIEZA Ø3.5 X 11,5mm", "IMPLANTE MONOPIEZA Ø3.5 X 13mm", "IMPLANTE MONOPIEZA Ø3.5 X 15mm", "IMPLANTE MONOPIEZA Ø3.5 X 18mm", "IMPLANTE MONOPIEZA Ø3.5 X 20mm",
+          "IMPLANTE MONOPIEZA Ø4.0 X 6mm", "IMPLANTE MONOPIEZA Ø4.0 X 8mm", "IMPLANTE MONOPIEZA Ø4.0 X 10mm", "IMPLANTE MONOPIEZA Ø4.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø4.0 X 13mm", "IMPLANTE MONOPIEZA Ø4.0 X 15mm", "IMPLANTE MONOPIEZA Ø4.0 X 18mm", "IMPLANTE MONOPIEZA Ø4.0 X 20mm",
+          "IMPLANTE MONOPIEZA Ø4.5X 6mm", "IMPLANTE MONOPIEZA Ø4.5X 8mm", "IMPLANTE MONOPIEZA Ø4.5X 10mm", "IMPLANTE MONOPIEZA Ø4.5X 11,5mm", "IMPLANTE MONOPIEZA Ø4.5X 13mm", "IMPLANTE MONOPIEZA Ø4.5X 15mm", "IMPLANTE MONOPIEZA Ø4.5X 18mm", "IMPLANTE MONOPIEZA Ø4.5X 20mm",
+          "IMPLANTE MONOPIEZA Ø5.0 X 6mm", "IMPLANTE MONOPIEZA Ø5.0 X 8mm", "IMPLANTE MONOPIEZA Ø5.0 X 10mm", "IMPLANTE MONOPIEZA Ø5.0 X 11,5mm", "IMPLANTE MONOPIEZA Ø5.0 X 13mm",
+          "IMPLANTE MONOPIEZA Ø5.5 X 6mm", "IMPLANTE MONOPIEZA Ø5.5 X 8mm", "IMPLANTE MONOPIEZA Ø5.5 X 10mm", "IMPLANTE MONOPIEZA Ø5.5 X 11,5mm", "IMPLANTE MONOPIEZA Ø5.5 X 13mm"
+        ],
+        "IBT": [
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø3.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 18mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 21mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 23mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø4.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 9mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 12mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 15mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø5.5 X 18mm",
+          "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø6.5 X 10mm", "IMPLANTE MONOPIEZA BASAL CON TRATAMIENTO Ø6.5 X 12mm"
+        ],
+        "IB": [
+          "IMPLANTE MONOPIEZA BASAL Ø3.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 18mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 21mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 23mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 24mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 26mm", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL Ø3.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL Ø3.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL Ø4.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 18mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 21mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 23mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 24mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 26mm", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 28mm",
+          "IMPLANTE MONOPIEZA BASAL Ø4.5 X 24mm C14", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 26mm C16", "IMPLANTE MONOPIEZA BASAL Ø4.5 X 28mm C18",
+          "IMPLANTE MONOPIEZA BASAL Ø5.5 X 9mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 12mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 15mm", "IMPLANTE MONOPIEZA BASAL Ø5.5 X 18mm",
+          "IMPLANTE MONOPIEZA BASAL Ø6.5 X 10mm", "IMPLANTE MONOPIEZA BASAL Ø6.5 X 12mm"
+        ],
+        "HI": [
+          "IMPLANTE HEXAGONO INTERNO Ø3.30 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø3.75 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø4.2 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø5.0 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 16mm"
+        ],
+        "HI-A": [
+          "IMPLANTE HEXAGONO INTERNO Ø3.30 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.30 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø3.75 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø3.75 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø4.2 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø4.2 X 16mm",
+          "IMPLANTE HEXAGONO INTERNO Ø5.0 X 6,5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 8mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 10mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 13mm", "IMPLANTE HEXAGONO INTERNO Ø5.0 X 16mm"
+        ],
+        "HE": [
+          "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.30 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø3.75 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 6mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø4.0 X 15mm",
+          "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 8.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 10mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 11.5mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 13mm", "IMPLANTE HEXÁGONO EXTERNO Ø5.0 X 15mm"
+        ],
+        "CMU": [
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 13mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 15mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 18mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 20mm",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 6mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 8mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 10mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 11,5mm", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 13mm"
+        ],
+        "CMU3": [
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø3.5 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø4.5 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 13mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 15mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 18mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.0 X 20mm C3",
+          "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 6mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 8mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 10mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 11,5mm C3", "IMPLANTE COMPRESIVO MULTIUNIT Ø5.5 X 13mm C3"
+        ],
+        "CMHI": [
+          "IMPLANTE CONO MORSE Ø3.30 X 8mm", "IMPLANTE CONO MORSE Ø3.30 X 10mm", "IMPLANTE CONO MORSE Ø3.30 X 11.5mm", "IMPLANTE CONO MORSE Ø3.30 X 13mm", "IMPLANTE CONO MORSE Ø3.30 X 16mm",
+          "IMPLANTE CONO MORSE Ø3.75 X 8mm", "IMPLANTE CONO MORSE Ø3.75 X 10mm", "IMPLANTE CONO MORSE Ø3.75 X 11.5mm", "IMPLANTE CONO MORSE Ø3.75 X 13mm", "IMPLANTE CONO MORSE Ø3.75 X 16mm",
+          "IMPLANTE CONO MORSE Ø4.2 X 8mm", "IMPLANTE CONO MORSE Ø4.2 X 10mm", "IMPLANTE CONO MORSE Ø4.2 X 11.5mm", "IMPLANTE CONO MORSE Ø4.2 X 13mm", "IMPLANTE CONO MORSE Ø4.2 X 16mm",
+          "IMPLANTE CONO MORSE Ø5.0 X 8mm", "IMPLANTE CONO MORSE Ø5.0 X 10mm", "IMPLANTE CONO MORSE Ø5.0 X 11.5mm", "IMPLANTE CONO MORSE Ø5.0 X 13mm", "IMPLANTE CONO MORSE Ø5.0 X 16mm"
+        ]
+      };
 
-<div id="msg"></div>
+      var componentesPorSistema = {
+        "HE": ["PILAR MULTIFUNCIÓN 3.4", "PILAR MULTIFUNCIÓN 4.1", "PILAR MULTIFUNCIÓN 5.0", "TAPA DE CIERRE 3.4", "TAPA DE CIERRE 4.1", "TAPA DE CIERRE 5.0", "TORNILLO CUADRADO DE FIJACIÓN 2X0,4"],
+        "HI": ["PILAR MULTIFUNCIÓN", "TAPA DE CIERRE", "TORNILLO DE FIJACIÓN CUADRADO"],
+        "HI-A": ["TAPA DE CIERRE"]
+      };
 
-<script>
-  function mostrarDiag(texto) {
-    var d = document.getElementById('diag');
-    d.style.display = 'block';
-    d.textContent = (d.textContent ? d.textContent + '\n' : '') + texto;
-  }
-  window.onerror = function (msg, src, linea) {
-    mostrarDiag('Error en la página: ' + msg + ' (línea ' + linea + ')');
-    return false;
-  };
+      var nombresProductos = {
+        "MP": "Monopieza",
+        "IBT": "Monopieza Basal Tratado",
+        "IB": "Monopieza Basal Pulido",
+        "HI": "Hexágono Interno",
+        "HI-A": "Hexágono Interno",
+        "HE": "Hexágono Externo",
+        "CMU": "Compresivo Multi-Unit",
+        "CMU3": "Compresivo Multi-Unit C3",
+        "CMHI": "Cono Morse"
+      };
 
-  var DETALLE = [];
-  var SEC_GUARDADO = null;   // lo que ya estaba escrito en el Secundario EN CURSO
-  var LOTES = [];
-  var LOTE_INICIAL = new URLSearchParams(location.search).get('lote') || '';
+      // Disponibilidad real de Sala Blanca para el sistema elegido en este
+      // momento: { "<medida>": [{lote, referencia, disponible}, ...], ... }
+      // Se recarga cada vez que cambia el Sistema (obtenerDisponibilidadSalaBlanca
+      // del lado del servidor).
+      var disponibilidadActual = {};
 
-  /* ---------- Guardado en vivo ---------- */
-  var CLAVE_ACTUAL = '';
-  var FINALIZANDO = false;
-  var timerGuardado = null;
-  var guardadoEnVuelo = false;
-  var guardadoPendiente = null;
-  var DEMORA_GUARDADO = 1500; // ms después de dejar de tipear
-
-  function textoError_(err) { return (err && err.message) ? err.message : String(err); }
-  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
-
-  function mostrarMsg(texto, ok) {
-    var el = document.getElementById('msg');
-    el.textContent = texto;
-    el.className = 'show ' + (ok ? 'ok' : 'err');
-    clearTimeout(mostrarMsg._t);
-    mostrarMsg._t = setTimeout(function () { el.className = ''; }, ok ? 6000 : 9000);
-  }
-
-  function estadoGuardado(texto, clase) {
-    var el = document.getElementById('estadoGuardado');
-    el.textContent = texto || '';
-    el.className = 'estado-guardado' + (clase ? ' ' + clase : '');
-  }
-
-  /* =====================================================================
-   * F-PRO-018-01 — Diferenciales de presión
-   * Entrada: una vez por día, antes de poder elegir un lote.
-   * Salida: UNA vez por día, junto con el primer "Finalizar lote" del día.
-   *   04/11/2026: si ya se registró hoy no se vuelve a pedir; los lotes que se
-   *   finalizan después solo se suman a la columna "Lotes" de la salida de hoy.
-   * ===================================================================== */
-  var DP_MIN = 2, DP_MAX = 4, DP_OBS_OK = 'Sin anomalías';
-  var DP_ENTRADA_FECHA = '';   // fecha (dd/MM/yyyy) en que se confirmó la entrada
-  var DP_SALIDA = null;        // salida de hoy ya registrada ({fecha, hora, ...}) o null
-
-  function hoyTxt_() {
-    var d = new Date();
-    return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
-  }
-  function dpEntradaOk_() { return DP_ENTRADA_FECHA === hoyTxt_(); }
-
-  // Lee los 3 valores de un bloque ('dpE' o 'dpS'). Devuelve { datos, error }
-  function dpLeer_(pref) {
-    var ids = [['vest', 'Entrada vestuario'], ['lav', 'Entrada de lavado'], ['env', 'Entrada de envasado']];
-    var vals = [], fuera = [], error = '';
-    ids.forEach(function (p) {
-      var el = document.getElementById(pref + '_' + p[0]);
-      var t = String(el.value).replace(',', '.').trim();
-      var n = Number(t);
-      if (t === '' || !isFinite(n)) { if (!error) error = 'Falta el valor de ' + p[1] + '.'; vals.push(''); return; }
-      if (n < DP_MIN || n > DP_MAX) fuera.push(p[1] + ' (' + n + ' Pa)');
-      vals.push(n);
-    });
-    var obs = document.getElementById(pref + '_obs').value.trim();
-    if (!error && fuera.length && (!obs || obs.toLowerCase() === DP_OBS_OK.toLowerCase())) {
-      error = 'Fuera de criterio (2 a 4 Pa): ' + fuera.join(', ') + '. Escribí en Observaciones qué pasó.';
-    }
-    return {
-      error: error,
-      datos: { vestuario: vals[0], lavado: vals[1], envasado: vals[2], observaciones: obs || DP_OBS_OK }
-    };
-  }
-
-  // Marca en rojo los valores fuera de 2–4 Pa y muestra el aviso
-  function dpRevisar_(pref) {
-    var fuera = [];
-    [['vest', 'Entrada vestuario'], ['lav', 'Entrada de lavado'], ['env', 'Entrada de envasado']].forEach(function (p) {
-      var el = document.getElementById(pref + '_' + p[0]);
-      var t = String(el.value).replace(',', '.').trim(), n = Number(t);
-      var mal = t !== '' && isFinite(n) && (n < DP_MIN || n > DP_MAX);
-      el.classList.toggle('dp-fuera', mal);
-      if (mal) fuera.push(p[1] + ' (' + n + ' Pa)');
-    });
-    var av = document.getElementById(pref + '_aviso');
-    av.style.display = fuera.length ? 'block' : 'none';
-    av.textContent = fuera.length ? '⚠ Fuera del criterio de aceptación (2 a 4 Pa): ' + fuera.join(', ') + '. Indicá el motivo en Observaciones.' : '';
-  }
-
-  function dpMostrarEntrada_(e) {
-    if (e) {
-      DP_ENTRADA_FECHA = e.fecha || hoyTxt_();
-      document.getElementById('dpEntradaForm').classList.add('oculto');
-      var ok = document.getElementById('dpEntradaOk');
-      ok.classList.remove('oculto');
-      ok.textContent = '✓ Monitoreo de entrada registrado hoy a las ' + e.hora + ' — Vestuario ' + e.vestuario +
-        ' Pa · Lavado ' + e.lavado + ' Pa · Envasado ' + e.envasado + ' Pa (' + (e.observaciones || DP_OBS_OK) + ')';
-      document.getElementById('loteSelect').disabled = false;
-    } else {
-      DP_ENTRADA_FECHA = '';
-      document.getElementById('dpEntradaForm').classList.remove('oculto');
-      document.getElementById('dpEntradaOk').classList.add('oculto');
-      document.getElementById('loteSelect').disabled = true;
-    }
-  }
-
-  // Salida de hoy: si ya está, se muestra como registrada y no se vuelve a pedir
-  function dpSalidaOk_() { return !!(DP_SALIDA && DP_SALIDA.fecha === hoyTxt_()); }
-  function dpMostrarSalida_(s) {
-    DP_SALIDA = (s && s.fecha === hoyTxt_()) ? s : null;
-    var ok = document.getElementById('dpSalidaOk'), form = document.getElementById('dpSalidaForm');
-    if (DP_SALIDA) {
-      form.classList.add('oculto');
-      ok.classList.remove('oculto');
-      ok.textContent = '✓ Monitoreo de salida de hoy ya registrado a las ' + s.hora + ' — Vestuario ' + s.vestuario +
-        ' Pa · Lavado ' + s.lavado + ' Pa · Envasado ' + s.envasado + ' Pa. No hace falta cargarlo de nuevo: este lote se suma solo.';
-    } else {
-      form.classList.remove('oculto');
-      ok.classList.add('oculto');
-    }
-  }
-
-  function dpCargarEstado_(callback) {
-    google.script.run.withSuccessHandler(function (est) {
-      dpMostrarEntrada_(est && est.entrada);
-      dpMostrarSalida_(est && est.salida);
-      if (est && est.realizadoPor) document.querySelectorAll('.dp-realizado').forEach(function (i) { i.value = est.realizadoPor; });
-      if (est && est.verificadoPor) document.querySelectorAll('.dp-verificado').forEach(function (i) { i.value = est.verificadoPor; });
-      if (callback) callback();
-    }).withFailureHandler(function (err) {
-      mostrarDiag('dpEstadoHoy -> Error: ' + textoError_(err));
-      dpMostrarEntrada_(null);
-      if (callback) callback();
-    }).dpEstadoHoy();
-  }
-
-  function dpRegistrarEntrada() {
-    var r = dpLeer_('dpE');
-    if (r.error) { mostrarMsg(r.error, false); return; }
-    var btn = document.getElementById('dpE_btn');
-    btn.disabled = true; btn.textContent = 'Registrando...';
-    google.script.run.withSuccessHandler(function (res) {
-      btn.disabled = false; btn.textContent = 'Registrar monitoreo de entrada';
-      dpMostrarEntrada_(res && res.estado && res.estado.entrada);
-      mostrarMsg((res && res.msg) || 'Monitoreo de entrada registrado.', true);
-    }).withFailureHandler(function (err) {
-      btn.disabled = false; btn.textContent = 'Registrar monitoreo de entrada';
-      mostrarMsg(textoError_(err), false);
-    }).dpRegistrarEntrada(r.datos);
-  }
-
-  // Si la pantalla quedó abierta de un día a otro, vuelve a pedir la entrada
-  function dpExigirEntrada_() {
-    if (dpEntradaOk_()) return true;
-    dpCargarEstado_();
-    mostrarMsg('Primero registrá el monitoreo de entrada de hoy (diferenciales de presión).', false);
-    window.scrollTo(0, 0);
-    return false;
-  }
-
-  function buscarLotePorTexto_(lista, texto) {
-    if (!texto) return null;
-    var t = String(texto).trim().toUpperCase();
-    for (var i = 0; i < lista.length; i++) {
-      var completo = (lista[i].sistema + '-' + lista[i].lote).toUpperCase();
-      if (completo === t || String(lista[i].lote).toUpperCase() === t) return lista[i];
-    }
-    return null;
-  }
-
-  /* ---------- Lista de lotes (todo lo que todavía no tiene Secundario finalizado) ---------- */
-  function cargarLotes(callback) {
-    var sel = document.getElementById('loteSelect');
-    google.script.run.withSuccessHandler(function (lista) {
-      LOTES = lista || [];
-      renderLotes();
-      if (callback) callback(LOTES);
-    }).withFailureHandler(function (err) {
-      var t = 'Error: ' + textoError_(err);
-      sel.innerHTML = '<option value="">' + t + '</option>';
-      mostrarDiag('obtenerLotesEnvasadoCombinado -> ' + t);
-    }).obtenerLotesEnvasadoCombinado();
-  }
-
-  function renderLotes() {
-    var sel = document.getElementById('loteSelect');
-    var previo = sel.value;
-    if (!LOTES.length) {
-      sel.innerHTML = '<option value="">No hay lotes pendientes</option>';
-      limpiar();
-      return;
-    }
-    sel.innerHTML = '<option value="">Elegí un lote...</option>' + LOTES.map(function (l) {
-      return '<option value="' + esc(l.clave) + '">Lote ' + esc(l.sistema + '-' + l.lote) + ' - ' + esc(l.producto) + ' (' + esc(l.fecha) + ')' +
-        (l.enCurso ? ' — en curso' : '') + '</option>';
-    }).join('');
-    if (previo && LOTES.some(function (l) { return l.clave === previo; })) sel.value = previo;
-  }
-
-  function limpiar() {
-    DETALLE = [];
-    SEC_GUARDADO = null;
-    CLAVE_ACTUAL = '';
-    clearTimeout(timerGuardado); timerGuardado = null;
-    document.getElementById('pFilas').innerHTML = '';
-    document.getElementById('sFilas').innerHTML = '';
-    document.getElementById('sInfoComponentes').style.display = 'none';
-    estadoGuardado('');
-    ['panelPrimario', 'panelSecundario', 'zonaAcciones'].forEach(function (id) { document.getElementById(id).classList.add('oculto'); });
-  }
-
-  function cargarDetalle() {
-    // si quedó algo sin escribir del lote anterior, se escribe antes de cambiar
-    if (timerGuardado) { clearTimeout(timerGuardado); timerGuardado = null; guardarAhora(); }
-
-    var clave = document.getElementById('loteSelect').value;
-    limpiar();
-    if (!clave) return;
-    if (!dpExigirEntrada_()) { document.getElementById('loteSelect').value = ''; return; }
-    document.getElementById('panelPrimario').classList.remove('oculto');
-    document.getElementById('pFilas').innerHTML = '<p class="vacio">Cargando...</p>';
-    google.script.run.withSuccessHandler(function (det) {
-      if (document.getElementById('loteSelect').value !== clave) return;
-      DETALLE = (det && det.filas) || [];
-      SEC_GUARDADO = (det && det.secundario) || null;
-      try { renderPrimario(); renderSecundario(); }
-      catch (e) { mostrarDiag('Error mostrando el lote: ' + e.message); return; }
-      CLAVE_ACTUAL = clave;
-      var l = LOTES.filter(function (x) { return x.clave === clave; })[0];
-      estadoGuardado(l && l.enCurso
-        ? 'Se cargó lo que ya estaba escrito en la planilla. Los cambios se guardan solos.'
-        : 'Los cambios se guardan solos en la planilla mientras cargás.');
-    }).withFailureHandler(function (err) {
-      document.getElementById('pFilas').innerHTML = '';
-      mostrarDiag('obtenerDetalleLoteEditable -> Error: ' + textoError_(err));
-    }).obtenerDetalleLoteEditable(clave);
-  }
-
-  /* ---------- PRIMARIO ---------- */
-  function renderPrimario() {
-    var cont = document.getElementById('pFilas');
-    if (!DETALLE.length) { cont.innerHTML = '<p class="vacio">Este lote no tiene medidas cargadas.</p>'; return; }
-    var BLOQ = ' readonly style="background:#e9ecef;"';
-    var html = '';
-    DETALLE.forEach(function (f) {
-      var refSel = f.ref || f.refSugerida || '';
-      var opcionesRef = '<option value=""' + (refSel === '' ? ' selected' : '') + '>-</option>';
-      for (var n = 0; n <= 7; n++) {
-        var v = f.esComponente ? ('0' + n) : String(n);
-        opcionesRef += '<option value="' + v + '"' + (refSel === v ? ' selected' : '') + '>' + v + '</option>';
+      // Sala Blanca ya guarda el lote como "Lote 0932" (con el prefijo puesto),
+      // así que si acá le volvíamos a agregar "Lote " a mano quedaba
+      // "Lote Lote 0932". Esta función arma el texto una sola vez, tenga o
+      // no el prefijo puesto el dato que vino del servidor.
+      function etiquetaLote_(lote) {
+        var s = String(lote == null ? '' : lote).trim();
+        if (!s) return '';
+        return /^lote\b/i.test(s) ? s : ('Lote ' + s);
       }
-      var ofProdSug = f.loteSugerido || '', ofLavSug = f.ofLavadoSugerido || '';
-      var ofProd = ofProdSug || f.ofProd || '';
-      var ofLav = ofLavSug || f.ofLavado || '';
-      var operario = f.operario || 'Miguel Gomez';
-      html +=
-        '<div class="fila-cierre prim-card" data-fila="' + esc(f.fila) + '" data-componente="' + (f.esComponente ? '1' : '0') + '">' +
-          '<div class="med">' + esc(f.medida) + ' <span class="cant">(' + esc(f.cantidad) + ' u.)</span></div>' +
-          '<div class="grid-fila">' +
-            '<div><label>O.F Prod.' + (ofProdSug ? ' <span class="tag-auto">· de Sala Blanca</span>' : '') + '</label><input class="in-ofProd" type="text" value="' + esc(ofProd) + '"' + (ofProdSug ? BLOQ : '') + '></div>' +
-            '<div><label>O.F Lav. Final' + (ofLavSug ? ' <span class="tag-auto">· de Lavado Final</span>' : '') + '</label><input class="in-ofLavado" type="text" value="' + esc(ofLav) + '"' + (ofLavSug ? BLOQ : '') + '></div>' +
-            (f.esComponente
-              ? '<div><label>Lote Tapón</label><input class="in-loteTap" type="text" value="No aplica" disabled></div>' +
-                '<div><label>Ref</label><select class="in-referencia">' + opcionesRef + '</select></div>'
-              : '<div><label>Lote Tapón</label><input class="in-loteTap" type="text" value="' + esc(f.loteTap || '') + '"></div>' +
-                '<div><label>Ref (OP-XXXX-N)' + (!f.ref && f.refSugerida ? ' <span class="tag-auto">· autocompletada</span>' : '') + '</label><select class="in-referencia">' + opcionesRef + '</select></div>') +
-            '<div><label>Operario / Responsable</label><input class="in-operario" type="text" value="' + esc(operario) + '" placeholder="- (si no hay)"></div>' +
-          '</div>' +
-        '</div>';
-    });
-    cont.innerHTML = html;
-  }
 
-  /* ---------- SECUNDARIO ---------- */
-  function renderSecundario() {
-    var medidas = DETALLE.filter(function (f) { return !f.esComponente; });
-    var componentes = DETALLE.filter(function (f) { return f.esComponente; });
-    document.getElementById('panelSecundario').classList.remove('oculto');
-
-    var info = document.getElementById('sInfoComponentes');
-    if (componentes.length) {
-      info.style.display = 'block';
-      info.textContent = 'Componentes del lote (' + componentes.map(function (c) { return c.medida + ': ' + c.cantidad; }).join(', ') + ') — pasan solos al Secundario con la cantidad del Primario.';
-    }
-
-    var cont = document.getElementById('sFilas');
-    if (!medidas.length) {
-      cont.innerHTML = '<p class="vacio">Este lote no tiene medidas para Envasado Secundario.</p>';
-      return;
-    }
-    cont.innerHTML = medidas.map(function (f, i) {
-      var g = (SEC_GUARDADO && SEC_GUARDADO[i] && SEC_GUARDADO[i].medida === String(f.medida).trim()) ? SEC_GUARDADO[i] : null;
-      var cant = (g && g.cantidad !== '') ? g.cantidad : f.cantidad;
-      var oper = (g && g.operario) ? g.operario : 'Miguel Gomez';
-      var obs = g ? (g.observaciones || '') : '';
-      var difiere = Number(cant) !== Number(f.cantidad);
-      return '' +
-        '<div class="fila-cierre sec-card">' +
-          '<div class="med">' + esc(f.medida) + ' <span class="cant">(Primario: ' + esc(f.cantidad) + ' u.)</span></div>' +
-          '<div class="grid-fila">' +
-            '<div><label>Cantidad</label><input class="in-cantidad" type="number" min="0" value="' + esc(cant) + '" data-esperado="' + esc(f.cantidad) + '" oninput="revisarCantidad(this)"></div>' +
-            '<div><label>Operario</label><input class="in-operario" type="text" value="' + esc(oper) + '"></div>' +
-            '<div style="grid-column:span 2;"><label>Observaciones</label><input class="in-observaciones" type="text" value="' + esc(obs) + '" placeholder="OK, o el motivo si difiere"></div>' +
-          '</div>' +
-          '<div class="aviso-warn aviso-cantidad"' + (difiere ? ' style="display:block"' : '') + '>La cantidad difiere de la del Primario.</div>' +
-          '<input type="hidden" class="in-medida-nombre" value="' + esc(f.medida) + '">' +
-        '</div>';
-    }).join('');
-    document.getElementById('zonaAcciones').classList.remove('oculto');
-  }
-
-  function revisarCantidad(input) {
-    var aviso = input.closest('.fila-cierre').querySelector('.aviso-cantidad');
-    aviso.style.display = (Number(input.value) !== Number(input.dataset.esperado)) ? 'block' : 'none';
-  }
-
-  /* ---------- Lectura de la pantalla ---------- */
-  function leerPrimario() {
-    var filas = [];
-    document.querySelectorAll('#pFilas .prim-card').forEach(function (card) {
-      var esComp = card.dataset.componente === '1';
-      filas.push({
-        fila: card.dataset.fila,
-        esComponente: esComp,
-        ofProd: card.querySelector('.in-ofProd').value.trim(),
-        ofLavado: card.querySelector('.in-ofLavado').value.trim(),
-        loteTap: esComp ? '' : card.querySelector('.in-loteTap').value.trim(),
-        referencia: card.querySelector('.in-referencia').value,
-        operario: card.querySelector('.in-operario').value.trim()
-      });
-    });
-    return filas;
-  }
-
-  function leerSecundario() {
-    var filas = [];
-    document.querySelectorAll('#sFilas .sec-card').forEach(function (card) {
-      filas.push({
-        medida: card.querySelector('.in-medida-nombre').value,
-        cantidad: card.querySelector('.in-cantidad').value,
-        operario: card.querySelector('.in-operario').value.trim(),
-        observaciones: card.querySelector('.in-observaciones').value.trim()
-      });
-    });
-    return filas;
-  }
-
-  /* ---------- Guardado en vivo en la planilla ---------- */
-  function programarGuardado(ev) {
-    if (!CLAVE_ACTUAL || FINALIZANDO) return;
-    clearTimeout(timerGuardado);
-    estadoGuardado('Escribiendo en la planilla...', 'guardando');
-    timerGuardado = setTimeout(function () { timerGuardado = null; guardarAhora(); }, DEMORA_GUARDADO);
-  }
-
-  function guardarAhora() {
-    if (!CLAVE_ACTUAL || FINALIZANDO) return;
-    clearTimeout(timerGuardado); timerGuardado = null;
-    var payload = { clave: CLAVE_ACTUAL, primario: leerPrimario(), secundario: leerSecundario() };
-    if (guardadoEnVuelo) { guardadoPendiente = payload; return; }
-    enviarAvance_(payload);
-  }
-
-  function enviarAvance_(payload) {
-    guardadoEnVuelo = true;
-    google.script.run.withSuccessHandler(function (r) {
-      guardadoEnVuelo = false;
-      if (r && r.ocupado) {
-        // el servidor estaba ocupado (por ejemplo finalizando otro lote): se reintenta
-        if (!guardadoPendiente) guardadoPendiente = payload;
-        setTimeout(siguienteAvance_, 3000);
-        return;
+      // Cuando SÍ hay disponibilidad en Sala Blanca, el campo "Cant." se
+      // completa solo sumando lo que se toma de cada lote.
+      function bloquearCantidadAuto_(inputCantidad) {
+        inputCantidad.value = '';
+        inputCantidad.readOnly = true;
+        inputCantidad.placeholder = 'Se completa solo ↑';
+        inputCantidad.style.backgroundColor = '
+#e9ecef';
       }
-      if (payload.clave === CLAVE_ACTUAL) {
-        if (r && r.finalizado) {
-          estadoGuardado(r.mensaje, '');
+
+      // Cuando NO hay disponibilidad registrada (o todavía no se eligió
+      // medida), el campo "Cant." vuelve a ser editable para cargarlo a mano.
+      function habilitarCantidadManual_(inputCantidad) {
+        inputCantidad.readOnly = false;
+        inputCantidad.placeholder = 'Cant.';
+        inputCantidad.style.backgroundColor = '';
+      }
+
+      function actualizarSistema() {
+        var sistemaSeleccionado = document.getElementById("sistema").value;
+        var inputProducto = document.getElementById("producto");
+        if (inputProducto && nombresProductos[sistemaSeleccionado]) {
+          inputProducto.value = nombresProductos[sistemaSeleccionado];
+        }
+
+        var medidas = listaMedidasPorSistema[sistemaSeleccionado] || [];
+        var selectsMedidas = document.querySelectorAll(".medida");
+
+        selectsMedidas.forEach(function (selectMedidas) {
+          var valorActual = selectMedidas.value;
+          selectMedidas.innerHTML = '<option value="">Seleccione una medida...</option>';
+          medidas.forEach(function (medida) {
+            var option = document.createElement("option");
+            option.value = medida;
+            option.text = medida;
+            selectMedidas.appendChild(option);
+          });
+          selectMedidas.value = valorActual;
+        });
+
+        var secComp = document.getElementById("seccionComponentes");
+        var contComp = document.getElementById("contenedorComponentes");
+        contComp.innerHTML = "";
+        if (componentesPorSistema[sistemaSeleccionado]) {
+          secComp.style.display = "block";
         } else {
-          estadoGuardado('✓ Guardado en la planilla a las ' + r.hora + ' (' + r.hojaPrim + (r.hojaSec ? ' / ' + r.hojaSec : '') + ')', 'ok');
+          secComp.style.display = "none";
+        }
+
+        cargarDisponibilidadSistema(sistemaSeleccionado);
+      }
+
+      // Trae de Sala Blanca (Trazabilidad) lo disponible para este sistema y
+      // vuelve a pintar el panel de disponibilidad de cualquier fila que ya
+      // tenga una medida elegida. Se le manda al servidor la lista de medidas
+      // TAL CUAL figura acá, así la respuesta viene con los mismos nombres
+      // que el desplegable (antes en IBT no coincidían y nunca mostraba stock).
+      function claveMedida_(s) {
+        return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9.,]/g, '');
+      }
+
+      function cargarDisponibilidadSistema(sistema) {
+        disponibilidadActual = {};
+        var est = document.getElementById('estadoStock');
+        est.style.color = '#555';
+        est.textContent = 'Cargando stock de Sala Blanca para ' + sistema + '…';
+        try {
+          google.script.run
+            .withSuccessHandler(function (mapa) {
+              if (document.getElementById('sistema').value !== sistema) return; // cambió el sistema mientras cargaba
+              // Se empareja por la medida "limpia" (solo letras, números, punto y coma):
+              // en el viaje a GitHub el "Ø" puede llegar cambiado (ej. "Ã˜") y entonces
+              // los nombres no coincidían letra por letra aunque fueran la misma medida.
+              var porClave = {};
+              Object.keys(mapa || {}).forEach(function (k) { porClave[claveMedida_(k)] = mapa[k]; });
+              disponibilidadActual = {};
+              (listaMedidasPorSistema[sistema] || []).forEach(function (m) {
+                var v = porClave[claveMedida_(m)];
+                if (v) disponibilidadActual[m] = v;
+              });
+              var conStock = Object.keys(disponibilidadActual).filter(function (k) { return (disponibilidadActual[k] || []).length; });
+              est.style.color = conStock.length ? '
+#15803d' : '
+#92400e';
+              est.textContent = conStock.length
+                ? 'Stock de Sala Blanca cargado: ' + conStock.length + ' medida(s) de ' + sistema + ' con stock.'
+                : 'El servidor respondió, pero no hay stock en Sala Blanca para ' + sistema + '.';
+              document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
+                var sel = grupo.querySelector('.medida');
+                if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
+              });
+            })
+            .withFailureHandler(function (err) {
+              est.style.color = '
+#b91c1c';
+              est.textContent = 'No se pudo leer el stock de Sala Blanca: ' + ((err && err.message) || err);
+            })
+            .obtenerDisponibilidadSalaBlanca(sistema, listaMedidasPorSistema[sistema] || []);
+        } catch (e) {
+          est.style.color = '
+#b91c1c';
+          est.textContent = 'No se pudo conectar con el servidor: ' + e.message;
         }
       }
-      siguienteAvance_();
-    }).withFailureHandler(function (err) {
-      guardadoEnVuelo = false;
-      if (payload.clave === CLAVE_ACTUAL) estadoGuardado('No se pudo escribir en la planilla: ' + textoError_(err), 'err');
-      siguienteAvance_();
-    }).guardarAvanceEnvasado(payload);
-  }
 
-  function siguienteAvance_() {
-    if (guardadoEnVuelo) return;
-    if (!guardadoPendiente || FINALIZANDO) { guardadoPendiente = null; return; }
-    var p = guardadoPendiente;
-    guardadoPendiente = null;
-    enviarAvance_(p);
-  }
-
-  /* ---------- FINALIZAR ---------- */
-  function finalizarLote() {
-    var clave = document.getElementById('loteSelect').value;
-    if (!clave) { mostrarMsg('Elegí un lote primero.', false); return; }
-    if (!dpExigirEntrada_()) return;
-
-    var faltaPrim = false;
-    var filasPrimario = leerPrimario().map(function (f) {
-      if (!f.ofProd || !f.ofLavado || (!f.esComponente && !f.loteTap)) faltaPrim = true;
-      return { fila: f.fila, ofProd: f.ofProd, ofLavado: f.ofLavado, loteTap: f.loteTap, referencia: f.referencia, operario: f.operario || '-' };
-    });
-    if (faltaPrim) { mostrarMsg('Primario: faltan O.F Prod., O.F Lav. Final o Lote Tapón. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
-
-    var faltaSec = false;
-    var filasSecundario = leerSecundario().map(function (f) {
-      if (f.cantidad === '' || !f.operario) faltaSec = true;
-      return f;
-    });
-    if (!filasSecundario.length) { mostrarMsg('No hay medidas de Secundario para guardar.', false); return; }
-    if (faltaSec) { mostrarMsg('Secundario: falta cantidad u operario. Lo cargado ya está en la planilla; el lote sigue abierto.', false); return; }
-
-    // Monitoreo de salida (F-PRO-018-01): una vez por día. Si ya está registrado hoy,
-    // no se piden los valores de nuevo: solo se suma este lote a la salida de hoy.
-    var salida;
-    if (dpSalidaOk_()) {
-      salida = { datos: { soloLote: true } };
-    } else {
-      salida = dpLeer_('dpS');
-      if (salida.error) { mostrarMsg('Monitoreo de salida: ' + salida.error, false); return; }
-    }
-    var l = LOTES.filter(function (x) { return x.clave === clave; })[0];
-    salida.datos.lote = l ? (l.sistema + '-' + l.lote) : clave;
-
-    clearTimeout(timerGuardado); timerGuardado = null;
-    guardadoPendiente = null;
-    FINALIZANDO = true;
-
-    var btn = document.getElementById('btnGuardar');
-    btn.disabled = true;
-    btn.textContent = 'Finalizando...';
-    google.script.run.withSuccessHandler(function (res) {
-      btn.textContent = 'Registrando monitoreo de salida...';
-      google.script.run.withSuccessHandler(function (rs) {
-        btn.disabled = false;
-        btn.textContent = 'Finalizar lote (Primario + Secundario)';
-        FINALIZANDO = false;
-        mostrarMsg(res + ' · ' + ((rs && rs.msg) || 'Monitoreo de salida registrado.'), true);
-        document.getElementById('loteSelect').value = '';
-        limpiar();
-        dpCargarEstado_();   // la salida de hoy queda como registrada (no se vuelve a pedir)
-        cargarLotes();
-      }).withFailureHandler(function (err) {
-        btn.disabled = false;
-        btn.textContent = 'Finalizar lote (Primario + Secundario)';
-        FINALIZANDO = false;
-        mostrarMsg(res + ' — PERO no se pudo registrar el monitoreo de salida: ' + textoError_(err), false);
-        mostrarDiag('dpRegistrarSalida -> ' + textoError_(err) + ' (el lote SÍ quedó finalizado; avisá a técnica para cargar la salida a mano)');
-        document.getElementById('loteSelect').value = '';
-        limpiar();
-        cargarLotes();
-      }).dpRegistrarSalida(salida.datos);
-    }).withFailureHandler(function (err) {
-      btn.disabled = false;
-      btn.textContent = 'Finalizar lote (Primario + Secundario)';
-      FINALIZANDO = false;
-      mostrarMsg(textoError_(err), false);
-      mostrarDiag('finalizarEnvasadoCombinado -> ' + textoError_(err));
-      cargarLotes();
-    }).finalizarEnvasadoCombinado({ clave: clave, filasPrimario: filasPrimario, filasSecundario: filasSecundario });
-  }
-
-  window.onload = function () {
-    ['panelPrimario', 'panelSecundario'].forEach(function (id) {
-      var p = document.getElementById(id);
-      p.addEventListener('input', programarGuardado);
-      p.addEventListener('change', programarGuardado);
-    });
-    window.addEventListener('beforeunload', function (e) {
-      if (timerGuardado || guardadoEnVuelo) {
-        if (timerGuardado) guardarAhora();
-        e.preventDefault();
-        e.returnValue = '';
+      function onMedidaChange(selectEl) {
+        var grupo = selectEl.closest('.grupo-medida');
+        mostrarDisponibilidadEnGrupo(grupo, selectEl.value);
       }
-    });
 
-    dpCargarEstado_(function () {
-      cargarLotes(function (lista) {
-        var m = buscarLotePorTexto_(lista, LOTE_INICIAL);
-        if (m && dpEntradaOk_()) {
-          document.getElementById('loteSelect').value = m.clave;
-          cargarDetalle();
+      function mostrarDisponibilidadEnGrupo(grupo, medida) {
+        var filaMedida = grupo.querySelector('.fila-medida');
+        var panel = grupo.querySelector('.panel-disponibilidad');
+        var inputCantidad = filaMedida.querySelector('.cantidad');
+        filaMedida.dataset.origen = '';
+
+        if (!medida) {
+          panel.style.display = 'none';
+          panel.innerHTML = '';
+          habilitarCantidadManual_(inputCantidad);
+          return;
         }
-      });
-    });
-  };
-</script>
-</body>
+
+        var opciones = disponibilidadActual[medida] || [];
+        if (!opciones.length) {
+          panel.style.display = 'block';
+          panel.innerHTML = '<div class="aviso-disp aviso-vacio">No hay stock registrado en Sala Blanca para esta medida — cargá la cantidad a mano.</div>';
+          habilitarCantidadManual_(inputCantidad);
+          return;
+        }
+
+        // Hay stock: la cantidad se arma sola con lo que se tome de cada
+        // lote más abajo, no se escribe a mano en este cuadro.
+        bloquearCantidadAuto_(inputCantidad);
+
+        var html = '<div class="aviso-disp"><b>Disponible en Sala Blanca</b> (elegí cuánto tomar de cada lote):</div>';
+        opciones.forEach(function (op) {
+          var loteTexto = etiquetaLote_(op.lote);
+          html += '' +
+            '<div class="fila-disp" data-lote="' + op.lote + '" data-ref="' + op.referencia + '" data-max="' + op.disponible + '">' +
+              '<span>' + loteTexto + (op.referencia ? ' — Ref ' + op.referencia : '') + ' <i>(' + op.disponible + ' disp.)</i></span>' +
+              '<input type="number" class="in-tomar" min="0" max="' + op.disponible + '" value="0" oninput="recalcularCantidadGrupo(this)">' +
+            '</div>';
+        });
+        panel.innerHTML = html;
+        panel.style.display = 'block';
+      }
+
+      function recalcularCantidadGrupo(inputEl) {
+        var grupo = inputEl.closest('.grupo-medida');
+        var filaMedida = grupo.querySelector('.fila-medida');
+        var panel = grupo.querySelector('.panel-disponibilidad');
+        var inputCantidad = filaMedida.querySelector('.cantidad');
+        var total = 0;
+        var partes = [];
+        panel.querySelectorAll('.fila-disp').forEach(function (f) {
+          var inputTomar = f.querySelector('.in-tomar');
+          var max = Number(f.dataset.max) || 0;
+          var val = Number(inputTomar.value) || 0;
+          if (val > max) { val = max; inputTomar.value = max; }
+          if (val > 0) {
+            total += val;
+            partes.push(etiquetaLote_(f.dataset.lote) + (f.dataset.ref ? ' (Ref ' + f.dataset.ref + ')' : '') + ' x' + val);
+          }
+        });
+        inputCantidad.value = total > 0 ? total : '';
+        filaMedida.dataset.origen = partes.join('; ');
+      }
+
+      function agregarFilaMedida() {
+        var contenedor = document.getElementById('contenedorMedidas');
+        var primerGrupo = contenedor.children[0];
+        var nuevoGrupo = primerGrupo.cloneNode(true);
+
+        var nuevaFilaMedida = nuevoGrupo.querySelector('.fila-medida');
+        nuevaFilaMedida.dataset.origen = '';
+        var nuevoSelect = nuevaFilaMedida.querySelector('.medida');
+        nuevoSelect.selectedIndex = 0;
+        habilitarCantidadManual_(nuevaFilaMedida.querySelector('.cantidad'));
+        nuevoGrupo.querySelector('.panel-disponibilidad').innerHTML = '';
+        nuevoGrupo.querySelector('.panel-disponibilidad').style.display = 'none';
+
+        if (!nuevaFilaMedida.querySelector('.btn-eliminar')) {
+          var btnEliminar = document.createElement('button');
+          btnEliminar.type = 'button';
+          btnEliminar.className = 'btn-eliminar';
+          btnEliminar.innerText = 'X';
+          btnEliminar.onclick = function () { nuevoGrupo.remove(); };
+          nuevaFilaMedida.appendChild(btnEliminar);
+        }
+        contenedor.appendChild(nuevoGrupo);
+      }
+
+      function agregarFilaComponente() {
+        var sistema = document.getElementById("sistema").value;
+        var listaComp = componentesPorSistema[sistema] || [];
+        if (!listaComp.length) return;
+
+        var contenedor = document.getElementById('contenedorComponentes');
+        var div = document.createElement('div');
+        div.className = 'fila-medida fila-componente';
+
+        var select = document.createElement('select');
+        select.className = 'componente-nombre';
+        select.innerHTML = '<option value="">Seleccione componente...</option>';
+        listaComp.forEach(function(c) {
+          select.innerHTML += '<option value="' + c + '">' + c + '</option>';
+        });
+
+        // Cantidad propia de este componente (ej. Pilar 3.4 = 80).
+        // Vacío = se usa el total de implantes del lote.
+        var inputCant = document.createElement('input');
+        inputCant.type = 'number';
+        inputCant.min = '1';
+        inputCant.step = '1';
+        inputCant.className = 'componente-cantidad';
+        inputCant.placeholder = 'Cant. (vacío = total)';
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-eliminar';
+        btn.innerText = 'X';
+        btn.onclick = function() { div.remove(); };
+
+        div.appendChild(select);
+        div.appendChild(inputCant);
+        div.appendChild(btn);
+        contenedor.appendChild(div);
+      }
+
+      function resetFormulario() {
+        document.getElementById('loteMp').value = '';
+
+        var contMedidas = document.getElementById('contenedorMedidas');
+        while (contMedidas.children.length > 1) {
+          contMedidas.removeChild(contMedidas.lastChild);
+        }
+        var primerGrupo = contMedidas.children[0];
+        primerGrupo.querySelector('.medida').selectedIndex = 0;
+        var primeraFilaMedida = primerGrupo.querySelector('.fila-medida');
+        primeraFilaMedida.dataset.origen = '';
+        habilitarCantidadManual_(primeraFilaMedida.querySelector('.cantidad'));
+        var panel = primerGrupo.querySelector('.panel-disponibilidad');
+        panel.innerHTML = '';
+        panel.style.display = 'none';
+        var btnEliminarSobrante = primeraFilaMedida.querySelector('.btn-eliminar');
+        if (btnEliminarSobrante) btnEliminarSobrante.remove();
+
+        document.getElementById('contenedorComponentes').innerHTML = '';
+
+        actualizarSistema();
+      }
+
+      function enviarPaso1() {
+        var lote = document.getElementById('loteMp').value;
+        if (!lote || !/^[0-9]+$/.test(lote)) {
+          alert('El número de lote debe ser solo numérico.');
+          return;
+        }
+
+        var filas = document.querySelectorAll('#contenedorMedidas .fila-medida');
+        var detalles = [];
+        var incompleto = false;
+
+        // Si la medida tomó stock de más de un lote de Sala Blanca, se manda
+        // UNA fila por lote (no una sola fila combinada).
+        filas.forEach(function (fila) {
+          var med = fila.querySelector('.medida').value;
+          var cantInput = fila.querySelector('.cantidad');
+          var cant = cantInput.value;
+          if (!med || !cant) { incompleto = true; return; }
+
+          var grupo = fila.closest('.grupo-medida');
+          var panel = grupo ? grupo.querySelector('.panel-disponibilidad') : null;
+          var filasDisp = panel ? panel.querySelectorAll('.fila-disp') : [];
+          var huboLotes = false;
+
+          filasDisp.forEach(function (fd) {
+            var inputTomar = fd.querySelector('.in-tomar');
+            var tomado = Number(inputTomar ? inputTomar.value : 0) || 0;
+            if (tomado <= 0) return;
+            huboLotes = true;
+            var origenUnLote = etiquetaLote_(fd.dataset.lote) + (fd.dataset.ref ? ' (Ref ' + fd.dataset.ref + ')' : '') + ' x' + tomado;
+            detalles.push({ medida: med, cantidad: tomado, origen: origenUnLote });
+          });
+
+          if (!huboLotes) {
+            detalles.push({ medida: med, cantidad: cant, origen: '' });
+          }
+        });
+
+        var componentes = [];
+        var errorComp = '';
+        var filasComp = document.querySelectorAll('#contenedorComponentes .fila-componente');
+        filasComp.forEach(function(f) {
+          var nomElem = f.querySelector('.componente-nombre');
+          var nom = nomElem ? nomElem.value.trim() : "";
+          if (!nom) return;
+
+          var cantElem = f.querySelector('.componente-cantidad');
+          var cantTexto = cantElem ? cantElem.value.trim() : "";
+          if (cantTexto && !(Number(cantTexto) > 0 && Math.floor(Number(cantTexto)) === Number(cantTexto))) {
+            errorComp = 'La cantidad de "' + nom + '" tiene que ser un número entero mayor a 0 (o dejala vacía para usar el total).';
+          }
+
+          var tapElem = f.querySelector('.componente-tap');
+          var envaseElem = f.querySelector('.componente-envase');
+          componentes.push({
+            nombre: nom,
+            cantidad: cantTexto,  // "" = total de implantes
+            loteTap: (tapElem && tapElem.value.trim()) ? tapElem.value.trim() : "-",
+            loteEnvase: (envaseElem && envaseElem.value.trim()) ? envaseElem.value.trim() : "-"
+          });
+        });
+        if (errorComp) { alert(errorComp); return; }
+
+        if (incompleto) {
+          alert('Por favor complete todas las medidas y cantidades añadidas.');
+          return;
+        }
+
+        var datos = {
+          sistema: document.getElementById('sistema').value,
+          loteMp: lote,
+          producto: document.getElementById('producto').value,
+          detallesMedidas: detalles,
+          componentes: componentes
+        };
+
+        var btn = document.getElementById('btnEnviar');
+        var msg = document.getElementById('mensaje');
+        btn.disabled = true;
+        msg.style.color = "#333";
+        msg.innerText = "Guardando carga...";
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            msg.style.color = "green";
+            msg.innerText = res;
+            btn.disabled = false;
+            resetFormulario();
+          })
+          .withFailureHandler(function (err) {
+            msg.style.color = "red";
+            msg.innerText = "Error: " + err.message;
+            btn.disabled = false;
+          })
+          .guardarPaso1(datos);
+      }
+
+      window.onload = function () {
+        actualizarSistema();
+      };
+    </script>
+  </body>
 </html>
