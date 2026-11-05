@@ -1328,7 +1328,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
   var GRAB_PEND = [], TAB_ACTUAL = 'control';
   function grabEsc_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
   function grabQuien_() { return (YO && YO !== YO_TODOS) ? YO : ''; }
-  var RESP_GRABADO = ['Gabriela', 'Marita'];   // únicas responsables de grabado
+  var RESP_GRABADO = ['Gabriela', 'Marita', 'Javier'];   // únicas responsables de grabado
   function grabOpcionesResp_() {
     var yo = grabQuien_();
     return '<option value="">— Elegir —</option>' + RESP_GRABADO.map(function (r) {
@@ -1403,7 +1403,7 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     function v(p) { var el = document.getElementById(p + i); return el ? el.value : ''; }
     if (v('gs_') !== 'SI') { msg('Marcá "SI" en ¿Se grabó?.', false); return; }
     if (!v('go_')) { msg('Falta el N° de OF de grabado.', false); return; }
-    if (RESP_GRABADO.indexOf(v('gr_')) < 0) { msg('Elegí el responsable (Gabriela o Marita).', false); return; }
+    if (RESP_GRABADO.indexOf(v('gr_')) < 0) { msg('Elegí el responsable (Gabriela, Marita o Javier).', false); return; }
     var cant = Math.floor(Number(v('gc_')) || 0);
     if (!(cant > 0)) { msg('Cargá la cantidad que se grabó hoy.', false); return; }
     if (cant > it.cantidad) { msg('La cantidad (' + cant + ') supera lo pendiente (' + it.cantidad + ').', false); return; }
