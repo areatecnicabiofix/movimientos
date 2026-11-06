@@ -402,11 +402,18 @@ function renderComp(res){
     if (jsGrabado(it.producto)) rutas.push('Grabado');
     var d = Number(it.disponible)||0;
     return '<tr><td>'+esc(it.producto)+'</td><td>'+esc(it.sistema||'—')+'</td><td>'+esc(it.lote)+'</td><td class="c">'+tg+'</td><td class="r">'+d+'</td><td class="c" style="font-size:11px;color:#475569;">'+(rutas.join(' · ')||'—')+'</td>' +
-      '<td class="c"><div class="celda-sel"><input type="checkbox" id="ck_'+i+'" onchange="toggleQty(\'qc_'+i+'\', this.checked)">' +
+      '<td class="c"><div class="celda-sel"><input type="checkbox" id="ck_'+i+'" onchange="toggleQty(\'qc_'+i+'\', this.checked)"'+(rutas.length?'':' disabled title="No tiene a dónde ir desde acá"')+'>' +
       '<input type="number" id="qc_'+i+'" value="'+d+'" min="1" max="'+d+'" style="width:60px; padding:3px; font-size:12px;" disabled></div></td></tr>';
   }).join('');
   document.getElementById('listaComp').innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Sistema</th><th>Lote</th><th class="c">Tipo</th><th style="text-align:right;">Cant.</th><th class="c">Puede ir a</th><th class="c">Sel.</th></tr></thead><tbody>'+filas+'</tbody></table></div>';
   filtrarBusqueda();
+}
+// A dónde puede ir cada pieza (mismas reglas que el servidor)
+function compPuedeIr(it, destino){
+  if (destino === 'control')  return it.tipo !== 'Instrumental';
+  if (destino === 'blasting') return jsCuerpoEscaneo(it.producto);
+  if (destino === 'grabado')  return jsGrabado(it.producto);
+  return false;
 }
 function compEnviarSel(destino){
   var sel = [];
@@ -418,6 +425,14 @@ function compEnviarSel(destino){
     }
   });
   if (!sel.length){ msg('Marcá al menos un componente.', false); return; }
+  // 06/11/2026: no deja enviar si alguna pieza marcada no corresponde a ese destino
+  var noVan = sel.filter(function(it){ return !compPuedeIr(it, destino); });
+  if (noVan.length){
+    var nomDest = ({control:'Control', blasting:'Blasting', grabado:'Grabado láser'})[destino] || destino;
+    msg('No se envió nada: ' + noVan.length + ' pieza(s) no van a ' + nomDest + ': ' +
+        noVan.map(function(it){ return it.producto + ' (' + it.lote + ')'; }).join(', ') + '. Desmarcalas y volvé a enviar.', false);
+    return;
+  }
   msg('Enviando…', true);
   api('compEnviar', [{ destino: destino, responsable: document.getElementById('comp_resp').value, items: sel }])
     .then(function(r){ msg((r && r.msg) || 'Listo.', true); cargarComp(); })
