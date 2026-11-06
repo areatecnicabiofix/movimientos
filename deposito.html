@@ -81,7 +81,7 @@
   <div class="tabs">
     <div class="tab active" id="tb_semi" onclick="ver('semi')">Semielaborado</div>
     <div class="tab" id="tb_sb" onclick="ver('sb')">Sala Blanca → Terminado</div>
-    <div class="tab" id="tb_comp" onclick="ver('comp')">Componentes / Instrumental</div>
+    <div class="tab" id="tb_comp" onclick="ver('comp')">Protésicos / Instrumental</div>
   </div>
 
   <div style="margin-bottom:12px;">
@@ -109,25 +109,16 @@
   </div>
 
   <div id="paneComp" class="hide">
-    <div class="total-box" style="background:#7c3aed;"><span class="lbl">Componentes + Instrumental en depósito</span><span class="num" id="totalComp">…</span></div>
+    <div class="total-box" style="background:#7c3aed;"><span class="lbl">Protésicos + Instrumental en Depósito Componente Final</span><span class="num" id="totalComp">…</span></div>
     <div class="card" style="border-color:#ddd6fe;background:#faf5ff;">
       <div class="card-head">
-        <h2>En depósito (ya pasaron los procesos)</h2>
+        <h2>En Depósito Componente Final</h2>
         <div>
           <label>Ver&nbsp;</label>
           <select id="comp_filtro" onchange="cargarComp()">
             <option value="todos">Todos (tipo)</option>
-            <option value="componente">Solo Componentes</option>
+            <option value="protesico">Solo Protésicos</option>
             <option value="instrumental">Solo Instrumental</option>
-          </select>
-          &nbsp;<select id="comp_sistema" onchange="cargarComp()">
-            <option value="todos">Todos (sistema)</option>
-            <option value="Componente HI">Componente HI</option>
-            <option value="Componente HE">Componente HE</option>
-            <option value="Componente CMU">Componente CMU</option>
-            <option value="Componente CMHI">Componente CMHI (Cono Morse)</option>
-            <option value="Componente MP-MPB">Componente MP-MPB</option>
-            <option value="Instrumental">Instrumental</option>
           </select>
         </div>
       </div>
@@ -392,7 +383,7 @@ function horaAhora(){ var d = new Date(); return d.toLocaleTimeString('es-AR', {
 function cargarComp(){
   document.getElementById('listaComp').innerHTML = '<p class="empty">Cargando…</p>';
   document.getElementById('totalComp').textContent = '…';
-  api('compResumen', [document.getElementById('comp_filtro').value, document.getElementById('comp_sistema').value])
+  api('compResumen', [document.getElementById('comp_filtro').value, 'todos'])
     .then(renderComp)
     .catch(function(e){ document.getElementById('listaComp').innerHTML = '<p style="color:#b91c1c;font-size:13px;">'+esc(e.message)+'</p>'; });
 }
@@ -401,10 +392,10 @@ function jsGrabado(p){ var n=(p||'').toLowerCase();
   return n.indexOf('llave colocadora')>=0||n.indexOf('llave conectora')>=0||n.indexOf('fresa lanza')>=0||n.indexOf('kit de 3 expansores')>=0||n.indexOf('kit de expansores')>=0||n.indexOf('torquimetro')>=0||n.indexOf('torquímetro')>=0||n.indexOf('mango rigido')>=0||n.indexOf('mango rígido')>=0||n.indexOf('mango para angulacion')>=0||n.indexOf('mango para angulación')>=0||n.indexOf('punta driver llave colocadora')>=0; }
 function renderComp(res){
   COMP_ITEMS = res.items || [];
-  document.getElementById('totalComp').textContent = (res.total||0) + ' u.  (Comp ' + (res.totalComp||0) + ' · Instr ' + (res.totalInstr||0) + ')';
-  if (!COMP_ITEMS.length){ document.getElementById('listaComp').innerHTML = '<p class="empty">No hay componentes en depósito.</p>'; return; }
+  document.getElementById('totalComp').textContent = (res.total||0) + ' u.  (Prot ' + (res.totalComp||0) + ' · Instr ' + (res.totalInstr||0) + ')';
+  if (!COMP_ITEMS.length){ document.getElementById('listaComp').innerHTML = '<p class="empty">No hay nada en Depósito Componente Final.</p>'; return; }
   var filas = COMP_ITEMS.map(function(it, i){
-    var tg = it.tipo==='Instrumental' ? '<span class="pill" style="background:#fef3c7;color:#92400e;">Instrumental</span>' : '<span class="pill" style="background:#ede9fe;color:#6d28d9;">Componente</span>';
+    var tg = it.tipo==='Instrumental' ? '<span class="pill" style="background:#fef3c7;color:#92400e;">Instrumental</span>' : '<span class="pill" style="background:#ede9fe;color:#6d28d9;">Protésico</span>';
     var rutas = [];
     if (it.tipo !== 'Instrumental') rutas.push('Control');
     if (jsCuerpoEscaneo(it.producto)) rutas.push('Blasting');
