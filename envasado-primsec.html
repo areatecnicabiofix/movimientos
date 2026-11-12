@@ -381,6 +381,21 @@
   }
 
   /* ---------- PRIMARIO ---------- */
+  // Busca "(LF 1234)" en cualquier texto de la fila (ej. el Origen "Lote 0981 (Ref 04) (LF 5131) x10")
+  function loteLFDeFila_(f) {
+    if (!f) return '';
+    if (f.loteLavadoFinal) return String(f.loteLavadoFinal).trim();
+    var lf = '';
+    Object.keys(f).some(function (k) {
+      var v = f[k];
+      if (typeof v !== 'string') return false;
+      var m = v.match(/\(LF\s+([0-9A-Za-z-]+)\)/);
+      if (m) { lf = m[1]; return true; }
+      return false;
+    });
+    return lf;
+  }
+
   function renderPrimario() {
     var cont = document.getElementById('pFilas');
     if (!DETALLE.length) { cont.innerHTML = '<p class="vacio">Este lote no tiene medidas cargadas.</p>'; return; }
@@ -394,6 +409,11 @@
         opcionesRef += '<option value="' + v + '"' + (refSel === v ? ' selected' : '') + '>' + v + '</option>';
       }
       var ofProdSug = f.loteSugerido || '', ofLavSug = f.ofLavadoSugerido || '';
+      // Si en el Paso 1 se tomó de un Lote de Lavado Final puntual, el origen
+      // guardado dice "(LF 5131)": ese manda sobre la sugerencia del servidor
+      // (un mismo lote puede tener piezas de dos lavados finales distintos).
+      var lfDeOrigen = loteLFDeFila_(f);
+      if (lfDeOrigen) ofLavSug = lfDeOrigen;
       var ofProd = ofProdSug || f.ofProd || '';
       var ofLav = ofLavSug || f.ofLavado || '';
       var operario = f.operario || 'Miguel Gomez';
