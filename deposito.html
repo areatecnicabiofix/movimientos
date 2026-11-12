@@ -340,11 +340,12 @@ async function depResumen() {
 }
 
 async function sbResumen() {
-  var filas = await traerTodo('v_deposito_items', 'producto,teton,medida,lote,disponible',
-    function (q) { return q.eq('orden', 9).order('primer_ord'); });
+  // Un renglón por Lote + Lote de Lavado Final (un mismo lote puede tener piezas de dos lavados finales)
+  var filas = await traerTodo('v_sala_blanca_por_lf', 'producto,teton,medida,lote,lote_lavado_final,disponible',
+    function (q) { return q.order('primer_ord'); });
   var total = 0;
   var items = filas.map(function (r) { var d = Number(r.disponible) || 0; total += d;
-    return { producto: r.producto, teton: r.teton, medida: r.medida, lote: r.lote, disponible: d }; });
+    return { producto: r.producto, teton: r.teton, medida: r.medida, lote: r.lote, loteLF: r.lote_lavado_final || '', disponible: d }; });
   return { items: items, total: total };
 }
 
@@ -534,11 +535,11 @@ function renderSb(res){
   if (!res.items || !res.items.length) { cont.innerHTML = '<p class="empty">No hay piezas en Sala Blanca.</p>'; return; }
   var filas = res.items.map(function (it, ii) {
     var d = Number(it.disponible)||0;
-    return '<tr><td>'+esc(it.producto)+'</td><td>'+esc(it.medida)+'</td><td>'+esc(it.lote)+'</td><td>'+esc(it.teton||'—')+'</td><td class="r">'+d+'</td>' +
+    return '<tr><td>'+esc(it.producto)+'</td><td>'+esc(it.medida)+'</td><td>'+esc(it.lote)+'</td><td>'+esc(it.loteLF||'—')+'</td><td>'+esc(it.teton||'—')+'</td><td class="r">'+d+'</td>' +
       '<td class="c"><div class="celda-sel"><input type="checkbox" id="csb_'+ii+'" onchange="toggleQty(\'qsb_'+ii+'\', this.checked)">' +
       '<input type="number" id="qsb_'+ii+'" value="'+d+'" min="1" max="'+d+'" style="width:60px; padding:3px; font-size:12px;" disabled></div></td></tr>';
   }).join('');
-  cont.innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Tetón</th><th style="text-align:right;">Cant.</th><th class="c">Sel.</th></tr></thead><tbody>'+filas+'</tbody></table></div>' +
+  cont.innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Lote L.F.</th><th>Tetón</th><th style="text-align:right;">Cant.</th><th class="c">Sel.</th></tr></thead><tbody>'+filas+'</tbody></table></div>' +
     '<div style="display:flex; justify-content:flex-end; margin-top:10px;"><button class="btn" id="btnSb" onclick="enviarTerminado()">Enviar a Terminado</button></div>';
   filtrarBusqueda();
 }
