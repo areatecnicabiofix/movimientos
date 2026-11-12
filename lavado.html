@@ -139,6 +139,52 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
   </div>
 
 
+  <div class="card" style="border-color:#c4b5fd; background:#f5f3ff;">
+    <h2 style="color:#5b21b6;">0c. Ingreso de Monopieza Basal desde Afuera</h2>
+    <p style="font-size:12px; color:var(--mut); margin:-6px 0 12px 0;">
+      Las Monopieza Basal no salen de Mecanizado: registrá acá lo que llegó (tetón, medida, lote y cantidad)
+      y queda en la cola "Esperando Lavado Primario" de abajo.
+    </p>
+    <div class="grid-3">
+      <div>
+        <label>Tetón</label>
+        <select id="ingBasTeton">
+          <option value="">Elegir...</option>
+          <option value="con teton">Con tetón</option>
+          <option value="sin teton">Sin tetón</option>
+        </select>
+      </div>
+      <div>
+        <label>Medida</label>
+        <select id="ingBasMedida">
+          <option value="">Elegir...</option>
+        </select>
+      </div>
+      <div>
+        <label>Número de Lote</label>
+        <input id="ingBasLote" type="text" placeholder="Ej: 1198J">
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:8px;">
+      <div>
+        <label>Cantidad</label>
+        <input id="ingBasCantidad" type="number" min="1" placeholder="Ej: 121">
+      </div>
+      <div>
+        <label>Producto</label>
+        <input type="text" value="Monopieza Basal" readonly style="background:#f1f5f9;">
+      </div>
+      <div>
+        <label>Observación (opcional)</label>
+        <input id="ingBasObs" type="text" placeholder="Ej: vienen de julio">
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+      <button class="btn-submit" id="btnIngresoBasal" style="background:#7c3aed;" onclick="registrarIngresoBasal()">Registrar Ingreso</button>
+    </div>
+  </div>
+
+
   <div class="card" style="border-color:#93c5fd; background:#f0f9ff;">
     <h2>1. Seleccionar Lote Disponible de Cola de Espera</h2>
     <div class="grid-3">
@@ -1332,8 +1378,61 @@ function finalizarBorrador(f){
     .abrActualizar(datosCard(f));
 }
 
+  /* ===== Ingreso de Monopieza Basal desde afuera (servidor: lavIngresoBasal en IngresoBasal.gs) ===== */
+  // Mismas medidas para con y sin tetón (iguales a la lista de Envasados IB / IBT)
+  var BASAL_MEDIDAS = [
+    '3.5 X 10mm', '3.5 X 12mm', '3.5 X 15mm', '3.5 X 18mm', '3.5 X 21mm', '3.5 X 23mm', '3.5 X 24mm', '3.5 X 26mm', '3.5 X 28mm',
+    '3.5 X 24mm C14', '3.5 X 26mm C16', '3.5 X 28mm C18',
+    '4.5 X 10mm', '4.5 X 12mm', '4.5 X 15mm', '4.5 X 18mm', '4.5 X 21mm', '4.5 X 23mm', '4.5 X 24mm', '4.5 X 26mm', '4.5 X 28mm',
+    '4.5 X 24mm C14', '4.5 X 26mm C16', '4.5 X 28mm C18',
+    '5.5 X 9mm', '5.5 X 10mm', '5.5 X 12mm', '5.5 X 15mm', '5.5 X 18mm',
+    '6.5 X 10mm', '6.5 X 12mm'
+  ];
+  function ingBasPintarMedidas_() {
+    var sel = document.getElementById('ingBasMedida');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Elegir...</option>';
+    var grupos = {};
+    BASAL_MEDIDAS.forEach(function (m) {
+      var d = m.split(' X ')[0];
+      if (!grupos[d]) { grupos[d] = document.createElement('optgroup'); grupos[d].label = 'Ø' + d; sel.appendChild(grupos[d]); }
+      var o = document.createElement('option'); o.value = m; o.textContent = 'Ø' + m; grupos[d].appendChild(o);
+    });
+  }
+  function registrarIngresoBasal() {
+    var teton = document.getElementById('ingBasTeton').value;
+    var medida = document.getElementById('ingBasMedida').value;
+    var lote = document.getElementById('ingBasLote').value.trim();
+    var cantidad = document.getElementById('ingBasCantidad').value;
+    var obs = document.getElementById('ingBasObs').value.trim();
+
+    if (!teton) { msg('Elegí si es con o sin tetón.', false); return; }
+    if (!medida) { msg('Elegí la medida.', false); return; }
+    if (!lote) { msg('Ingresá el número de lote.', false); return; }
+    if (!cantidad || Number(cantidad) <= 0 || Math.floor(Number(cantidad)) !== Number(cantidad)) { msg('Ingresá una cantidad entera mayor a 0.', false); return; }
+
+    var datos = { producto: 'Monopieza Basal', teton: teton, medida: medida, lote: lote,
+                  cantidad: Number(cantidad), observacion: obs, responsable: 'Javier' };
+    var btn = document.getElementById('btnIngresoBasal');
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        btn.disabled = false;
+        if (r && r.ok === false) { msg(r.msg || 'No se pudo registrar.', false); return; }
+        msg((r && r.msg) || 'Ingreso registrado.', true);
+        ['ingBasTeton', 'ingBasMedida', 'ingBasLote', 'ingBasCantidad', 'ingBasObs'].forEach(function (id) { document.getElementById(id).value = ''; });
+        actualizarInventarios();
+      })
+      .withFailureHandler(function (e) {
+        btn.disabled = false;
+        msg('Error al registrar ingreso: ' + e.message, false);
+      })
+      .lavIngresoBasal(datos);
+  }
+
 window.onload = function() {
   ingCompPintarCombo_();
+  ingBasPintarMedidas_();
   cargarInicial();
   setInterval(function() { refrescarTodo(true); }, 60000);   // respaldo: lo normal es que se actualice sola al instante (tiempo real)
 };
