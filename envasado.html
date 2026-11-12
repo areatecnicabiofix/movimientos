@@ -1,4 +1,3 @@
-html:
 <!DOCTYPE html>
 <html>
   <head>
@@ -16,8 +15,7 @@ html:
     <style>
   body {
     font-family: Arial, sans-serif;
-    background: 
-#f4f6f9;
+    background: #f4f6f9;
     padding: 20px;
     color: #333;
     font-size: 16px;
@@ -31,8 +29,7 @@ html:
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
   }
   h2 {
-    color: 
-#1a73e8;
+    color: #1a73e8;
     text-align: center;
     margin-bottom: 25px;
     font-size: 26px;
@@ -45,8 +42,7 @@ html:
   }
   legend {
     font-weight: bold;
-    color: 
-#1a73e8;
+    color: #1a73e8;
     padding: 0 5px;
     font-size: 18px;
   }
@@ -85,10 +81,8 @@ html:
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    background: 
-#eef6ff;
-    border: 1px solid 
-#bcdfff;
+    background: #eef6ff;
+    border: 1px solid #bcdfff;
     border-radius: 6px;
     padding: 6px 10px;
     margin-bottom: 6px;
@@ -98,8 +92,7 @@ html:
   .fila-disp .in-tomar { width: 80px; padding: 6px; margin-top: 0; flex: none; }
 
   .btn-add {
-    background: 
-#34a853;
+    background: #34a853;
     color: white;
     border: none;
     padding: 12px 18px;
@@ -110,8 +103,7 @@ html:
     font-size: 15px;
   }
   .btn-eliminar {
-    background: 
-#ea4335;
+    background: #ea4335;
     color: white;
     border: none;
     padding: 12px 14px;
@@ -121,8 +113,7 @@ html:
     font-size: 15px;
   }
   button.enviar {
-    background: 
-#1a73e8;
+    background: #1a73e8;
     color: white;
     border: none;
     padding: 16px;
@@ -166,14 +157,12 @@ html:
                placeholder="Ej: 1023" required>
 
         <label>Producto:</label>
-        <input type="text" id="producto" value="Monopieza" required readonly style="background-color: 
-#e9ecef;">
+        <input type="text" id="producto" value="Monopieza" required readonly style="background-color: #e9ecef;">
 
         <label>Medidas y Cantidades:</label>
         <div id="estadoStock" style="font-size:13px;margin-top:6px;color:#555">
         </div>
-        <button type="button" class="btn-add" style="background:
-#64748b;padding:8px 12px;font-size:13px" onclick="cargarDisponibilidadSistema(document.getElementById('sistema').value)">↻ Recargar stock</button>
+        <button type="button" class="btn-add" style="background: #64748b;padding:8px 12px;font-size:13px" onclick="cargarDisponibilidadSistema(document.getElementById('sistema').value)">↻ Recargar stock</button>
         <div id="contenedorMedidas">
           <div class="grupo-medida">
             <div class="fila-medida">
@@ -191,8 +180,7 @@ html:
         <div id="seccionComponentes" class="seccion-componentes">
           <label>Componentes (se autocompletan con el total de implantes, sin Ref):</label>
           <div id="contenedorComponentes"></div>
-          <button type="button" class="btn-add" style="background:
-#0b57d0;" onclick="agregarFilaComponente()">+ Añadir componente</button>
+          <button type="button" class="btn-add" style="background: #0b57d0;" onclick="agregarFilaComponente()">+ Añadir componente</button>
         </div>
       </fieldset>
       <button type="button" class="enviar" id="btnEnviar" onclick="enviarPaso1()">Guardar carga</button>
@@ -307,8 +295,7 @@ html:
         inputCantidad.value = '';
         inputCantidad.readOnly = true;
         inputCantidad.placeholder = 'Se completa solo ↑';
-        inputCantidad.style.backgroundColor = '
-#e9ecef';
+        inputCantidad.style.backgroundColor = '#e9ecef';
       }
 
       // Cuando NO hay disponibilidad registrada (o todavía no se eligió
@@ -382,28 +369,100 @@ html:
                 if (v) disponibilidadActual[m] = v;
               });
               var conStock = Object.keys(disponibilidadActual).filter(function (k) { return (disponibilidadActual[k] || []).length; });
-              est.style.color = conStock.length ? '
-#15803d' : '
-#92400e';
+              est.style.color = conStock.length ? '#15803d' : '#92400e';
               est.textContent = conStock.length
                 ? 'Stock de Sala Blanca cargado: ' + conStock.length + ' medida(s) de ' + sistema + ' con stock.'
                 : 'El servidor respondió, pero no hay stock en Sala Blanca para ' + sistema + '.';
-              document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
-                var sel = grupo.querySelector('.medida');
-                if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
+              var repintar = function () {
+                if (document.getElementById('sistema').value !== sistema) return;
+                document.querySelectorAll('.grupo-medida').forEach(function (grupo) {
+                  var sel = grupo.querySelector('.medida');
+                  if (sel && sel.value) mostrarDisponibilidadEnGrupo(grupo, sel.value);
+                });
+              };
+              repintar();
+              // Separa cada lote por Lote de Lavado Final (si un mismo lote/medida
+              // tiene piezas de dos lavados finales distintos, van en filas separadas).
+              partirPorLavadoFinal_(sistema).then(repintar, function (e) {
+                console.warn('No se pudo separar por Lote de Lavado Final:', e);
               });
             })
             .withFailureHandler(function (err) {
-              est.style.color = '
-#b91c1c';
+              est.style.color = '#b91c1c';
               est.textContent = 'No se pudo leer el stock de Sala Blanca: ' + ((err && err.message) || err);
             })
             .obtenerDisponibilidadSalaBlanca(sistema, listaMedidasPorSistema[sistema] || []);
         } catch (e) {
-          est.style.color = '
-#b91c1c';
+          est.style.color = '#b91c1c';
           est.textContent = 'No se pudo conectar con el servidor: ' + e.message;
         }
+      }
+
+      /* ---------- Separación por Lote de Lavado Final ----------
+       * Lee la vista v_sala_blanca_por_lf de Supabase (lo que queda en Sala Blanca
+       * por Lote + Lote de Lavado Final; las salidas descuentan primero el lavado
+       * más viejo). Si para un lote/medida la vista suma lo mismo que mandó el
+       * servidor, se reemplazan esas opciones por una fila por cada Lote de L.F.
+       * Si no coincide (ej. la hoja todavía no se actualizó) se deja como venía. */
+      function normTxt_(s) {
+        return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .toLowerCase().replace(/\s+/g, ' ').trim();
+      }
+      function normLote_(s) { return normTxt_(s).replace(/^lote\s*/, '').replace(/\s+/g, ''); }
+      // "IMPLANTE MONOPIEZA Ø4.0 X 10mm" y "4.0 X 10mm" -> "4.0x10mm"
+      function claveMedidaNum_(s) {
+        var t = normTxt_(s).replace(/,/g, '.');
+        var i = t.search(/[0-9]/);
+        if (i < 0) return t.replace(/\s+/g, '');
+        return t.slice(i).replace(/\s+/g, '');
+      }
+      function partirPorLavadoFinal_(sistema) {
+        var B = window.BIOFIX;
+        if (!B || !B.supabase) return Promise.resolve();
+        return B.sesion.then(function () {
+          return B.supabase.from('v_sala_blanca_por_lf')
+            .select('producto,teton,medida,lote,lote_lavado_final,referencia,disponible,primer_ord')
+            .order('primer_ord').limit(5000);
+        }).then(function (r) {
+          if (r.error) throw r.error;
+          if (document.getElementById('sistema').value !== sistema) return;
+          var filas = r.data || [];
+          var prodSist = normTxt_(nombresProductos[sistema] || '');
+          Object.keys(disponibilidadActual).forEach(function (medida) {
+            var ops = disponibilidadActual[medida] || [];
+            var km = claveMedidaNum_(medida);
+            var porLote = {}, orden = [];
+            ops.forEach(function (op) {
+              var k = normLote_(op.lote);
+              if (!porLote[k]) { porLote[k] = []; orden.push(k); }
+              porLote[k].push(op);
+            });
+            var nuevas = [];
+            orden.forEach(function (k) {
+              var grupoOps = porLote[k];
+              var totalServidor = grupoOps.reduce(function (a, o) { return a + (Number(o.disponible) || 0); }, 0);
+              var cand = filas.filter(function (f) { return normLote_(f.lote) === k && claveMedidaNum_(f.medida) === km; });
+              // si el mismo lote/medida aparece en más de un producto, quedarse con el del sistema
+              var prods = {}; cand.forEach(function (f) { prods[normTxt_(f.producto)] = 1; });
+              if (Object.keys(prods).length > 1 && prodSist) {
+                var exacto = cand.filter(function (f) { return normTxt_(f.producto) === prodSist; });
+                if (exacto.length) cand = exacto;
+              }
+              var totalVista = cand.reduce(function (a, f) { return a + (Number(f.disponible) || 0); }, 0);
+              if (!cand.length || totalVista !== totalServidor) { nuevas = nuevas.concat(grupoOps); return; }
+              cand.forEach(function (f, i) {
+                nuevas.push({
+                  lote: grupoOps[0].lote,
+                  referencia: f.referencia || grupoOps[0].referencia || '',
+                  disponible: Number(f.disponible) || 0,
+                  loteLF: f.lote_lavado_final || '',
+                  ordenLF: i   // 0 = el lavado final más viejo de ese lote
+                });
+              });
+            });
+            disponibilidadActual[medida] = nuevas;
+          });
+        });
       }
 
       function onMedidaChange(selectEl) {
@@ -440,8 +499,8 @@ html:
         opciones.forEach(function (op) {
           var loteTexto = etiquetaLote_(op.lote);
           html += '' +
-            '<div class="fila-disp" data-lote="' + op.lote + '" data-ref="' + op.referencia + '" data-max="' + op.disponible + '">' +
-              '<span>' + loteTexto + (op.referencia ? ' — Ref ' + op.referencia : '') + ' <i>(' + op.disponible + ' disp.)</i></span>' +
+            '<div class="fila-disp" data-lote="' + op.lote + '" data-ref="' + (op.referencia || '') + '" data-lf="' + (op.loteLF || '') + '" data-ordlf="' + (op.ordenLF == null ? '' : op.ordenLF) + '" data-max="' + op.disponible + '">' +
+              '<span>' + loteTexto + (op.referencia ? ' — Ref ' + op.referencia : '') + (op.loteLF ? ' — <b>L.F. ' + op.loteLF + '</b>' : '') + ' <i>(' + op.disponible + ' disp.)</i></span>' +
               '<input type="number" class="in-tomar" min="0" max="' + op.disponible + '" value="0" oninput="recalcularCantidadGrupo(this)">' +
             '</div>';
         });
@@ -463,7 +522,7 @@ html:
           if (val > max) { val = max; inputTomar.value = max; }
           if (val > 0) {
             total += val;
-            partes.push(etiquetaLote_(f.dataset.lote) + (f.dataset.ref ? ' (Ref ' + f.dataset.ref + ')' : '') + ' x' + val);
+            partes.push(etiquetaLote_(f.dataset.lote) + (f.dataset.ref ? ' (Ref ' + f.dataset.ref + ')' : '') + (f.dataset.lf ? ' (LF ' + f.dataset.lf + ')' : '') + ' x' + val);
           }
         });
         inputCantidad.value = total > 0 ? total : '';
@@ -583,8 +642,8 @@ html:
             var tomado = Number(inputTomar ? inputTomar.value : 0) || 0;
             if (tomado <= 0) return;
             huboLotes = true;
-            var origenUnLote = etiquetaLote_(fd.dataset.lote) + (fd.dataset.ref ? ' (Ref ' + fd.dataset.ref + ')' : '') + ' x' + tomado;
-            detalles.push({ medida: med, cantidad: tomado, origen: origenUnLote });
+            var origenUnLote = etiquetaLote_(fd.dataset.lote) + (fd.dataset.ref ? ' (Ref ' + fd.dataset.ref + ')' : '') + (fd.dataset.lf ? ' (LF ' + fd.dataset.lf + ')' : '') + ' x' + tomado;
+            detalles.push({ medida: med, cantidad: tomado, origen: origenUnLote, loteLavadoFinal: fd.dataset.lf || '' });
           });
 
           if (!huboLotes) {
@@ -621,6 +680,36 @@ html:
           alert('Por favor complete todas las medidas y cantidades añadidas.');
           return;
         }
+
+        // Dentro de un mismo lote, se envasa primero el Lote de Lavado Final más viejo
+        // (así el stock que queda en Sala Blanca sigue cuadrando por L.F.).
+        var errorLF = '';
+        document.querySelectorAll('#contenedorMedidas .panel-disponibilidad').forEach(function (panel) {
+          if (errorLF) return;
+          var porLote = {};
+          panel.querySelectorAll('.fila-disp').forEach(function (fd) {
+            if (fd.dataset.ordlf === '') return;
+            (porLote[fd.dataset.lote] = porLote[fd.dataset.lote] || []).push(fd);
+          });
+          Object.keys(porLote).forEach(function (lote) {
+            if (errorLF) return;
+            var filasLF = porLote[lote].sort(function (a, b) { return Number(a.dataset.ordlf) - Number(b.dataset.ordlf); });
+            for (var i = 1; i < filasLF.length; i++) {
+              var tomado = Number(filasLF[i].querySelector('.in-tomar').value) || 0;
+              if (tomado <= 0) continue;
+              for (var j = 0; j < i; j++) {
+                var tAnt = Number(filasLF[j].querySelector('.in-tomar').value) || 0;
+                var mAnt = Number(filasLF[j].dataset.max) || 0;
+                if (tAnt < mAnt) {
+                  errorLF = etiquetaLote_(lote) + ': primero hay que envasar todo lo del L.F. ' + filasLF[j].dataset.lf +
+                    ' (' + mAnt + ' u.) antes de tomar del L.F. ' + filasLF[i].dataset.lf + '.';
+                  return;
+                }
+              }
+            }
+          });
+        });
+        if (errorLF) { alert(errorLF); return; }
 
         var datos = {
           sistema: document.getElementById('sistema').value,
