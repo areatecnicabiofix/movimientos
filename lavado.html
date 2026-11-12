@@ -174,10 +174,6 @@ window.BIOFIX_CAMBIOS = ['movimientos', 'hoja:Lavado Primario', 'hoja:Abrillanta
         <label>Producto</label>
         <input type="text" value="Monopieza Basal" readonly style="background:#f1f5f9;">
       </div>
-      <div>
-        <label>Observación (opcional)</label>
-        <input id="ingBasObs" type="text" placeholder="Ej: vienen de julio">
-      </div>
     </div>
     <div style="display:flex; justify-content:flex-end; margin-top:8px;">
       <button class="btn-submit" id="btnIngresoBasal" style="background:#7c3aed;" onclick="registrarIngresoBasal()">Registrar Ingreso</button>
@@ -1404,7 +1400,6 @@ function finalizarBorrador(f){
     var medida = document.getElementById('ingBasMedida').value;
     var lote = document.getElementById('ingBasLote').value.trim();
     var cantidad = document.getElementById('ingBasCantidad').value;
-    var obs = document.getElementById('ingBasObs').value.trim();
 
     if (!teton) { msg('Elegí si es con o sin tetón.', false); return; }
     if (!medida) { msg('Elegí la medida.', false); return; }
@@ -1412,7 +1407,7 @@ function finalizarBorrador(f){
     if (!cantidad || Number(cantidad) <= 0 || Math.floor(Number(cantidad)) !== Number(cantidad)) { msg('Ingresá una cantidad entera mayor a 0.', false); return; }
 
     var datos = { producto: 'Monopieza Basal', teton: teton, medida: medida, lote: lote,
-                  cantidad: Number(cantidad), observacion: obs, responsable: 'Javier' };
+                  cantidad: Number(cantidad), responsable: 'Javier' };
     var btn = document.getElementById('btnIngresoBasal');
     btn.disabled = true;
     google.script.run
@@ -1420,7 +1415,7 @@ function finalizarBorrador(f){
         btn.disabled = false;
         if (r && r.ok === false) { msg(r.msg || 'No se pudo registrar.', false); return; }
         msg((r && r.msg) || 'Ingreso registrado.', true);
-        ['ingBasTeton', 'ingBasMedida', 'ingBasLote', 'ingBasCantidad', 'ingBasObs'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['ingBasTeton', 'ingBasMedida', 'ingBasLote', 'ingBasCantidad'].forEach(function (id) { document.getElementById(id).value = ''; });
         actualizarInventarios();
       })
       .withFailureHandler(function (e) {
