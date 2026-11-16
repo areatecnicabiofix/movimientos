@@ -681,35 +681,6 @@
           return;
         }
 
-        // Dentro de un mismo lote, se envasa primero el Lote de Lavado Final más viejo
-        // (así el stock que queda en Sala Blanca sigue cuadrando por L.F.).
-        var errorLF = '';
-        document.querySelectorAll('#contenedorMedidas .panel-disponibilidad').forEach(function (panel) {
-          if (errorLF) return;
-          var porLote = {};
-          panel.querySelectorAll('.fila-disp').forEach(function (fd) {
-            if (fd.dataset.ordlf === '') return;
-            (porLote[fd.dataset.lote] = porLote[fd.dataset.lote] || []).push(fd);
-          });
-          Object.keys(porLote).forEach(function (lote) {
-            if (errorLF) return;
-            var filasLF = porLote[lote].sort(function (a, b) { return Number(a.dataset.ordlf) - Number(b.dataset.ordlf); });
-            for (var i = 1; i < filasLF.length; i++) {
-              var tomado = Number(filasLF[i].querySelector('.in-tomar').value) || 0;
-              if (tomado <= 0) continue;
-              for (var j = 0; j < i; j++) {
-                var tAnt = Number(filasLF[j].querySelector('.in-tomar').value) || 0;
-                var mAnt = Number(filasLF[j].dataset.max) || 0;
-                if (tAnt < mAnt) {
-                  errorLF = etiquetaLote_(lote) + ': primero hay que envasar todo lo del L.F. ' + filasLF[j].dataset.lf +
-                    ' (' + mAnt + ' u.) antes de tomar del L.F. ' + filasLF[i].dataset.lf + '.';
-                  return;
-                }
-              }
-            }
-          });
-        });
-        if (errorLF) { alert(errorLF); return; }
 
         var datos = {
           sistema: document.getElementById('sistema').value,
