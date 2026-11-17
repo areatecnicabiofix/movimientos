@@ -492,7 +492,11 @@ function renderSemi(res){
       return '<tr><td>'+esc(it.producto)+conv+'</td><td>'+esc(it.medida)+'</td><td>'+esc(it.lote)+'</td><td>'+esc(it.teton||'—')+'</td><td class="r">'+cantTotal+'</td>'+est+chk+'</tr>';
     }).join('');
     var thx = despacha ? '<th class="c">Estado</th><th class="c">Sel.</th>' : '';
-    var boton = despacha ? '<div style="display:flex; justify-content:flex-end; margin-top:10px;"><button class="btn" id="bs_'+ei+'" onclick="enviarSector('+ei+')">Enviar a '+nombreSector(e.sectorKey)+'</button></div>' : '';
+    // 17/11/2026: el envío a Blasting lleva Responsable (queda en Movimientos)
+    var selResp = (despacha && e.sectorKey === 'blasting')
+      ? '<label style="font-size:13px; margin-right:8px;">Responsable&nbsp;<select id="br_'+ei+'"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel</option><option>Marcos</option></select></label>'
+      : '';
+    var boton = despacha ? '<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:10px;">'+selResp+'<button class="btn" id="bs_'+ei+'" onclick="enviarSector('+ei+')">Enviar a '+nombreSector(e.sectorKey)+'</button></div>' : '';
     return '<div class="card'+(despacha?' desp':' info')+'"><div class="card-head"><h2>'+e.etapa+'</h2><span class="sub">'+(e.subtotal||0)+' u.</span></div>' +
       '<div class="tabla-wrap"><table><thead><tr><th>Producto</th><th>Medida</th><th>Lote</th><th>Tetón</th><th style="text-align:right;">Cant.</th>'+thx+'</tr></thead><tbody>'+filas+'</tbody></table></div>'+boton+'</div>';
   }).join('');
@@ -514,9 +518,15 @@ function enviarSector(ei){
     }
   });
   if (!sel.length) { msg('Marcá al menos un lote.', false); return; }
+  var resp = '';
+  if (e.sectorKey === 'blasting') {
+    var sr = document.getElementById('br_'+ei);
+    resp = sr ? sr.value : '';
+    if (!resp) { msg('Elegí el responsable del envío a Blasting.', false); return; }
+  }
   var btn = document.getElementById('bs_'+ei); if (btn) btn.disabled = true;
   msg('Enviando…', true);
-  api('depAsignar', [{ sector: e.sectorKey, items: sel }])
+  api('depAsignar', [{ sector: e.sectorKey, responsable: resp, items: sel }])
     .then(function(r){ msg((r && r.msg) || 'Listo.', true); cargarSemi(); })
     .catch(function(err){ if (btn) btn.disabled = false; msg(err.message, false); });
 }
