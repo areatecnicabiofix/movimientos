@@ -330,7 +330,7 @@
       </div>
       <div class="grid-3" style="margin-top:12px;">
         <div><label>Responsable (quien controla esta partida)</label>
-          <select id="responsable"><option value="">— Seleccionar —</option><option value="Javier">Javier</option><option value="Miguel">Miguel</option><option value="Marcos">Marcos</option></select>
+          <select id="responsable"><option value="">— Seleccionar —</option><option value="Javier">Javier</option><option value="Miguel Gomez">Miguel Gomez</option><option value="Marcos">Marcos</option></select>
         </div>
       </div>
       <div style="margin-top:12px;"><label>Observaciones</label><textarea id="txtObservaciones" rows="2" placeholder="Notas sobre el lote..."></textarea></div>
@@ -710,7 +710,7 @@
         '<div class="grid-3">'+
           '<div><label>Fecha</label><input id="iFecha" type="date" value="'+fh+'" disabled style="background:#f1f5f9;"></div>'+
           '<div><label>N° Bandeja (automático)</label><input id="iBandeja" value="'+esc_(PROXIMA_BANDEJA)+'" readonly style="background:#f1f5f9;"></div>'+
-          '<div><label>Operario</label><select id="iOperario"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel</option><option>Marcos</option></select></div>'+
+          '<div><label>Operario</label><select id="iOperario"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel Gomez</option><option>Marcos</option></select></div>'+
         '</div>'+
         '<div class="grid-3" style="margin-top:12px;">'+
           '<div><label>Cuántas piezas van en esta bandeja (máx 50)</label><input id="iCant" type="number" min="1" max="50" step="1" placeholder="Ej: 50" oninput="chequear50()"><div id="aviso50" style="font-size:12px;font-weight:700;margin-top:4px;"></div></div>'+
@@ -779,7 +779,7 @@
 
 
 
-  function selResp(id, def){ var ops=['Javier','Miguel','Marcos']; var o=ops.map(function(x){return '<option'+(x===def?' selected':'')+'>'+x+'</option>';}).join(''); return '<select id="'+id+'">'+o+'</select>'; }
+  function selResp(id, def){ var ops=['Javier','Miguel Gomez','Marcos']; var o=ops.map(function(x){return '<option'+(x===def?' selected':'')+'>'+x+'</option>';}).join(''); return '<select id="'+id+'">'+o+'</select>'; }
   function renderEnCurso(d){
     CUR_FILA = (d && d.fila) || CUR_FILA;
     if (d && d.pausadas) BND_PAUSADAS = d.pausadas;
