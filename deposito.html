@@ -494,7 +494,7 @@ function renderSemi(res){
     var thx = despacha ? '<th class="c">Estado</th><th class="c">Sel.</th>' : '';
     // 17/11/2026: el envío a Blasting lleva Responsable (queda en Movimientos)
     var selResp = (despacha && e.sectorKey === 'blasting')
-      ? '<label style="font-size:13px; margin-right:8px;">Responsable&nbsp;<select id="br_'+ei+'"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel</option><option>Marcos</option></select></label>'
+      ? '<label style="font-size:13px; margin-right:8px;">Responsable&nbsp;<select id="br_'+ei+'"><option value="">— Seleccionar —</option><option>Javier</option><option>Miguel Gomez</option><option>Marcos</option></select></label>'
       : '';
     var boton = despacha ? '<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:10px;">'+selResp+'<button class="btn" id="bs_'+ei+'" onclick="enviarSector('+ei+')">Enviar a '+nombreSector(e.sectorKey)+'</button></div>' : '';
     return '<div class="card'+(despacha?' desp':' info')+'"><div class="card-head"><h2>'+e.etapa+'</h2><span class="sub">'+(e.subtotal||0)+' u.</span></div>' +
