@@ -50,7 +50,10 @@
       .aviso-cmu { background: #f3e8ff; border: 1px solid #c4b5fd; color: #5b21b6; border-radius: 8px; padding: 10px 14px; font-size: 15px; margin-top: 10px; display: none; }
       .oculto { display: none !important; }
       @media (max-width: 700px) { .etq-fila { flex-direction: column; align-items: stretch; } .etq-fila > div.etq-ref { flex: 1; } }
-    </style>
+    
+/* 18/11/2026: las observaciones no se pueden agrandar (se desfasaba el formulario) */
+textarea{resize:none !important;max-width:100% !important;box-sizing:border-box;}
+</style>
   </head>
   <body>
 <div style="max-width:1400px;margin:0 auto 10px;font:13px Arial;display:flex;gap:12px;flex-wrap:wrap">
