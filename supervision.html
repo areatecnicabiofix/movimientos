@@ -132,7 +132,6 @@
       <button class="btn gris" onclick="cargarWip()">↻ Actualizar</button>
     </div>
     <p class="mut">Mismas cantidades que el Depósito. En Máquina: lo que falta producir de cada lote que está en la máquina, y "Días" desde que arrancó. En el resto, "Días" = desde que entró a esa etapa la parte más vieja de lo que todavía queda ahí. Tocá una etapa para filtrar y un lote para ver su historia.</p>
-    <div class="card" id="wSector"><h2>Por sector — ¿dónde se frena el flujo?</h2><p class="mut">Cargando…</p></div>
     <div class="etapas" id="wEtapas"></div>
     <div class="card"><div class="tabla-wrap" id="wLista"><p class="mut">Cargando…</p></div></div>
   </div>
@@ -264,7 +263,6 @@
 
 <script>
 var QP = null, MECOP = {};
-var WSECT_T = null;   // 18/11/2026: tiempos por sector (mediana de lotes terminados, últimos 60 días)
 var AUD = [], COTAS = [], ACT = 'ale', WIP = null, WETAPA = '', ALE = [], LT = null, REND = null, PROD = null, AUD_OK = false, DERIVA = [];
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -384,7 +382,6 @@ function irLote(l){ ver('lote'); $('loteNum').value = l; cargarLote(); }
 function claseDias(d){ return d > 14 ? 'd14' : (d > 7 ? 'd7' : 'd0'); }
 function cargarWip(){
   $('wLista').innerHTML = '<p class="mut">Cargando…</p>';
-  rpc('flujo_tiempos_sector').then(function(t){ WSECT_T = t || []; if (WIP) renderWip(); }).catch(function(){ WSECT_T = []; });
   rpc('wip_etapas').then(function(d){
     WIP = d || [];
     var prods = {}; WIP.forEach(function(w){ prods[w.producto] = 1; });
@@ -402,7 +399,6 @@ function filtroWip(conEtapa){
 }
 function filtrarEtapa(e){ WETAPA = (WETAPA === e ? '' : e); renderWip(); }
 function renderWip(){
-  renderWipSector();
   var base = filtroWip(false), etapas = {}, orden = [];
   base.forEach(function(w){
     if (!etapas[w.etapa]) { etapas[w.etapa] = { o: w.orden, lotes: 0, pz: 0, v: 0, a: 0, r: 0, max: 0 }; orden.push(w.etapa); }
@@ -428,56 +424,6 @@ function renderWip(){
         '<td>'+esc(w.etapa)+'</td><td><b>'+esc(w.lote)+'</b>'+(w.inicial?' <span class="pill baja">carga inicial</span>':'')+(w.detalle?'<div class="mut">'+esc(w.detalle)+'</div>':'')+'</td><td>'+esc(w.producto)+'</td><td>'+esc(w.medida)+'</td><td>'+esc(w.teton)+'</td>' +
         '<td class="r">'+num(w.cantidad,0)+'</td><td>'+fecha(w.desde)+'</td><td>'+fecha(w.ultimo_mov)+'</td></tr>';
     }).join('') + '</tbody></table>';
-}
-
-/* 18/11/2026: resumen POR SECTOR (junta las etapas de cada sector: espera + en proceso).
-   Usa los mismos datos y filtros que las tarjetas de abajo (producto, búsqueda, antigüedad, carga inicial).
-   "Tarda" = mediana de días que estuvieron en el sector los lotes que ya salieron (últimos 60 días). */
-var SECTORES = ['Mecanizado','Lavado Primario','Abrillantado','Vaporeado','Lavado Secundario','Control de Calidad',
-  'Lavado Grueso','Blasting','Grabado Láser','Lavado Final','Sala Blanca','Depósito Componentes'];
-function sectorDeEtapa(e){
-  e = String(e || '').toLowerCase();
-  if (/m[aá]quina/.test(e)) return 'Mecanizado';
-  if (/abrillant/.test(e)) return 'Abrillantado';
-  if (/vapore/.test(e)) return 'Vaporeado';
-  if (/lavado primario/.test(e)) return 'Lavado Primario';
-  if (/lavado secundario/.test(e)) return 'Lavado Secundario';
-  if (/control/.test(e)) return 'Control de Calidad';
-  if (/lavado grueso/.test(e)) return 'Lavado Grueso';
-  if (/blast/.test(e)) return 'Blasting';
-  if (/grabado/.test(e)) return 'Grabado Láser';
-  if (/lavado final/.test(e)) return 'Lavado Final';
-  if (/sala blanca/.test(e)) return 'Sala Blanca';
-  if (/dep[oó]sito/.test(e)) return 'Depósito Componentes';
-  return e ? e.charAt(0).toUpperCase() + e.slice(1) : 'Otros';
-}
-function renderWipSector(){
-  var box = $('wSector'); if (!box) return;
-  var s = {}, tarda = {};
-  (WSECT_T || []).forEach(function(t){ tarda[t.sector] = t; });
-  filtroWip(false).forEach(function(w){
-    var k = sectorDeEtapa(w.etapa), d = Number(w.dias) || 0, c = Number(w.cantidad) || 0;
-    if (!s[k]) s[k] = { pz: 0, lotes: 0, viejos: 0, max: 0 };
-    s[k].pz += c; s[k].lotes++; s[k].max = Math.max(s[k].max, d); if (d > 14) s[k].viejos++;
-  });
-  var orden = SECTORES.filter(function(k){ return s[k] || tarda[k]; }).concat(Object.keys(s).filter(function(k){ return SECTORES.indexOf(k) < 0; }));
-  var prod = orden.filter(function(k){ return s[k] && k !== 'Sala Blanca' && k !== 'Depósito Componentes'; });
-  var cuello = prod.sort(function(a, b){ return s[b].pz - s[a].pz; })[0];
-  var maxPz = Math.max.apply(null, orden.map(function(k){ return s[k] ? s[k].pz : 0; }).concat([1]));
-  box.innerHTML = '<h2>Por sector — ¿dónde se frena el flujo?</h2>' +
-    (cuello ? '<p style="margin:0 0 8px">Cuello de botella hoy: <b>' + esc(cuello) + '</b> · ' + num(s[cuello].pz, 0) + ' piezas en ' + s[cuello].lotes + ' lote(s) esperando.</p>' : '') +
-    '<div class="tabla-wrap"><table><thead><tr><th>Sector</th><th>Piezas esperando</th><th></th><th>Lotes</th><th>Lotes +14 d</th><th>El más viejo</th><th title="Mediana de días que estuvieron en el sector los lotes que ya salieron (últimos 60 días)">Tarda en salir</th></tr></thead><tbody>' +
-    orden.map(function(k){
-      var e = s[k] || { pz: 0, lotes: 0, viejos: 0, max: 0 }, t = tarda[k], stock = (k === 'Sala Blanca' || k === 'Depósito Componentes');
-      return '<tr' + (k === cuello ? ' style="background:#fef2f2"' : '') + '><td><b>' + esc(k) + '</b>' + (stock ? ' <span class="pill baja">stock terminado</span>' : '') + '</td>' +
-        '<td class="r">' + num(e.pz, 0) + '</td>' +
-        '<td style="min-width:120px"><div style="height:8px;border-radius:4px;background:#f1f5f9"><div style="height:8px;border-radius:4px;width:' + (e.pz * 100 / maxPz) + '%;background:' + (stock ? '#94a3b8' : (k === cuello ? '#ef4444' : '#0ea5e9')) + '"></div></div></td>' +
-        '<td class="r">' + e.lotes + '</td>' +
-        '<td class="r">' + (e.viejos ? '<span class="pill d14">' + e.viejos + '</span>' : '0') + '</td>' +
-        '<td class="r">' + (e.lotes ? '<span class="pill ' + claseDias(e.max) + '">' + e.max + ' d</span>' : '') + '</td>' +
-        '<td class="r">' + (t ? num(t.mediana_dias, 1) + ' d <span class="mut">(' + t.lotes + ' lotes)</span>' : '<span class="mut">—</span>') + '</td></tr>';
-    }).join('') + '</tbody></table></div>' +
-    '<p class="mut" style="margin:6px 0 0">Piezas y lotes: lo que está hoy en el sector, con los mismos filtros de arriba. "Tarda en salir": cuántos días (mediana) estuvieron en el sector los lotes que ya pasaron al siguiente, en los últimos 60 días.</p>';
 }
 
 /* ---------------- Alertas ---------------- */
