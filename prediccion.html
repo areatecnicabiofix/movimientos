@@ -100,7 +100,8 @@
   <div id="p_quiebre" class="hide">
     <div class="nota">Consumo = lo que salió de Sala Blanca a envasado en los últimos 90 días (no hay registro de ventas en el sistema, se usa esa salida).
       Para cada medida se descuenta el consumo diario del stock de Sala Blanca y se suma lo que va llegando según la simulación.
-      <b>Mandar a mecanizar antes de</b> = fecha de quiebre menos el tiempo que tarda hoy un lote nuevo desde máquina hasta Sala Blanca.</div>
+      <b>Mandar a mecanizar antes de</b> = fecha de quiebre menos el tiempo que tarda hoy un lote nuevo desde máquina hasta Sala Blanca.
+      <b>Con tetón y sin tetón se cuentan por separado</b> (son productos distintos desde la máquina); debajo de la medida se muestra lo que hay del otro tetón.</div>
     <div class="fila">
       <select id="qPrio" onchange="renderQuiebre()"><option value="">Todas</option><option value="urg">Solo urgentes / pronto</option></select>
       <input id="qBuscar" placeholder="Buscar producto o medida…" oninput="renderQuiebre()" style="min-width:220px">
@@ -266,6 +267,11 @@ function simular(){
     var lista = atrasados[e].sort(function(a, b){ return a.desde - b.desde; }), acum = 0, cap = capDe(e, true);
     lista.forEach(function(it){ acum += it.q; it.rem = Math.max(0.5, acum / cap * 7 / 5); });
   });
+  // Colas de los lavados (antes de Control): cada partida sale en orden de llegada al ritmo real del sector
+  var colaPre = {};
+  items.filter(function(it){ return it.k === 0 && it.etapa !== 'maq' && !it.trabajo; })
+    .sort(function(a, b){ return a.desde - b.desde; })
+    .forEach(function(it){ var c = colaPre[it.etapa] = (colaPre[it.etapa] || 0) + it.q; it.salePre = Math.max(0.5, c / capDe(it.etapa, true) * 7 / 5); });
   // 2) Desde ahí, cada tramo que falta con su mediana
   items.forEach(function(it){
     // "Si se lo prioriza": solo el tiempo de hacerlo en cada etapa que le falta (sin esperar en ninguna cola)
@@ -275,8 +281,28 @@ function simular(){
     var fr = aHabil(sumarDias(ahora, dRap));
     if (!it.L.rapido || fr > it.L.rapido) it.L.rapido = fr;
     var L = it.L, q = it.q, S = it.S, t = sumarDias(ahora, it.rem);
+    // Antes de Control: lo que sale de máquina va llegando a Lavado Primario día a día, y de ahí a
+    // Abrillantado / Vaporeado / Lavado Secundario, cada etapa con su tiempo de proceso.
+    var tPre = null;
+    if (it.k === 0) {
+      var r0 = ruta(it.w.producto), ia = r0.indexOf(it.etapa), tt = new Date(ahora);
+      if (it.etapa === 'maq') {
+        var porLoteDia = capDe('maq', true) / Math.max(1, activosMaq), resto = q, di = 0;
+        while (resto > 0.5 && di < SIM_DIAS.length) { var hoyQ = Math.min(resto, porLoteDia); llegadas.lp[di] += hoyQ; resto -= hoyQ; di++; }
+        tt = sumarDias(ahora, it.rem);
+      } else if (it.trabajo) {
+        tt = sumarDias(ahora, Math.max(0.5, q / capDe(it.etapa, false) * 7 / 5));
+      } else tt = sumarDias(ahora, it.salePre || 0.5);
+      for (var x2 = ia + 1; x2 < r0.length && ETAPAS.indexOf(r0[x2]) < ETAPAS.indexOf('ctrl'); x2++) {
+        var fh2 = aHabil(tt), i2 = diaIdx(fh2);
+        if (i2 >= 0 && r0[x2] !== 'lp') llegadas[r0[x2]][i2] += q;
+        tt = sumarDias(tt, (q / capDe(r0[x2], false) + 0.5) * 7 / 5);
+      }
+      tPre = tt;
+    }
     for (var j = it.k; j < 6; j++) {
       if (j > it.k || it.etapa === 'maq') t = sumarDias(t, S[j]);
+      if (j === 0 && tPre && t < tPre) t = new Date(tPre);           // no llega a Control antes de terminar los lavados
       if (j === 3 && S[3] === 0) continue;                           // sin Blasting: no "llega" a Blasting
       var dest = LLEGA_TRAS_TRAMO[j], fh = aHabil(t), i = diaIdx(fh);
       if (i >= 0) llegadas[dest][i] += q;
@@ -403,7 +429,10 @@ function calcularQuiebre(){
     var prio = !quiebre ? 'ok' : diasLimite <= 0 ? 'urg' : diasLimite <= 14 ? 'pronto' : 'ok';
     var futuro = (Number(r.sala_blanca) || 0) + (wip[k] || 0);
     var necesita = Math.max(0, Math.ceil(consumo * (cubrir + leadCal) - futuro));
+    var kOtro = clave(r.producto, tet(r.teton) === 'con' ? 'sin' : 'con', r.medida);
+    var salaOtro = (D.demanda || []).filter(function(x){ return clave(x.producto, x.teton, x.medida) === kOtro; }).reduce(function(a, x){ return a + (Number(x.sala_blanca) || 0); }, 0);
     return { producto: r.producto, teton: tet(r.teton), medida: r.medida, sala: Number(r.sala_blanca) || 0, wip: wip[k] || 0, consumo: consumo,
+             otro: { sala: salaOtro, wip: wip[kOtro] || 0, teton: tet(r.teton) === 'con' ? 'sin' : 'con' },
              quiebre: quiebre, limite: limite, diasLimite: diasLimite, prio: prio, lead: leadCal, necesita: necesita,
              poner: necesita ? ponerEnMaquina(r.producto, tet(r.teton), r.medida, necesita).poner : 0 };
   });
@@ -423,7 +452,8 @@ function renderQuiebre(){
     '<th class="r">Consumo/sem.</th><th>Se acaba</th><th>Mandar a mecanizar antes de</th><th class="r">Faltan</th><th class="r">Poner en máquina</th></tr></thead><tbody>' +
     lista.map(function(x){
       var p = x.prio === 'urg' ? '<span class="pill rojo">Ya</span>' : x.prio === 'pronto' ? '<span class="pill ama">Pronto</span>' : '<span class="pill verde">OK</span>';
-      return '<tr><td>' + p + '</td><td>' + esc(x.producto) + '</td><td>' + esc(x.teton) + '</td><td><b>' + esc(x.medida) + '</b></td>' +
+      var otro = (x.otro.sala + x.otro.wip) > 0 ? '<br><span class="mut">' + x.otro.teton + ' tetón: ' + n0(x.otro.sala) + ' en Sala B. · ' + n0(x.otro.wip) + ' en proceso</span>' : '';
+      return '<tr><td>' + p + '</td><td>' + esc(x.producto) + '</td><td>' + esc(x.teton) + '</td><td><b>' + esc(x.medida) + '</b>' + otro + '</td>' +
         '<td class="r">' + n0(x.sala) + '</td><td class="r">' + n0(x.wip) + '</td><td class="r">' + (Math.round(x.consumo * 7 * 10) / 10).toLocaleString('es-AR') + '</td>' +
         '<td>' + (x.quiebre ? (x.quiebre <= new Date() ? '<b style="color:#b91c1c">Ya sin stock</b>' : fCorta(x.quiebre) + '/' + String(x.quiebre.getFullYear()).slice(2)) : '<span class="mut">más de 1 año</span>') + '</td>' +
         '<td>' + (x.limite ? (x.diasLimite <= 0 ? '<b style="color:#b91c1c">Ya</b>' + (x.sala > 0 ? ' <span class="mut">(aunque se mande hoy, llega después de que se acabe)</span>' : '') : fCorta(x.limite) + ' <span class="mut">(en ' + x.diasLimite + ' d)</span>') : '—') +
