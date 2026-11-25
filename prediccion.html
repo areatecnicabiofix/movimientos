@@ -74,7 +74,9 @@
     <div class="nota">Para cada lote se suman los <b>tiempos reales</b> que tardaron los lotes del mismo producto en cada tramo (mediana de los últimos 8 meses):
       Máquina → llega a Control · espera y control · Lavado Grueso · Blasting · Lavado Final · Sala Blanca. Lo que ya lleva en la etapa en que está se descuenta.
       Lo que ya está atrasado en una etapa sale en orden de llegada, al ritmo que ese sector sacó por día hábil en los últimos <span class="nDias">60</span> días.
-      Si cae sábado, domingo o feriado (RRHH) pasa al día hábil siguiente. Solo implantes. <span id="tTiempos"></span></div>
+      Si cae sábado, domingo o feriado (RRHH) pasa al día hábil siguiente. Solo implantes.
+      <br><b>Se actualiza sola con cada movimiento:</b> cuando un lote se empieza a controlar, a blastinar o sale, la fecha se recalcula desde donde está.
+      La columna <b>Si se lo prioriza</b> es la fecha si se lo hace pasar primero en cada sector (solo el tiempo de hacerlo, sin esperar en ninguna cola). <span id="tTiempos"></span></div>
     <div class="fila">
       <input id="etaBuscar" placeholder="Buscar lote, producto o medida…" oninput="renderEta()" style="min-width:240px">
       <select id="etaEtapa" onchange="renderEta()"><option value="">Todas las etapas</option></select>
@@ -205,7 +207,15 @@ function capDe(e, habil){   // piezas por día: hábil = promedio real por día 
  *                s4 Lavado Grueso→Blasting · s5 Blasting→Lavado Final · s6 Lavado Final→Sala Blanca
  * Si una partida ya lleva más que la mediana en su etapa (atrasada), sale en orden de llegada al ritmo real del sector.
  * ========================================================================== */
-var TRAMO_DE_ORDEN = [0, 0, 0, 0, 0, 1, 2, 3, 4];               // orden wip (0..8) -> tramo s1..s5 (índice 0..4)
+var TRAMO_DE_ETAPA = { maq: 0, lp: 0, abr: 0, vap: 0, sec: 0, ctrl: 1, lg: 2, bla: 3, lf: 4 };   // etapa -> tramo s1..s5 (índice 0..4)
+// Fila de wip_etapas -> { etapa, trabajo }. "En trabajo" = se está haciendo ahora (en máquina, en control, en blasting...)
+function etapaDe(w){
+  var o = Number(w.orden), trabajo = o >= 100 || w.grupo === 'En trabajo', n = norm(w.etapa);
+  if (!trabajo) return { etapa: ORDEN_A_ETAPA[o], trabajo: false };
+  var e = /maquina/.test(n) ? 'maq' : /abrillant/.test(n) ? 'abr' : /vapor/.test(n) ? 'vap' : /secundario/.test(n) ? 'sec' :
+          /primario/.test(n) ? 'lp' : /control/.test(n) ? 'ctrl' : /grueso/.test(n) ? 'lg' : /blast/.test(n) ? 'bla' : /final/.test(n) ? 'lf' : null;
+  return { etapa: e, trabajo: true };
+}
 var LLEGA_TRAS_TRAMO = ['ctrl', 'lg', 'bla', 'lf', 'lfok', 'sala'];
 function tiemposDe(p){
   var T = D.tiempos || {}, base = T['*'] || {}, t = T[p] || {}, out = [];
@@ -227,36 +237,46 @@ function simular(){
   ETAPAS.concat(['sala','lfok']).forEach(function(e){ llegadas[e] = SIM_DIAS.map(function(){ return 0; }); colaHoy[e] = 0; });
   var conInicial = $('conInicial').checked;
   var wip = (D.wip || []).filter(function(w){ return esImplante(w.producto) && (Number(w.cantidad) || 0) > 0 && (conInicial || !(w.inicial === true || w.inicial === 'true')); });
-  var activosMaq = wip.filter(function(w){ return Number(w.orden) === 0 && !/pausa/i.test(w.detalle || ''); }).length || 1;
+  var activosMaq = wip.filter(function(w){ return etapaDe(w).etapa === 'maq' && !/pausa/i.test(w.detalle || ''); }).length || 1;
   // 1) Lo que le falta a cada partida en su tramo actual. Si ya pasó la mediana (atrasada), no se la
   //    manda toda "para hoy": las atrasadas de cada etapa salen en orden de llegada al ritmo real del sector.
   var items = [];
   wip.forEach(function(w){
-    var o = Number(w.orden), q = Number(w.cantidad), etapa = ORDEN_A_ETAPA[o];
+    var ed = etapaDe(w), etapa = ed.etapa, q = Number(w.cantidad);
+    if (!etapa) return;
+    var o = etapa === 'sala' ? 9 : (etapa === 'maq' ? 0 : ETAPAS.indexOf(etapa));
     var kl = w.lote + '|' + clave(w.producto, w.teton, w.medida);
     var L = lotes[kl] || (lotes[kl] = { lote: w.lote, producto: w.producto, teton: tet(w.teton), medida: w.medida, total: 0, etapas: {},
                                          primero: null, ultimo: null, atrasado: false, clave: clave(w.producto, w.teton, w.medida) });
-    L.etapas[etapa] = (L.etapas[etapa] || 0) + q; L.total += q;
-    colaHoy[etapa] = (colaHoy[etapa] || 0) + q;
-    if (o >= 9) return;
-    var S = tiemposDe(w.producto), k = TRAMO_DE_ORDEN[o];
+    var etq = ed.trabajo && etapa !== 'maq' ? etapa + '_t' : etapa;          // "_t" = se está haciendo ahora
+    L.etapas[etq] = (L.etapas[etq] || 0) + q; L.total += q;
+    if (!ed.trabajo) colaHoy[etapa] = (colaHoy[etapa] || 0) + q;
+    if (etapa === 'sala') return;
+    var S = tiemposDe(w.producto), k = TRAMO_DE_ETAPA[etapa];
     var desde = w.desde ? new Date(w.desde) : ahora, transc = Math.max(0, (ahora - desde) / 86400000);
-    var it = { w: w, L: L, o: o, q: q, etapa: etapa, S: S, k: k, desde: desde, rem: 0, atrasado: false };
-    if (o === 0) it.rem = prodDias(q, activosMaq);
+    var it = { w: w, L: L, o: o, q: q, etapa: etapa, S: S, k: k, desde: desde, rem: 0, atrasado: false, trabajo: ed.trabajo };
+    if (etapa === 'maq') it.rem = prodDias(q, activosMaq);
+    else if (ed.trabajo) it.rem = Math.max(0.5, q / capDe(etapa, false) * 7 / 5);   // ya lo están haciendo: solo falta terminarlo
     else { it.rem = S[k] - transc; if (it.rem < 0.5) { it.atrasado = S[k] > 0; L.atrasado = L.atrasado || it.atrasado; } }
     items.push(it);
   });
   var atrasados = {};
-  items.forEach(function(it){ if (it.o > 0 && it.rem < 0.5) (atrasados[it.etapa] = atrasados[it.etapa] || []).push(it); });
+  items.forEach(function(it){ if (it.etapa !== 'maq' && !it.trabajo && it.rem < 0.5) (atrasados[it.etapa] = atrasados[it.etapa] || []).push(it); });
   Object.keys(atrasados).forEach(function(e){
     var lista = atrasados[e].sort(function(a, b){ return a.desde - b.desde; }), acum = 0, cap = capDe(e, true);
     lista.forEach(function(it){ acum += it.q; it.rem = Math.max(0.5, acum / cap * 7 / 5); });
   });
   // 2) Desde ahí, cada tramo que falta con su mediana
   items.forEach(function(it){
+    // "Si se lo prioriza": solo el tiempo de hacerlo en cada etapa que le falta (sin esperar en ninguna cola)
+    var r = ruta(it.w.producto), pos = r.indexOf(it.etapa), dRap = 0;
+    if (pos < 0) pos = 0;
+    for (var x = pos; x < r.length; x++) dRap += (x === pos && it.etapa === 'maq') ? it.rem : (it.q / capDe(r[x], false) + 0.5) * 7 / 5;
+    var fr = aHabil(sumarDias(ahora, dRap));
+    if (!it.L.rapido || fr > it.L.rapido) it.L.rapido = fr;
     var L = it.L, q = it.q, S = it.S, t = sumarDias(ahora, it.rem);
     for (var j = it.k; j < 6; j++) {
-      if (j > it.k || it.o === 0) t = sumarDias(t, S[j]);
+      if (j > it.k || it.etapa === 'maq') t = sumarDias(t, S[j]);
       if (j === 3 && S[3] === 0) continue;                           // sin Blasting: no "llega" a Blasting
       var dest = LLEGA_TRAS_TRAMO[j], fh = aHabil(t), i = diaIdx(fh);
       if (i >= 0) llegadas[dest][i] += q;
@@ -306,7 +326,7 @@ function renderEta(){
   var lista = Object.keys(SIM.lotes).map(function(k){ return SIM.lotes[k]; })
     .filter(function(L){ return L.total - L.enSala > 0 || L.etapas.sala; })
     .filter(function(L){ return !q || norm(L.lote + ' ' + L.producto + ' ' + L.medida).indexOf(q) >= 0; })
-    .filter(function(L){ return !fe || L.etapas[fe]; });
+    .filter(function(L){ return !fe || L.etapas[fe] || L.etapas[fe + '_t']; });
   lista.sort(function(a, b){ return (a.ultimo ? a.ultimo.getTime() : 9e15) - (b.ultimo ? b.ultimo.getTime() : 9e15); });
   var en7 = SIM.dias[5], en20 = SIM.dias[20];
   var k7 = 0, k20 = 0, atr = 0;
@@ -318,16 +338,18 @@ function renderEta(){
     kpi('Atrasados', atr, 'ya pasaron el tiempo normal de su etapa');
   if (!lista.length) { $('etaLista').innerHTML = '<p class="mut">No hay lotes para mostrar.</p>'; return; }
   $('etaLista').innerHTML = '<table><thead><tr><th>Lote</th><th>Producto</th><th>Tetón</th><th>Medida</th><th>Dónde está hoy</th><th class="r">Piezas en proceso</th>' +
-    '<th>Primeras en Sala Blanca</th><th>Listo para envasar</th></tr></thead><tbody>' +
+    '<th>Primeras en Sala Blanca</th><th>Listo para envasar</th><th>Si se lo prioriza</th></tr></thead><tbody>' +
     lista.map(function(L){
-      var donde = ETAPAS.concat(['sala']).filter(function(e){ return L.etapas[e]; }).map(function(e){ return NOM[e] + ' ' + n0(L.etapas[e]); }).join(' · ');
+      var donde = Object.keys(L.etapas).map(function(e){ var t = /_t$/.test(e), b = e.replace(/_t$/, '');
+        return (t ? '<b>En ' + NOM[b] + ' (ahora)</b> ' : NOM[b] + ' ') + n0(L.etapas[e]); }).join(' · ');
       var pend = L.total - (L.etapas.sala || 0);
       var listo = pend <= 0 ? '<span class="pill verde">Ya está en Sala Blanca</span>' :
         (L.ultimo ? '<b>' + fDia(L.ultimo) + '/' + String(L.ultimo.getFullYear()).slice(2) + '</b> <span class="mut">(' + habilesHasta(L.ultimo) + ' días háb.)</span>' : '—') +
         (L.atrasado ? ' <span class="pill nar" title="Ya lleva más que la mediana en su etapa">atrasado</span>' : '');
       return '<tr><td><b>' + esc(L.lote) + '</b></td><td>' + esc(L.producto) + '</td><td>' + esc(L.teton) + '</td><td>' + esc(L.medida) + '</td>' +
-        '<td>' + esc(donde) + '</td><td class="r">' + n0(pend) + '</td>' +
-        '<td>' + (L.etapas.sala ? 'Ya hay ' + n0(L.etapas.sala) : (L.primero ? fDia(L.primero) : '—')) + '</td><td>' + listo + '</td></tr>';
+        '<td>' + donde + '</td><td class="r">' + n0(pend) + '</td>' +
+        '<td>' + (L.etapas.sala ? 'Ya hay ' + n0(L.etapas.sala) : (L.primero ? fDia(L.primero) : '—')) + '</td><td>' + listo + '</td>' +
+        '<td>' + (pend > 0 && L.rapido ? fDia(L.rapido) + ' <span class="mut">(' + habilesHasta(L.rapido) + ' d)</span>' : '') + '</td></tr>';
     }).join('') + '</tbody></table>';
 }
 function habilesHasta(f){ var n = 0, d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + 1); while (d <= f && n < 999) { if (habil(d)) n++; d.setDate(d.getDate() + 1); } return n; }
