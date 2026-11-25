@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predicción — Bio-Fix</title>
+<!-- Solo para "tecnica": modelo predictivo armado con Supervisión + Movimientos (Supabase) -->
+<script>window.BIOFIX_PANTALLA = 'supervision'; window.BIOFIX_SOLO_ADMIN = true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="gas.js"></script>
+<style>
+  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; --az:#0284c7; }
+  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
+  body{ background:#f8fafc; color:var(--tx); margin:0; padding:16px; }
+  .container{ max-width:1150px; margin:0 auto; }
+  h1{ font-size:18px; color:#0369a1; margin:0 0 4px; }
+  .sub{ font-size:12px; color:var(--mut); margin:0 0 12px; }
+  .tabs{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab{ flex:1; min-width:130px; padding:11px 6px; text-align:center; font-weight:700; font-size:14px; border:1px solid var(--bx); border-radius:10px; background:#fff; cursor:pointer; color:var(--mut); }
+  .tab.active{ background:var(--az); color:#fff; border-color:var(--az); }
+  .card{ background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .fila{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  input, select{ padding:8px 10px; font-size:13px; border:1px solid #cbd5e1; border-radius:8px; }
+  .btn{ background:var(--az); color:#fff; border:none; padding:8px 14px; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+  .btn.gris{ background:#fff; color:#475569; border:1px solid #cbd5e1; }
+  .tabla-wrap{ overflow-x:auto; max-height:70vh; overflow-y:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  th{ background:#f1f5f9; text-align:left; padding:6px 8px; border:1px solid var(--bx); font-size:12px; position:sticky; top:0; z-index:1; }
+  td{ padding:5px 8px; border:1px solid var(--bx); vertical-align:top; }
+  td.r, th.r{ text-align:right; font-variant-numeric:tabular-nums; }
+  .pill{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:7px; white-space:nowrap; display:inline-block; }
+  .rojo{ background:#fee2e2; color:#b91c1c; } .nar{ background:#ffedd5; color:#9a3412; } .ama{ background:#fef3c7; color:#92400e; }
+  .verde{ background:#dcfce7; color:#15803d; } .gris{ background:#f1f5f9; color:#475569; }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; margin-bottom:12px; }
+  .kpi{ background:#fff; border:1px solid var(--bx); border-radius:10px; padding:10px 12px; }
+  .kpi .l{ font-size:11px; color:var(--mut); } .kpi .v{ font-size:22px; font-weight:800; margin-top:2px; } .kpi .s{ font-size:11px; color:var(--mut); }
+  .mut{ color:var(--mut); font-size:12px; }
+  .hide{ display:none; }
+  h2{ font-size:14px; margin:4px 0 8px; }
+  .nota{ font-size:12px; color:#475569; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:8px 10px; margin-bottom:10px; line-height:1.45; }
+  .bar{ height:10px; background:#e2e8f0; border-radius:5px; overflow:hidden; min-width:90px; }
+  .bar i{ display:block; height:100%; background:#0284c7; }
+  .calc{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; align-items:end; }
+  .calc label{ display:block; font-size:11.5px; color:#334155; font-weight:700; margin-bottom:3px; }
+  .calc input, .calc select{ width:100%; }
+  .grande{ font-size:22px; font-weight:800; color:#0369a1; }
+  .sector-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-bottom:12px; }
+  .sector{ border:1px solid var(--bx); border-radius:10px; padding:10px 12px; background:#fff; }
+  .sector .t{ font-weight:700; font-size:13px; } .sector .s{ font-size:11.5px; color:var(--mut); margin:2px 0 6px; }
+  .dias{ display:flex; gap:3px; align-items:flex-end; height:70px; }
+  .dias div{ flex:1; background:#93c5fd; border-radius:3px 3px 0 0; min-height:2px; position:relative; }
+  .dias div.hoy{ background:#0284c7; }
+  .diaslbl{ display:flex; gap:3px; font-size:9.5px; color:var(--mut); }
+  .diaslbl span{ flex:1; text-align:center; }
+  svg.spark{ display:block; }
+  @media print{ .tabs, .fila, #bfChip{ display:none !important; } body{ padding:0; background:#fff; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Predicción</h1>
+  <p class="sub" id="gen">Cargando datos…</p>
+  <div class="tabs">
+    <div class="tab active" id="tb_eta" onclick="ver('eta')">Cuándo sale cada lote</div>
+    <div class="tab" id="tb_carga" onclick="ver('carga')">Carga por sector</div>
+    <div class="tab" id="tb_quiebre" onclick="ver('quiebre')">Quiebre de stock</div>
+    <div class="tab" id="tb_prod" onclick="ver('prod')">Cuánto producir</div>
+    <div class="tab" id="tb_cotas" onclick="ver('cotas')">Alerta de cotas</div>
+  </div>
+
+  <!-- ===================== ETA POR LOTE ===================== -->
+  <div id="p_eta">
+    <div class="nota">Para cada lote se suman los <b>tiempos reales</b> que tardaron los lotes del mismo producto en cada tramo (mediana de los últimos 8 meses):
+      Máquina → llega a Control · espera y control · Lavado Grueso · Blasting · Lavado Final · Sala Blanca. Lo que ya lleva en la etapa en que está se descuenta.
+      Lo que ya está atrasado en una etapa sale en orden de llegada, al ritmo que ese sector sacó por día hábil en los últimos <span class="nDias">60</span> días.
+      Si cae sábado, domingo o feriado (RRHH) pasa al día hábil siguiente. Solo implantes. <span id="tTiempos"></span></div>
+    <div class="fila">
+      <input id="etaBuscar" placeholder="Buscar lote, producto o medida…" oninput="renderEta()" style="min-width:240px">
+      <select id="etaEtapa" onchange="renderEta()"><option value="">Todas las etapas</option></select>
+      <label class="mut" title="Stock que se cargó de una vez el 30/06 y quedó esperando: si se atiende por pedido y no por orden de llegada, conviene no contarlo"><input type="checkbox" id="conInicial" checked onchange="resimular()"> Contar el stock de la carga inicial en las colas</label>
+      <label class="mut">Ritmo de los sectores: últimos <select id="selDias" onchange="cargar()"><option>30</option><option selected>60</option><option>90</option></select> días</label>
+      <button class="btn gris" onclick="cargar()">↻ Actualizar</button>
+    </div>
+    <div class="kpis" id="etaKpis"></div>
+    <div class="card"><div class="tabla-wrap" id="etaLista"><p class="mut">Cargando…</p></div></div>
+  </div>
+
+  <!-- ===================== CARGA POR SECTOR ===================== -->
+  <div id="p_carga" class="hide">
+    <div class="nota">Cuántas piezas le van a llegar a cada sector en los próximos días hábiles, según la fecha estimada de cada lote. La barra oscura es lo que ya está esperando hoy.
+      "Días para vaciar la cola" = lo que tiene hoy ÷ lo que efectivamente sacó por día hábil en los últimos <span class="nDias">60</span> días (con la gente que hubo). Para bajarlo hay que sumar gente u horas.</div>
+    <div class="sector-grid" id="cargaGrid"></div>
+    <div class="card"><h2>Detalle por día</h2><div class="tabla-wrap" id="cargaTabla"></div></div>
+  </div>
+
+  <!-- ===================== QUIEBRE DE STOCK ===================== -->
+  <div id="p_quiebre" class="hide">
+    <div class="nota">Consumo = lo que salió de Sala Blanca a envasado en los últimos 90 días (no hay registro de ventas en el sistema, se usa esa salida).
+      Para cada medida se descuenta el consumo diario del stock de Sala Blanca y se suma lo que va llegando según la simulación.
+      <b>Mandar a mecanizar antes de</b> = fecha de quiebre menos el tiempo que tarda hoy un lote nuevo desde máquina hasta Sala Blanca.</div>
+    <div class="fila">
+      <select id="qPrio" onchange="renderQuiebre()"><option value="">Todas</option><option value="urg">Solo urgentes / pronto</option></select>
+      <input id="qBuscar" placeholder="Buscar producto o medida…" oninput="renderQuiebre()" style="min-width:220px">
+      <label class="mut">Cubrir <select id="qCubrir" onchange="renderQuiebre()"><option value="60">2 meses</option><option value="90" selected>3 meses</option><option value="180">6 meses</option></select> de consumo</label>
+    </div>
+    <div class="kpis" id="qKpis"></div>
+    <div class="card"><div class="tabla-wrap" id="qLista"><p class="mut">Cargando…</p></div></div>
+  </div>
+
+  <!-- ===================== CUÁNTO PRODUCIR ===================== -->
+  <div id="p_prod" class="hide">
+    <div class="card">
+      <h2>Calculadora</h2>
+      <div class="calc">
+        <div><label>Producto</label><select id="cProd" onchange="llenarMedidas(); calcular()"></select></div>
+        <div><label>Tetón</label><select id="cTet" onchange="llenarMedidas(); calcular()"><option value="con">Con tetón</option><option value="sin">Sin tetón</option></select></div>
+        <div><label>Medida</label><select id="cMed" onchange="calcular()"></select></div>
+        <div><label>Piezas que querés entregar</label><input id="cCant" type="number" min="1" value="200" oninput="calcular()"></div>
+      </div>
+      <div id="cRes" style="margin-top:14px"></div>
+    </div>
+    <div class="nota">Rechazo de máquina = rechazadas + perdidas ÷ producidas (cierres de Mecanizado, último año). Rechazo posterior = descartes en Control, Blasting y demás ÷ buenas de máquina.
+      Si una medida tiene menos de 300 piezas de historia se usa el promedio del producto. <b>No se puede separar por máquina</b>: en los cierres no se registra en qué máquina se hizo cada lote.</div>
+    <div class="card"><div class="tabla-wrap" id="rendLista"></div></div>
+  </div>
+
+  <!-- ===================== COTAS ===================== -->
+  <div id="p_cotas" class="hide">
+    <div class="nota">Por cada cota con tolerancia cargada se toma el promedio de cada lote (últimos 10) y la tendencia de los últimos 5.
+      <span class="pill rojo">Ya da rechazos</span> el último lote tuvo mediciones fuera de tolerancia ·
+      <span class="pill nar">Al límite</span> el último lote usó 90% o más de la tolerancia ·
+      <span class="pill ama">Se viene corriendo</span> al ritmo actual llega al límite en 3 lotes o menos, o el promedio ya usa más del 65% ·
+      <span class="pill gris">Patrón</span> la regla estadística de Supervisión detectó un corrimiento.</div>
+    <div class="fila">
+      <select id="kNivel" onchange="renderCotas()"><option value="">Todas las alertas</option><option value="3">Solo rechazos y al límite</option></select>
+      <select id="kOrigen" onchange="renderCotas()"><option value="">Máquina y Control</option><option>Máquina</option><option>Control de Calidad</option></select>
+      <input id="kBuscar" placeholder="Buscar producto o medida…" oninput="renderCotas()" style="min-width:220px">
+    </div>
+    <div class="kpis" id="kKpis"></div>
+    <div class="card"><div class="tabla-wrap" id="kLista"><p class="mut">Cargando…</p></div></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+ * Predicción (25/11/2026) — todo se calcula acá con un solo pedido a Supabase:
+ *   prediccion_datos(p_dias) -> { wip, capacidad, demanda, lead, rendimiento, cotas, deriva, feriados }
+ * ========================================================================== */
+var D = null, SIM = null, ACT = 'eta';
+var ETAPAS = ['maq','lp','abr','vap','sec','ctrl','lg','bla','lf'];
+var NOM = { maq:'Máquina', lp:'Lavado Primario', abr:'Abrillantado', vap:'Vaporeado', sec:'Lavado Secundario', ctrl:'Control de Calidad',
+            lg:'Lavado Grueso', bla:'Blasting', lf:'Lavado Final', sala:'Sala Blanca' };
+var ORDEN_A_ETAPA = ['maq','lp','abr','vap','sec','ctrl','lg','bla','lf','sala'];
+var HORIZONTE = 260;   // días hábiles simulados
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function n0(x){ return Math.round(Number(x) || 0).toLocaleString('es-AR'); }
+function pct(x){ return (Math.round(x * 1000) / 10).toLocaleString('es-AR') + '%'; }
+function norm(s){ return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+function tet(t){ t = norm(t); if (t === 'true' || t.indexOf('con') === 0) return 'con'; if (t === 'false' || t.indexOf('sin') === 0) return 'sin'; return ''; }
+function esImplante(p){ return /^(monopieza|hexagono|compresivo|cono morse)/.test(norm(p)); }
+function clave(p, t, m){ return norm(p) + '|' + tet(t) + '|' + norm(m).replace(/,/g, '.'); }
+function rpc(nombre, args){
+  return BIOFIX.sesion.then(function(){ return BIOFIX.supabase.rpc(nombre, args || {}); })
+    .then(function(r){ if (r.error) throw new Error(r.error.message); return r.data; });
+}
+function ver(t){
+  ACT = t;
+  ['eta','carga','quiebre','prod','cotas'].forEach(function(x){ $('p_'+x).classList.toggle('hide', x !== t); $('tb_'+x).className = x === t ? 'tab active' : 'tab'; });
+}
+
+/* ---------- Calendario de días hábiles ---------- */
+var FERIADOS = {};
+function iso(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function habil(d){ var w = d.getDay(); return w !== 0 && w !== 6 && !FERIADOS[iso(d)]; }
+function diasHabiles(n){   // hoy (si es hábil) + los siguientes
+  var out = [], d = new Date(); d.setHours(12, 0, 0, 0);
+  while (out.length < n) { if (habil(d)) out.push(new Date(d)); d.setDate(d.getDate() + 1); }
+  return out;
+}
+function fCorta(d){ if (!d) return ''; var x = (d instanceof Date) ? d : new Date(d); return String(x.getDate()).padStart(2, '0') + '/' + String(x.getMonth() + 1).padStart(2, '0'); }
+var DSEM = ['dom','lun','mar','mié','jue','vie','sáb'];
+function fDia(d){ return DSEM[d.getDay()] + ' ' + fCorta(d); }
+
+/* ---------- Recorrido de cada producto ---------- */
+function ruta(p){
+  var n = norm(p), r = ['maq','lp','abr','sec','ctrl','lg','bla','lf'];
+  if (/^hexagono interno/.test(n)) r = ['maq','lp','abr','vap','sec','ctrl','lg','bla','lf'];
+  if (/pulido/.test(n)) r = r.filter(function(e){ return e !== 'bla'; });
+  return r;
+}
+function capDe(e, habil){   // piezas por día: hábil = promedio real por día hábil (lo que efectivamente sale con la gente de hoy)
+  var c = D.capacidad && D.capacidad[e];
+  var def = { vap: 300, maq: 180 }[e] || 100;
+  if (!c) return def;
+  var v = habil ? Number(c.por_dia_habil) : Number(c.por_dia);
+  return v > 0 ? v : def;
+}
+
+/* ============================================================================
+ * MODELO: cada lote avanza con los tiempos REALES (mediana de los últimos 8 meses) de cada tramo,
+ * por producto:  s1 Máquina→llega a Control · s2 Control (espera + control) · s3 Control→Lavado Grueso
+ *                s4 Lavado Grueso→Blasting · s5 Blasting→Lavado Final · s6 Lavado Final→Sala Blanca
+ * Si una partida ya lleva más que la mediana en su etapa (atrasada), sale en orden de llegada al ritmo real del sector.
+ * ========================================================================== */
+var TRAMO_DE_ORDEN = [0, 0, 0, 0, 0, 1, 2, 3, 4];               // orden wip (0..8) -> tramo s1..s5 (índice 0..4)
+var LLEGA_TRAS_TRAMO = ['ctrl', 'lg', 'bla', 'lf', 'lfok', 'sala'];
+function tiemposDe(p){
+  var T = D.tiempos || {}, base = T['*'] || {}, t = T[p] || {}, out = [];
+  ['s1','s2','s3','s4','s5','s6'].forEach(function(k){ var v = t[k]; if (v == null || (t.n || 0) < 3) v = base[k]; out.push(Math.max(0, Number(v) || 0)); });
+  if (/pulido/.test(norm(p))) out[3] = 0;                         // no pasa por Blasting
+  return out;
+}
+function sumarDias(f, dias){ return new Date(f.getTime() + dias * 86400000); }
+function aHabil(f){ var d = new Date(f); d.setHours(12, 0, 0, 0); while (!habil(d)) d.setDate(d.getDate() + 1); return d; }
+function diaIdx(f){ var k = iso(f); for (var i = 0; i < SIM_DIAS.length; i++) if (iso(SIM_DIAS[i]) === k) return i; return -1; }
+var SIM_DIAS = [];
+function prodDias(q, activos){            // días corridos que le faltan a la máquina para terminar q piezas
+  var porLote = capDe('maq', true) / Math.max(1, activos);
+  return q / Math.max(1, porLote) * 7 / 5;
+}
+function simular(){
+  SIM_DIAS = diasHabiles(HORIZONTE);
+  var ahora = new Date(), lotes = {}, llegadas = {}, colaHoy = {}, salaPorClave = {};
+  ETAPAS.concat(['sala','lfok']).forEach(function(e){ llegadas[e] = SIM_DIAS.map(function(){ return 0; }); colaHoy[e] = 0; });
+  var conInicial = $('conInicial').checked;
+  var wip = (D.wip || []).filter(function(w){ return esImplante(w.producto) && (Number(w.cantidad) || 0) > 0 && (conInicial || !(w.inicial === true || w.inicial === 'true')); });
+  var activosMaq = wip.filter(function(w){ return Number(w.orden) === 0 && !/pausa/i.test(w.detalle || ''); }).length || 1;
+  // 1) Lo que le falta a cada partida en su tramo actual. Si ya pasó la mediana (atrasada), no se la
+  //    manda toda "para hoy": las atrasadas de cada etapa salen en orden de llegada al ritmo real del sector.
+  var items = [];
+  wip.forEach(function(w){
+    var o = Number(w.orden), q = Number(w.cantidad), etapa = ORDEN_A_ETAPA[o];
+    var kl = w.lote + '|' + clave(w.producto, w.teton, w.medida);
+    var L = lotes[kl] || (lotes[kl] = { lote: w.lote, producto: w.producto, teton: tet(w.teton), medida: w.medida, total: 0, etapas: {},
+                                         primero: null, ultimo: null, atrasado: false, clave: clave(w.producto, w.teton, w.medida) });
+    L.etapas[etapa] = (L.etapas[etapa] || 0) + q; L.total += q;
+    colaHoy[etapa] = (colaHoy[etapa] || 0) + q;
+    if (o >= 9) return;
+    var S = tiemposDe(w.producto), k = TRAMO_DE_ORDEN[o];
+    var desde = w.desde ? new Date(w.desde) : ahora, transc = Math.max(0, (ahora - desde) / 86400000);
+    var it = { w: w, L: L, o: o, q: q, etapa: etapa, S: S, k: k, desde: desde, rem: 0, atrasado: false };
+    if (o === 0) it.rem = prodDias(q, activosMaq);
+    else { it.rem = S[k] - transc; if (it.rem < 0.5) { it.atrasado = S[k] > 0; L.atrasado = L.atrasado || it.atrasado; } }
+    items.push(it);
+  });
+  var atrasados = {};
+  items.forEach(function(it){ if (it.o > 0 && it.rem < 0.5) (atrasados[it.etapa] = atrasados[it.etapa] || []).push(it); });
+  Object.keys(atrasados).forEach(function(e){
+    var lista = atrasados[e].sort(function(a, b){ return a.desde - b.desde; }), acum = 0, cap = capDe(e, true);
+    lista.forEach(function(it){ acum += it.q; it.rem = Math.max(0.5, acum / cap * 7 / 5); });
+  });
+  // 2) Desde ahí, cada tramo que falta con su mediana
+  items.forEach(function(it){
+    var L = it.L, q = it.q, S = it.S, t = sumarDias(ahora, it.rem);
+    for (var j = it.k; j < 6; j++) {
+      if (j > it.k || it.o === 0) t = sumarDias(t, S[j]);
+      if (j === 3 && S[3] === 0) continue;                           // sin Blasting: no "llega" a Blasting
+      var dest = LLEGA_TRAS_TRAMO[j], fh = aHabil(t), i = diaIdx(fh);
+      if (i >= 0) llegadas[dest][i] += q;
+      if (dest === 'sala') {
+        if (!L.primero || fh < L.primero) L.primero = fh;
+        if (!L.ultimo || fh > L.ultimo) L.ultimo = fh;
+        var arr = salaPorClave[L.clave] || (salaPorClave[L.clave] = {});
+        arr[iso(fh)] = (arr[iso(fh)] || 0) + q;
+      }
+    }
+  });
+  return { dias: SIM_DIAS, lotes: lotes, llegadas: llegadas, colaHoy: colaHoy, salaPorClave: salaPorClave };
+}
+
+/* ---------- Tiempo de un lote nuevo (200 piezas) desde que entra a máquina hasta Sala Blanca, en días corridos ---------- */
+function leadNuevo(p){
+  var S = tiemposDe(p);
+  return Math.round(prodDias(200, 1) + S.reduce(function(a, b){ return a + b; }, 0));
+}
+
+/* ============================================================================ CARGA */
+function cargar(){
+  $('gen').textContent = 'Cargando datos…';
+  $('etaLista').innerHTML = '<p class="mut">Cargando…</p>';
+  var d = Number($('selDias').value) || 60;
+  Array.prototype.forEach.call(document.querySelectorAll('.nDias'), function(x){ x.textContent = d; });
+  rpc('prediccion_datos', { p_dias: d }).then(function(r){
+    D = r || {};
+    FERIADOS = {}; (D.feriados || []).forEach(function(f){ FERIADOS[String(f).slice(0, 10)] = true; });
+    SIM = simular();
+    $('gen').textContent = 'Datos al ' + new Date(D.generado).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) +
+      ' · capacidad medida en los últimos ' + d + ' días. Es una estimación: cambia si se agrega gente, se priorizan lotes o hay paradas.';
+    var T = D.tiempos || {};
+    $('tTiempos').innerHTML = Object.keys(T).filter(function(k){ return k !== '*' && T[k].n >= 3; }).map(function(k){ var t = tiemposDe(k);
+      return '<br><b>' + esc(k) + '</b>: a Control ' + t[0] + ' d · Control ' + t[1] + ' d · L. Grueso ' + t[2] + ' d · Blasting ' + t[3] + ' d · L. Final ' + t[4] + ' d · Sala ' + t[5] + ' d (' + T[k].n + ' lotes)'; }).join('');
+    var sel = $('etaEtapa'); sel.innerHTML = '<option value="">Todas las etapas</option>' + ETAPAS.concat(['sala']).map(function(e){ return '<option value="' + e + '">' + NOM[e] + '</option>'; }).join('');
+    prepararCalc(); renderEta(); renderCarga(); renderQuiebre(); renderRend(); renderCotas();
+  }).catch(function(e){ $('gen').innerHTML = '<span style="color:#b91c1c">No se pudo cargar: ' + esc(e.message) + '</span>'; });
+}
+
+function resimular(){ if (!D) return; SIM = simular(); renderEta(); renderCarga(); renderQuiebre(); }
+
+/* ============================================================================ 1) ETA */
+function renderEta(){
+  if (!SIM) return;
+  var q = norm($('etaBuscar').value), fe = $('etaEtapa').value;
+  var lista = Object.keys(SIM.lotes).map(function(k){ return SIM.lotes[k]; })
+    .filter(function(L){ return L.total - L.enSala > 0 || L.etapas.sala; })
+    .filter(function(L){ return !q || norm(L.lote + ' ' + L.producto + ' ' + L.medida).indexOf(q) >= 0; })
+    .filter(function(L){ return !fe || L.etapas[fe]; });
+  lista.sort(function(a, b){ return (a.ultimo ? a.ultimo.getTime() : 9e15) - (b.ultimo ? b.ultimo.getTime() : 9e15); });
+  var en7 = SIM.dias[5], en20 = SIM.dias[20];
+  var k7 = 0, k20 = 0, atr = 0;
+  lista.forEach(function(L){ if (L.atrasado) atr++; if (L.ultimo && L.ultimo <= en7) k7++; else if (L.ultimo && L.ultimo <= en20) k20++; });
+  $('etaKpis').innerHTML =
+    kpi('Lotes en proceso', lista.length, 'implantes') +
+    kpi('Listos en 1 semana', k7, 'todo el lote en Sala Blanca') +
+    kpi('Listos en 2 a 4 semanas', k20, '') +
+    kpi('Atrasados', atr, 'ya pasaron el tiempo normal de su etapa');
+  if (!lista.length) { $('etaLista').innerHTML = '<p class="mut">No hay lotes para mostrar.</p>'; return; }
+  $('etaLista').innerHTML = '<table><thead><tr><th>Lote</th><th>Producto</th><th>Tetón</th><th>Medida</th><th>Dónde está hoy</th><th class="r">Piezas en proceso</th>' +
+    '<th>Primeras en Sala Blanca</th><th>Listo para envasar</th></tr></thead><tbody>' +
+    lista.map(function(L){
+      var donde = ETAPAS.concat(['sala']).filter(function(e){ return L.etapas[e]; }).map(function(e){ return NOM[e] + ' ' + n0(L.etapas[e]); }).join(' · ');
+      var pend = L.total - (L.etapas.sala || 0);
+      var listo = pend <= 0 ? '<span class="pill verde">Ya está en Sala Blanca</span>' :
+        (L.ultimo ? '<b>' + fDia(L.ultimo) + '/' + String(L.ultimo.getFullYear()).slice(2) + '</b> <span class="mut">(' + habilesHasta(L.ultimo) + ' días háb.)</span>' : '—') +
+        (L.atrasado ? ' <span class="pill nar" title="Ya lleva más que la mediana en su etapa">atrasado</span>' : '');
+      return '<tr><td><b>' + esc(L.lote) + '</b></td><td>' + esc(L.producto) + '</td><td>' + esc(L.teton) + '</td><td>' + esc(L.medida) + '</td>' +
+        '<td>' + esc(donde) + '</td><td class="r">' + n0(pend) + '</td>' +
+        '<td>' + (L.etapas.sala ? 'Ya hay ' + n0(L.etapas.sala) : (L.primero ? fDia(L.primero) : '—')) + '</td><td>' + listo + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+function habilesHasta(f){ var n = 0, d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + 1); while (d <= f && n < 999) { if (habil(d)) n++; d.setDate(d.getDate() + 1); } return n; }
+function kpi(l, v, s){ return '<div class="kpi"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>'; }
+
+/* ============================================================================ 2) CARGA POR SECTOR */
+function renderCarga(){
+  var N = 10, dias = SIM.dias.slice(0, N), sectores = ['ctrl','bla','lg','lf','lp','abr','sec'];
+  $('cargaGrid').innerHTML = sectores.map(function(e){
+    var lleg = SIM.llegadas[e].slice(0, N), cola = SIM.colaHoy[e] || 0, cap = capDe(e);
+    var mx = Math.max.apply(null, lleg.concat([cola, 1]));
+    var tot = lleg.reduce(function(a, b){ return a + b; }, 0);
+    cap = capDe(e, true);
+    var vaciar = cola / cap;
+    var cls = vaciar > 10 ? 'rojo' : vaciar > 4 ? 'ama' : 'verde';
+    return '<div class="sector"><div class="t">' + NOM[e] + '</div>' +
+      '<div class="s">Hoy esperando: <b>' + n0(cola) + '</b> · saca ~' + n0(cap) + ' por día hábil</div>' +
+      '<div class="s">Días para vaciar la cola: <span class="pill ' + cls + '">' + (Math.round(vaciar * 10) / 10).toLocaleString('es-AR') + '</span> · llegan ' + n0(tot) + ' en ' + N + ' días háb.</div>' +
+      '<div class="dias"><div class="hoy" title="Esperando hoy: ' + n0(cola) + '" style="height:' + (cola / mx * 100) + '%"></div>' +
+        lleg.map(function(v, i){ return '<div title="' + fDia(dias[i]) + ': llegan ' + n0(v) + '" style="height:' + (v / mx * 100) + '%"></div>'; }).join('') + '</div>' +
+      '<div class="diaslbl"><span>hoy</span>' + dias.map(function(d){ return '<span>' + fCorta(d) + '</span>'; }).join('') + '</div></div>';
+  }).join('');
+  $('cargaTabla').innerHTML = '<table><thead><tr><th>Día</th>' + sectores.map(function(e){ return '<th class="r">' + NOM[e] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    '<tr><td><b>Esperando hoy</b></td>' + sectores.map(function(e){ return '<td class="r"><b>' + n0(SIM.colaHoy[e]) + '</b></td>'; }).join('') + '</tr>' +
+    dias.map(function(d, i){ return '<tr><td>' + fDia(d) + '</td>' + sectores.map(function(e){ var v = SIM.llegadas[e][i]; return '<td class="r">' + (v >= 0.5 ? n0(v) : '') + '</td>'; }).join('') + '</tr>'; }).join('') +
+    '</tbody></table><p class="mut" style="margin:8px 0 0">Cada celda: piezas que llegan ese día (además de lo que ya está esperando).</p>';
+}
+
+/* ============================================================================ 3) QUIEBRE DE STOCK */
+var QUIEBRE = [];
+function calcularQuiebre(){
+  var hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+  var cubrir = Number($('qCubrir').value) || 90;
+  // llegadas a Sala Blanca por fecha (calendario) para cada clave
+  var lleg = SIM.salaPorClave;
+  // WIP total por clave
+  var wip = {};
+  Object.keys(SIM.lotes).forEach(function(kl){ var L = SIM.lotes[kl]; wip[L.clave] = (wip[L.clave] || 0) + (L.total - (L.etapas.sala || 0)); });
+  QUIEBRE = (D.demanda || []).filter(function(r){ return esImplante(r.producto) && Number(r.salidas) > 0; }).map(function(r){
+    var k = clave(r.producto, r.teton, r.medida), consumo = Number(r.salidas) / 90;
+    var stock = Number(r.sala_blanca) || 0, quiebre = null, f = new Date(hoy), llega = lleg[k] || {};
+    for (var i = 0; i < 400; i++) {
+      stock += llega[iso(f)] || 0;
+      stock -= consumo;
+      if (stock < 0) { quiebre = new Date(f); break; }
+      f.setDate(f.getDate() + 1);
+    }
+    var leadCal = leadNuevo(r.producto);
+    var limite = quiebre ? new Date(quiebre.getTime() - leadCal * 86400000) : null;
+    var diasLimite = limite ? Math.round((limite - hoy) / 86400000) : null;
+    var prio = !quiebre ? 'ok' : diasLimite <= 0 ? 'urg' : diasLimite <= 14 ? 'pronto' : 'ok';
+    var futuro = (Number(r.sala_blanca) || 0) + (wip[k] || 0);
+    var necesita = Math.max(0, Math.ceil(consumo * (cubrir + leadCal) - futuro));
+    return { producto: r.producto, teton: tet(r.teton), medida: r.medida, sala: Number(r.sala_blanca) || 0, wip: wip[k] || 0, consumo: consumo,
+             quiebre: quiebre, limite: limite, diasLimite: diasLimite, prio: prio, lead: leadCal, necesita: necesita,
+             poner: necesita ? ponerEnMaquina(r.producto, tet(r.teton), r.medida, necesita).poner : 0 };
+  });
+  QUIEBRE.sort(function(a, b){ return (a.diasLimite == null ? 9e9 : a.diasLimite) - (b.diasLimite == null ? 9e9 : b.diasLimite); });
+}
+function renderQuiebre(){
+  if (!SIM) return;
+  calcularQuiebre();
+  var q = norm($('qBuscar').value), solo = $('qPrio').value;
+  var lista = QUIEBRE.filter(function(x){ return (!solo || x.prio !== 'ok') && (!q || norm(x.producto + ' ' + x.medida).indexOf(q) >= 0); });
+  var nU = QUIEBRE.filter(function(x){ return x.prio === 'urg'; }).length, nP = QUIEBRE.filter(function(x){ return x.prio === 'pronto'; }).length;
+  var sinStock = QUIEBRE.filter(function(x){ return x.sala <= 0; }).length;
+  $('qKpis').innerHTML = kpi('Mandar ya a mecanizar', nU, 'el lote nuevo no llega antes del quiebre') + kpi('Mandar en 2 semanas', nP, '') +
+    kpi('Sin stock hoy en Sala Blanca', sinStock, 'con consumo en 90 días') + kpi('Medidas analizadas', QUIEBRE.length, 'implantes con salidas');
+  if (!lista.length) { $('qLista').innerHTML = '<p class="mut">No hay medidas para mostrar.</p>'; return; }
+  $('qLista').innerHTML = '<table><thead><tr><th>Prioridad</th><th>Producto</th><th>Tetón</th><th>Medida</th><th class="r">Sala Blanca</th><th class="r">En proceso</th>' +
+    '<th class="r">Consumo/sem.</th><th>Se acaba</th><th>Mandar a mecanizar antes de</th><th class="r">Faltan</th><th class="r">Poner en máquina</th></tr></thead><tbody>' +
+    lista.map(function(x){
+      var p = x.prio === 'urg' ? '<span class="pill rojo">Ya</span>' : x.prio === 'pronto' ? '<span class="pill ama">Pronto</span>' : '<span class="pill verde">OK</span>';
+      return '<tr><td>' + p + '</td><td>' + esc(x.producto) + '</td><td>' + esc(x.teton) + '</td><td><b>' + esc(x.medida) + '</b></td>' +
+        '<td class="r">' + n0(x.sala) + '</td><td class="r">' + n0(x.wip) + '</td><td class="r">' + (Math.round(x.consumo * 7 * 10) / 10).toLocaleString('es-AR') + '</td>' +
+        '<td>' + (x.quiebre ? (x.quiebre <= new Date() ? '<b style="color:#b91c1c">Ya sin stock</b>' : fCorta(x.quiebre) + '/' + String(x.quiebre.getFullYear()).slice(2)) : '<span class="mut">más de 1 año</span>') + '</td>' +
+        '<td>' + (x.limite ? (x.diasLimite <= 0 ? '<b style="color:#b91c1c">Ya</b>' + (x.sala > 0 ? ' <span class="mut">(aunque se mande hoy, llega después de que se acabe)</span>' : '') : fCorta(x.limite) + ' <span class="mut">(en ' + x.diasLimite + ' d)</span>') : '—') +
+        ' <span class="mut">· tarda ~' + x.lead + ' d</span></td>' +
+        '<td class="r">' + (x.necesita ? n0(x.necesita) : '') + '</td><td class="r"><b>' + (x.poner ? n0(x.poner) : '') + '</b></td></tr>';
+    }).join('') + '</tbody></table><p class="mut" style="margin:8px 0 0">"Faltan" = consumo del período elegido + lo que se consume mientras se fabrica − (Sala Blanca + en proceso). "Poner en máquina" ya suma el rechazo histórico de esa medida.</p>';
+}
+
+/* ============================================================================ 4) CUÁNTO PRODUCIR */
+var REND = {};
+function prepararRend(){
+  REND = { med: {}, prodTet: {}, prod: {} };
+  (D.rendimiento || []).forEach(function(r){
+    var a = { buenas: +r.buenas || 0, malas: +r.malas_maquina || 0, setup: +r.setup || 0, lotes: +r.lotes || 0,
+              dc: +r.desc_control || 0, db: +r.desc_blasting || 0, dot: +r.desc_otros || 0 };
+    function sumar(m, k){ var x = m[k] || (m[k] = { buenas: 0, malas: 0, setup: 0, lotes: 0, dc: 0, db: 0, dot: 0, producto: r.producto, teton: tet(r.teton), medida: r.medida });
+      Object.keys(a).forEach(function(f){ x[f] += a[f]; }); }
+    sumar(REND.med, clave(r.producto, r.teton, r.medida));
+    sumar(REND.prodTet, norm(r.producto) + '|' + tet(r.teton));
+    sumar(REND.prod, norm(r.producto));
+  });
+}
+function tasas(x){
+  var rm = (x.buenas + x.malas) > 0 ? x.malas / (x.buenas + x.malas) : 0;
+  var rd = x.buenas > 0 ? Math.min(0.9, (x.dc + x.db + x.dot) / x.buenas) : 0;
+  return { rm: rm, rd: rd, setup: x.lotes ? x.setup / x.lotes : 0 };
+}
+function ponerEnMaquina(p, t, m, cant){
+  var base = REND.med[clave(p, t, m)], nivel = 'esa medida';
+  if (!base || base.buenas < 300) { base = REND.prodTet[norm(p) + '|' + tet(t)]; nivel = 'el promedio de ' + p + ' ' + (t ? t + ' tetón' : ''); }
+  if (!base || base.buenas < 300) { base = REND.prod[norm(p)]; nivel = 'el promedio de ' + p; }
+  if (!base || !base.buenas) return { poner: Math.ceil(cant), nivel: 'sin historia (no se agrega rechazo)', rm: 0, rd: 0, setup: 0, base: null };
+  var tx = tasas(base);
+  var poner = Math.ceil(cant / ((1 - tx.rm) * (1 - tx.rd)));
+  return { poner: poner, nivel: nivel, rm: tx.rm, rd: tx.rd, setup: tx.setup, base: base };
+}
+function prepararCalc(){
+  prepararRend();
+  var prods = {};
+  (D.rendimiento || []).concat(D.demanda || []).forEach(function(r){ if (esImplante(r.producto)) prods[r.producto] = true; });
+  var sel = $('cProd'), prev = sel.value;
+  sel.innerHTML = Object.keys(prods).sort().map(function(p){ return '<option>' + esc(p) + '</option>'; }).join('');
+  if (prev && prods[prev]) sel.value = prev; else if (prods['Monopieza']) sel.value = 'Monopieza';
+  llenarMedidas(); calcular();
+}
+function llenarMedidas(){
+  var p = $('cProd').value, t = $('cTet').value, med = {};
+  (D.rendimiento || []).concat(D.demanda || []).forEach(function(r){ if (r.producto === p && tet(r.teton) === t && r.medida) med[r.medida] = true; });
+  var sel = $('cMed'), prev = sel.value;
+  var lista = Object.keys(med).sort(function(a, b){ return a.localeCompare(b, 'es', { numeric: true }); });
+  sel.innerHTML = lista.map(function(m){ return '<option>' + esc(m) + '</option>'; }).join('') || '<option value="">(sin medidas)</option>';
+  if (prev && med[prev]) sel.value = prev;
+}
+function calcular(){
+  var cant = Math.max(1, Number($('cCant').value) || 0), p = $('cProd').value, t = $('cTet').value, m = $('cMed').value;
+  var r = ponerEnMaquina(p, t, m, cant);
+  $('cRes').innerHTML = '<div>Para entregar <b>' + n0(cant) + '</b> de ' + esc(p) + ' ' + esc(t) + ' tetón <b>' + esc(m) + '</b>, poné</div>' +
+    '<div class="grande">' + n0(r.poner) + ' piezas en máquina</div>' +
+    '<div class="mut" style="margin-top:4px">Rechazo en máquina ' + pct(r.rm) + ' · rechazo posterior (Control, Blasting y demás) ' + pct(r.rd) + ' · calculado con ' + esc(r.nivel) +
+    (r.base ? ' (' + n0(r.base.buenas) + ' piezas buenas de máquina, ' + r.base.lotes + ' lotes)' : '') + '.' +
+    ' Aparte, como siempre, van las 3 piezas de prueba' + (r.setup ? ' y un setup promedio de ' + n0(r.setup) + ' piezas por lote' : '') + '.</div>';
+}
+function renderRend(){
+  var filas = Object.keys(REND.med).map(function(k){ return REND.med[k]; }).filter(function(x){ return x.buenas > 0; });
+  filas.sort(function(a, b){ return norm(a.producto + a.teton).localeCompare(norm(b.producto + b.teton)) || String(a.medida).localeCompare(String(b.medida), 'es', { numeric: true }); });
+  $('rendLista').innerHTML = '<table><thead><tr><th>Producto</th><th>Tetón</th><th>Medida</th><th class="r">Lotes</th><th class="r">Buenas máquina</th><th class="r">Rechazo máquina</th>' +
+    '<th class="r">Desc. Control</th><th class="r">Desc. Blasting</th><th class="r">Desc. otros</th><th class="r">Rechazo total</th><th class="r">Para entregar 100, poné</th></tr></thead><tbody>' +
+    filas.map(function(x){
+      var tx = tasas(x), tot = 1 - (1 - tx.rm) * (1 - tx.rd), poco = x.buenas < 300;
+      return '<tr><td>' + esc(x.producto) + '</td><td>' + esc(x.teton) + '</td><td>' + esc(x.medida) + '</td><td class="r">' + x.lotes + '</td><td class="r">' + n0(x.buenas) + '</td>' +
+        '<td class="r">' + pct(tx.rm) + '</td><td class="r">' + n0(x.dc) + '</td><td class="r">' + n0(x.db) + '</td><td class="r">' + n0(x.dot) + '</td>' +
+        '<td class="r"><b>' + pct(tot) + '</b></td><td class="r">' + n0(ponerEnMaquina(x.producto, x.teton, x.medida, 100).poner) + (poco ? ' <span class="mut" title="Menos de 300 piezas: usa el promedio del producto">*</span>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table><p class="mut" style="margin:8px 0 0">* Poca historia en esa medida: la última columna usa el promedio del producto.</p>';
+}
+
+/* ============================================================================ 5) COTAS */
+function nivelCota(c, deriva){
+  var lsl = +c.lsl, usl = +c.usl, half = (usl - lsl) / 2, centro = (usl + lsl) / 2;
+  if (!(half > 0)) return null;
+  var media = +c.ultima, usoMedia = Math.abs(media - centro) / half;
+  var usoExt = Math.max(Math.abs((+c.max_ult) - centro), Math.abs((+c.min_ult) - centro)) / half;
+  var pend = Number(c.pendiente), hacia = null;
+  if (pend && c.lotes >= 3 && Math.sign(pend) === Math.sign(media - centro || pend)) hacia = (half - Math.abs(media - centro)) / Math.abs(pend);
+  var n = 0, motivo = [];
+  if (+c.fuera_ult > 0) { n = 4; motivo.push(c.fuera_ult + ' de ' + c.n_ult + ' mediciones fuera de tolerancia en el último lote'); }
+  else if (usoExt >= 0.9) { n = 3; motivo.push('el último lote llegó al ' + Math.round(usoExt * 100) + '% de la tolerancia'); }
+  if (n < 2 && hacia != null && hacia <= 3) { n = 2; motivo.push('al ritmo actual llega al límite en ' + (Math.round(hacia * 10) / 10).toLocaleString('es-AR') + ' lote(s)'); }
+  if (n < 2 && usoMedia >= 0.65) { n = 2; motivo.push('el promedio ya usa el ' + Math.round(usoMedia * 100) + '% de la tolerancia'); }
+  if (deriva) { if (n < 1) n = 1; motivo.push(deriva); }
+  if (n && +c.errores_ult > 0) motivo.push(c.errores_ult + ' valor(es) imposibles ignorados (¿error de tipeo?)');
+  if (!n) return null;
+  return { n: n, motivo: motivo.join(' · '), usoMedia: usoMedia, usoExt: usoExt, hacia: hacia, lado: media >= centro ? 'arriba' : 'abajo' };
+}
+function spark(c){
+  var s = c.serie || [], w = 150, h = 38, lsl = +c.lsl, usl = +c.usl;
+  if (!s.length) return '';
+  var vals = []; s.forEach(function(p){ vals.push(+p.min, +p.max, +p.media); });
+  var lo = Math.min(lsl, Math.min.apply(null, vals)), hi = Math.max(usl, Math.max.apply(null, vals)), pad = (hi - lo) * 0.08 || 0.001;
+  lo -= pad; hi += pad;
+  function y(v){ return h - 3 - (v - lo) / (hi - lo) * (h - 6); }
+  function x(i){ return s.length === 1 ? w / 2 : 4 + i * (w - 8) / (s.length - 1); }
+  var linea = s.map(function(p, i){ return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(+p.media).toFixed(1); }).join(' ');
+  return '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+    '<rect x="0" y="' + y(usl).toFixed(1) + '" width="' + w + '" height="' + (y(lsl) - y(usl)).toFixed(1) + '" fill="#dcfce7"/>' +
+    '<line x1="0" x2="' + w + '" y1="' + y(usl).toFixed(1) + '" y2="' + y(usl).toFixed(1) + '" stroke="#16a34a" stroke-dasharray="3 2"/>' +
+    '<line x1="0" x2="' + w + '" y1="' + y(lsl).toFixed(1) + '" y2="' + y(lsl).toFixed(1) + '" stroke="#16a34a" stroke-dasharray="3 2"/>' +
+    s.map(function(p, i){ return '<line x1="' + x(i).toFixed(1) + '" x2="' + x(i).toFixed(1) + '" y1="' + y(+p.min).toFixed(1) + '" y2="' + y(+p.max).toFixed(1) + '" stroke="#94a3b8"/>'; }).join('') +
+    '<path d="' + linea + '" fill="none" stroke="#0284c7" stroke-width="1.6"/>' +
+    s.map(function(p, i){ var fuera = +p.media < lsl || +p.media > usl; return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(+p.media).toFixed(1) + '" r="2.4" fill="' + (fuera ? '#dc2626' : '#0284c7') + '"><title>' + esc(p.lote) + ': ' + p.media + '</title></circle>'; }).join('') +
+    '</svg>';
+}
+function renderCotas(){
+  if (!D) return;
+  var der = {};
+  (D.deriva || []).forEach(function(d){ der[d.origen + '|' + d.producto + '|' + d.medida + '|' + String(d.letra).toUpperCase()] = d.motivo; });
+  var q = norm($('kBuscar').value), og = $('kOrigen').value, nv = Number($('kNivel').value) || 0;
+  var lista = [];
+  (D.cotas || []).forEach(function(c){
+    var a = nivelCota(c, der[c.origen + '|' + c.producto + '|' + c.medida + '|' + c.letra]);
+    if (!a) return;
+    if (og && c.origen !== og) return;
+    if (nv && a.n < nv) return;
+    if (q && norm(c.producto + ' ' + c.medida).indexOf(q) < 0) return;
+    lista.push({ c: c, a: a });
+  });
+  lista.sort(function(x, y){ return y.a.n - x.a.n || y.a.usoExt - x.a.usoExt; });
+  var cnt = [0, 0, 0, 0, 0]; lista.forEach(function(x){ cnt[x.a.n]++; });
+  $('kKpis').innerHTML = kpi('Ya da rechazos', cnt[4], 'último lote') + kpi('Al límite', cnt[3], '90% o más de la tolerancia') +
+    kpi('Se viene corriendo', cnt[2], 'tendencia o promedio cerca del límite') + kpi('Patrón estadístico', cnt[1], 'reglas de Supervisión');
+  if (!lista.length) { $('kLista').innerHTML = '<p class="mut">Ninguna cota con alerta. 👍</p>'; return; }
+  var CL = { 4: ['rojo', 'Ya da rechazos'], 3: ['nar', 'Al límite'], 2: ['ama', 'Se viene corriendo'], 1: ['gris', 'Patrón'] };
+  $('kLista').innerHTML = '<table><thead><tr><th>Alerta</th><th>Dónde</th><th>Producto</th><th>Medida</th><th>Cota</th><th>Tolerancia</th><th class="r">Último lote</th><th>Tendencia (últimos lotes)</th><th>Por qué</th></tr></thead><tbody>' +
+    lista.map(function(x){
+      var c = x.c, cl = CL[x.a.n];
+      return '<tr><td><span class="pill ' + cl[0] + '">' + cl[1] + '</span></td><td>' + esc(c.origen) + '</td><td>' + esc(c.producto) + (c.teton ? ' ' + esc(c.teton) + ' tetón' : '') + '</td>' +
+        '<td><b>' + esc(c.medida) + '</b></td><td><b>' + esc(c.letra) + '</b></td>' +
+        '<td>' + c.nominal + ' <span class="mut">(' + c.lsl + ' a ' + c.usl + ')</span></td>' +
+        '<td class="r">' + esc(c.ultimo_lote) + '<br>media ' + c.ultima + '<br><span class="mut">' + c.min_ult + ' – ' + c.max_ult + '</span></td>' +
+        '<td>' + spark(c) + '<span class="mut">corrido hacia ' + x.a.lado + '</span></td><td>' + esc(x.a.motivo) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+cargar();
+</script>
+</body>
+</html>
