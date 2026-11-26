@@ -1,96 +1,958 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bio-Fix — Producción</title>
-<!-- Inicio: cada puesto va DIRECTO a su pantalla. Solo "tecnica" ve el menú completo. -->
+<title>Bio-Fix — Registro de personal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
-<script src="config.js"></script>
-<script src="gas.js"></script>
 <style>
-  :root{ --bx:#e2e8f0; --tx:#0f172a; --mut:#64748b; }
-  *{ box-sizing:border-box; font-family:Arial, sans-serif; }
-  body{ background:#f8fafc; color:var(--tx); margin:0; padding:16px; }
-  .container{ max-width:720px; margin:0 auto; }
-  h1{ font-size:20px; color:#0369a1; margin:8px 0 4px; }
-  .sub{ font-size:13px; color:var(--mut); margin-bottom:18px; }
-  h2{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:22px 0 8px; }
-  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; }
-  a.card{ display:block; background:#fff; border:1px solid var(--bx); border-radius:12px; padding:14px 16px; text-decoration:none; color:var(--tx); }
-  a.card:hover{ border-color:#93c5fd; }
-  .t{ font-weight:700; font-size:15px; }
-  .d{ font-size:12px; color:var(--mut); margin-top:4px; }
-  .tag{ display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; margin-top:8px; }
-  .tag.nuevo{ background:#dcfce7; color:#15803d; }
-  .tag.as{ background:#f1f5f9; color:#64748b; }
-  .hide{ display:none; }
+  :root {
+    --niebla: #EDF1EF;      /* fondo */
+    --hoja: #FFFFFF;
+    --tinta: #18252B;
+    --titanio: #5B6B70;     /* texto secundario */
+    --linea: #D6DEDA;
+    --laguna: #0E6B66;      /* llegada / acción principal */
+    --laguna-suave: #DDEEEB;
+    --indigo: #34437A;      /* salida */
+    --indigo-suave: #E3E7F4;
+    --ambar: #8A5A10; --ambar-suave: #F6EBD8;
+    --rojo: #9E3434;  --rojo-suave: #F6E1E1;
+    --radio: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: "Onest", system-ui, sans-serif; font-size: 16px; line-height: 1.5; background: var(--niebla); color: var(--tinta); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font-family: inherit; }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--laguna) 45%, transparent); outline-offset: 2px; }
+
+  /* ---------- barra superior ---------- */
+  .barra { display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; }
+  .marca { display: flex; align-items: center; gap: 12px; font-weight: 600; letter-spacing: -0.01em; }
+  .marca .sello { width: 34px; height: 34px; border-radius: 10px; background: var(--laguna); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px; }
+  .marca small { display: block; font-weight: 400; color: var(--titanio); font-size: 13px; line-height: 1.2; }
+  .marca span { line-height: 1.2; }
+  .barra-der { display: flex; align-items: center; gap: 16px; }
+  .reloj-chico { font-variant-numeric: tabular-nums; color: var(--titanio); font-size: 15px; }
+
+  /* ---------- botones y campos ---------- */
+  button { border: 0; border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer; background: var(--laguna); color: #fff; transition: background .15s, transform .05s; }
+  button:hover { background: #0B5955; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+  button.sec { background: transparent; color: var(--tinta); box-shadow: inset 0 0 0 1px var(--linea); }
+  button.sec:hover { background: var(--hoja); }
+  button.peligro { background: var(--rojo); } button.peligro:hover { background: #842B2B; }
+  button.chico { padding: 7px 12px; font-size: 13px; border-radius: 8px; }
+  label { display: block; font-size: 14px; font-weight: 500; margin: 14px 0 6px; }
+  input, select, textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--linea); border-radius: 10px; font-size: 16px; background: var(--hoja); color: var(--tinta); }
+  input:focus, select:focus { border-color: var(--laguna); outline: none; box-shadow: 0 0 0 3px var(--laguna-suave); }
+
+  .msg { margin-top: 14px; padding: 12px 14px; border-radius: 10px; display: none; font-size: 15px; }
+  .msg.ok { display: block; background: var(--laguna-suave); color: #0A4B47; }
+  .msg.err { display: block; background: var(--rojo-suave); color: #6E2222; }
+  .muted { color: var(--titanio); font-size: 14px; }
+  .oculto { display: none !important; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ---------- kiosco: el reloj es el protagonista ---------- */
+  .kiosco { min-height: calc(100vh - 70px); display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center; padding: 8px 64px 48px; max-width: 1280px; margin: 0 auto; }
+  .hora-grande { font-size: clamp(88px, 13vw, 184px); font-weight: 300; letter-spacing: -0.045em; line-height: .9; font-variant-numeric: tabular-nums; margin: 0; }
+  .hora-grande .seg { font-size: .32em; letter-spacing: -0.01em; color: var(--titanio); margin-left: .12em; vertical-align: .95em; }
+  .fecha-grande { font-size: clamp(18px, 1.8vw, 24px); color: var(--titanio); margin: 18px 0 0; }
+  .nota-hora { margin-top: 28px; max-width: 40ch; color: var(--titanio); font-size: 14px; border-left: 2px solid var(--linea); padding-left: 14px; }
+
+  .panel { background: var(--hoja); border-radius: 20px; padding: 32px; box-shadow: 0 1px 0 var(--linea), 0 24px 48px -32px rgba(24, 37, 43, .35); }
+  .panel h2 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+
+  .saludo { font-size: 30px; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+  .puesto { color: var(--titanio); margin: 2px 0 22px; }
+  .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .accion { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 22px; border-radius: 16px; font-size: 20px; text-align: left; min-height: 128px; }
+  .accion svg { width: 30px; height: 30px; }
+  .accion small { font-size: 14px; font-weight: 400; opacity: .85; }
+  .accion.llegada { background: var(--laguna); } .accion.llegada:hover { background: #0B5955; }
+  .accion.salida { background: var(--indigo); } .accion.salida:hover { background: #2A376A; }
+  .marcas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; min-height: 34px; align-items: center; }
+  .marca-hoy { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 10px; border-radius: 999px; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .marca-hoy::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .marca-hoy.entrada { background: var(--laguna-suave); color: var(--laguna); }
+  .marca-hoy.salida { background: var(--indigo-suave); color: var(--indigo); }
+
+  .ropa { max-width: 1280px; margin: 0 auto; padding: 0 64px 64px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; }
+  .ropa h3 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; }
+  .mis-horas-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .mis-horas-cab h3 { margin: 0; }
+  .mes-nav { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .mes-nav span { min-width: 130px; text-align: center; }
+  .mes-nav button { padding: 4px 12px; font-size: 18px; line-height: 1; }
+  table.mis-horas td, table.mis-horas th { padding: 9px 8px; font-variant-numeric: tabular-nums; }
+  table.mis-horas tfoot td { font-weight: 600; border-top: 2px solid var(--linea); border-bottom: 0; }
+  table.mis-horas tr.hoy td { background: #E3EFEC; }
+  table.mis-horas .falta { color: var(--titanio); }
+  .prendas { list-style: none; margin: 0; padding: 0; }
+  .prendas li { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--linea); }
+  .prendas li:last-child { border-bottom: 0; }
+  .prendas .cant { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .prendas .cuando { color: var(--titanio); font-size: 14px; font-variant-numeric: tabular-nums; min-width: 88px; text-align: right; }
+  .pendiente-aviso { margin-top: 18px; padding: 14px 16px; border-radius: 12px; background: var(--ambar-suave); color: var(--ambar); font-size: 14px; }
+  .pendiente-aviso b { display: block; margin-bottom: 4px; }
+  .cuenta-atras { text-align: center; padding-bottom: 24px; }
+
+  .atajos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--linea); }
+  .columna-der { display: grid; gap: 24px; align-content: start; }
+  .foto { display: flex; align-items: center; gap: 14px; margin: 0; padding: 14px; border: 1.5px dashed var(--linea); border-radius: 12px; cursor: pointer; color: var(--titanio); font-weight: 500; background: #FAFCFB; }
+  .foto:hover { border-color: var(--laguna); color: var(--laguna); }
+  .foto img { max-height: 84px; border-radius: 8px; }
+
+  /* ---------- administración ---------- */
+  .admin { max-width: 1240px; margin: 0 auto; padding: 0 32px 64px; }
+  .admin-titulo { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 8px 0 20px; }
+  .admin-titulo h2 { font-size: 30px; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+  .pestanas { display: flex; gap: 4px; border-bottom: 1px solid var(--linea); margin-bottom: 24px; overflow-x: auto; }
+  .pestanas button { background: none; color: var(--titanio); font-weight: 500; border-radius: 0; padding: 12px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .pestanas button:hover { color: var(--tinta); background: none; }
+  .pestanas button.activo { color: var(--tinta); border-bottom-color: var(--laguna); }
+  .contador { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--ambar-suave); color: var(--ambar); font-size: 12px; font-weight: 600; margin-left: 4px; }
+  .contador:empty { display: none; }
+  .hoja { background: var(--hoja); border-radius: 18px; padding: 24px 28px; box-shadow: 0 1px 0 var(--linea); margin-bottom: 20px; }
+  .hoja h3 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .hoja h4 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  .hoja .intro { color: var(--titanio); font-size: 14px; margin: 0 0 16px; }
+  .filtros { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
+  .filtros > div { min-width: 200px; }
+  .filtros label { margin-top: 0; }
+  .fila { display: flex; gap: 14px; flex-wrap: wrap; } .fila > * { flex: 1; min-width: 150px; }
+  .tabla-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { text-align: left; font-size: 13px; font-weight: 500; color: var(--titanio); padding: 10px 12px; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  td { padding: 12px; border-bottom: 1px solid #EBF0ED; vertical-align: top; }
+  tbody tr:hover td { background: #F7FAF8; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .estado { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: #EEF1F0; color: var(--titanio); white-space: nowrap; }
+  .estado.ok { background: var(--laguna-suave); color: var(--laguna); }
+  .estado.no { background: var(--rojo-suave); color: var(--rojo); }
+  .estado.pend { background: var(--ambar-suave); color: var(--ambar); }
+  .estado.azul { background: var(--indigo-suave); color: var(--indigo); }
+  .acciones-tabla { display: flex; gap: 6px; justify-content: flex-end; }
+  .vacio { color: var(--titanio); text-align: center; padding: 28px 12px !important; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .kiosco, .ropa { grid-template-columns: 1fr; padding-left: 20px; padding-right: 20px; gap: 24px; }
+    .kiosco { min-height: auto; padding-top: 12px; }
+    .barra { padding: 14px 20px; }
+    .admin { padding: 0 16px 48px; }
+    .hoja { padding: 18px 16px; }
+  }
+  @media (max-width: 520px) { .acciones { grid-template-columns: 1fr; } .accion { min-height: 96px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<div class="container">
-  <div id="estado" class="sub">Cargando…</div>
-
-  <!-- Solo lo ve el usuario "tecnica" -->
-  <div id="menu" class="hide">
-    <h1>Bio-Fix — Producción</h1>
-    <div class="sub">Menú completo (usuario técnico).</div>
-    <h2>GitHub</h2>
-    <div class="grid" id="nuevas"></div>
-  </div>
+<div class="barra">
+  <div class="marca"><div class="sello">BF</div><span>Bio-Fix<small>Registro de personal</small></span></div>
+  <div class="barra-der"><span class="reloj-chico oculto" id="reloj"></span><button class="sec chico oculto" id="btnSalir" onclick="salir()">Cerrar sesión</button></div>
 </div>
 
+<!-- ============ KIOSCO: reloj + ingreso / acciones ============ -->
+<section class="kiosco" id="vKiosco">
+  <div>
+    <p class="hora-grande" id="horaGrande">--:--</p>
+    <p class="fecha-grande" id="fechaGrande"></p>
+    <p class="nota-hora">La hora de llegada y de salida la registra el sistema en el momento en que marcás. No se puede cargar ni cambiar desde este equipo.</p>
+  </div>
+
+  <div class="panel" id="vLogin">
+    <h2>Ingresá para marcar</h2>
+    <p class="muted" style="margin:0 0 6px">Usá tu usuario y tu contraseña personal.</p>
+    <form onsubmit="ingresar(event)">
+      <label for="lUsuario">Usuario</label>
+      <input id="lUsuario" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="por ejemplo, mgomez" required>
+      <label for="lPass">Contraseña</label>
+      <input id="lPass" type="password" required>
+      <button style="width:100%; margin-top:22px; padding:15px" id="btnIngresar">Ingresar</button>
+    </form>
+    <div class="msg" id="mLogin"></div>
+  </div>
+
+  <div class="panel oculto" id="vEmpleado">
+    <p class="saludo" id="eNombre"></p>
+    <p class="puesto" id="ePuesto"></p>
+    <div class="acciones">
+      <button class="accion llegada" id="btnLlegada" onclick="fichar('entrada')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        Marcar llegada<small>Empiezo mi jornada</small>
+      </button>
+      <button class="accion salida" id="btnSalida" onclick="fichar('salida')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        Marcar salida<small>Termino mi jornada</small>
+      </button>
+    </div>
+    <div class="marcas" id="eHoy"></div>
+    <div class="msg" id="mFichar"></div>
+    <div class="atajos">
+      <button class="sec chico" onclick="abrirAviso('llegada_tarde')">Llegué tarde</button>
+      <button class="sec chico" onclick="abrirAviso('retiro_anticipado')">Me retiro antes</button>
+      <button class="sec chico" onclick="abrirAviso('ausencia')">Voy a faltar / falté</button>
+      <button class="sec chico" onclick="abrirAviso('permiso')">Permiso con regreso</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ KIOSCO: indumentaria ============ -->
+<section class="ropa oculto" id="vRopa">
+  <div>
+    <div class="mis-horas-cab">
+      <h3>Mis horarios</h3>
+      <div class="mes-nav">
+        <button class="sec chico" onclick="moverMes(-1)" aria-label="Mes anterior">‹</button>
+        <span id="hMes"></span>
+        <button class="sec chico" id="hSig" onclick="moverMes(1)" aria-label="Mes siguiente">›</button>
+      </div>
+    </div>
+    <div class="tabla-scroll"><table class="mis-horas"><thead><tr><th>Día</th><th>Llegada</th><th>Salida</th><th class="num">Horas</th><th class="num">Extra</th></tr></thead><tbody id="hDias"></tbody>
+      <tfoot><tr><td colspan="3">Total del mes</td><td class="num" id="hTot"></td><td class="num" id="hExt"></td></tr></tfoot></table></div>
+
+    <h3 style="margin-top:36px">Mi indumentaria</h3>
+    <ul class="prendas" id="eIndu"></ul>
+    <div class="pendiente-aviso oculto" id="ePendWrap"><b>Esperando confirmación de administración</b><span id="ePend"></span></div>
+    <h3 style="margin-top:36px">Mis avisos</h3>
+    <ul class="prendas" id="eAvisos"></ul>
+  </div>
+  <div class="columna-der">
+  <div class="panel" id="pAviso">
+    <h3 style="margin-top:0">Avisar o justificar</h3>
+    <p class="muted" style="margin:0">Llegada tarde, retiro antes de hora, ausencia o permiso. Si tenés certificado, sacale una foto.</p>
+    <div class="fila">
+      <div><label for="avTipo">Qué pasó</label>
+        <select id="avTipo" onchange="ajustarAviso()">
+          <option value="llegada_tarde">Llegué tarde</option>
+          <option value="retiro_anticipado">Me retiro antes de hora</option>
+          <option value="ausencia">Ausencia (voy a faltar o falté)</option>
+          <option value="permiso">Permiso con salida y regreso</option>
+          <option value="otro">Otro</option>
+        </select></div>
+      <div style="max-width:190px"><label for="avFecha">Día</label><input type="date" id="avFecha"></div>
+    </div>
+    <div class="fila" id="avHoras">
+      <div><label for="avDesde" id="avDesdeLbl">Hora</label><input type="time" id="avDesde"></div>
+      <div id="avHastaWrap"><label for="avHasta">Hora de regreso</label><input type="time" id="avHasta"></div>
+    </div>
+    <div class="fila">
+      <div><label for="avMotivo">Motivo</label>
+        <select id="avMotivo" onchange="ajustarAviso()">
+          <option>Turno médico</option><option>Enfermedad</option><option>Transporte</option><option>Trámite personal</option>
+          <option>Familiar</option><option>Estudio / examen</option><option value="__otro">Otro motivo…</option>
+        </select></div>
+      <div id="avMotivoOtroWrap" class="oculto"><label for="avMotivoOtro">¿Cuál?</label><input id="avMotivoOtro" maxlength="120"></div>
+    </div>
+    <label for="avDetalle">Detalle (opcional)</label><input id="avDetalle" maxlength="300">
+    <label for="avFoto">Certificado o comprobante (opcional)</label>
+    <label class="foto" for="avFoto"><span id="avFotoTxt">Sacar foto o elegir archivo</span><img id="avFotoPrev" class="oculto" alt="Vista previa del certificado"></label>
+    <input type="file" id="avFoto" accept="image/*,application/pdf" capture="environment" class="oculto" onchange="previsualizarFoto()">
+    <button style="margin-top:16px" id="btnAviso" onclick="enviarAviso()">Enviar aviso</button>
+    <div class="msg" id="mAviso"></div>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">Recibí ropa nueva</h3>
+    <p class="muted" style="margin:0">Registrala acá. Queda pendiente hasta que la confirme administración.</p>
+    <div class="fila">
+      <div><label for="ePrenda">Prenda</label><select id="ePrenda"></select></div>
+      <div style="max-width:120px"><label for="eCant">Cantidad</label><input id="eCant" type="number" min="1" max="50" value="1"></div>
+    </div>
+    <label for="eObs">Comentario (opcional)</label><input id="eObs" maxlength="200" placeholder="talle, color…">
+    <button style="margin-top:16px" onclick="registrarEntrega()">Registrar entrega</button>
+    <div class="msg" id="mEntrega"></div>
+  </div>
+  </div>
+</section>
+<p class="muted cuenta-atras oculto" id="eAuto"></p>
+
+<!-- ============ ADMINISTRACIÓN ============ -->
+<section class="admin oculto" id="vAdmin">
+  <div class="admin-titulo"><h2>Personal</h2><span class="muted" id="aHoyFecha"></span></div>
+  <nav class="pestanas" id="aTabs">
+    <button data-t="hoy" class="activo">Hoy</button>
+    <button data-t="pend">Entregas por confirmar<span class="contador" id="aPendN"></span></button>
+    <button data-t="avisos">Avisos y certificados<span class="contador" id="aAvN"></span></button>
+    <button data-t="plan">Carga de planilla</button>
+    <button data-t="mes">Resumen del mes</button>
+    <button data-t="det">Detalle y correcciones</button>
+    <button data-t="indu">Indumentaria</button>
+    <button data-t="emp">Empleados y accesos</button>
+  </nav>
+
+  <div class="hoja" data-p="hoy">
+    <h3>Quién está en planta</h3>
+    <p class="intro">Marcas de hoy, se actualiza al volver a esta pestaña.</p>
+    <div class="tabla-scroll"><table><thead><tr><th>Empleado</th><th>Llegada</th><th>Salida</th><th>Estado</th></tr></thead><tbody id="aHoy"></tbody></table></div>
+  </div>
+
+  <div class="hoja oculto" data-p="pend">
+    <h3>Entregas registradas por los empleados</h3>
+    <p class="intro">Confirmalas cuando verifiques que la prenda se entregó.</p>
+    <div class="tabla-scroll"><table><thead><tr><th>Registrada</th><th>Empleado</th><th>Prenda</th><th class="num">Cantidad</th><th>Comentario</th><th></th></tr></thead><tbody id="aPend"></tbody></table></div>
+    <div class="msg" id="mPend"></div>
+  </div>
+
+  <div class="hoja oculto" data-p="plan">
+    <h3>Pasar la planilla en papel</h3>
+    <p class="intro">Para los días en que se firmó en papel. Elegí el día y copiá las horas de cada uno. Se guardan como marcas normales (origen "planilla"), no como correcciones. Si volvés a guardar el mismo día, reemplaza lo cargado antes. A quien ya marcó en la tablet ese día no se lo toca.</p>
+    <div class="filtros">
+      <div style="max-width:200px"><label for="aPlFecha">Día</label><input type="date" id="aPlFecha"></div>
+    </div>
+    <div class="tabla-scroll"><table><thead><tr><th>Empleado</th><th>Llegada</th><th>Salida</th><th>Faltó</th><th>Observación</th><th>Ya cargado</th></tr></thead><tbody id="aPl"></tbody></table></div>
+    <div class="fila"><div><button id="btnPl" onclick="guardarPlanilla()">Guardar día</button></div></div>
+    <div class="msg" id="mPl"></div>
+  </div>
+
+  <div class="hoja oculto" data-p="avisos">
+    <div class="filtros">
+      <div><h3>Avisos y certificados</h3><p class="intro" style="margin:0">Al aprobar, el día queda justificado con ese motivo.</p></div>
+      <div style="max-width:220px"><label for="aAvFiltro">Mostrar</label><select id="aAvFiltro"><option value="pendiente">Pendientes</option><option value="todos">Últimos 60 días</option></select></div>
+    </div>
+    <div class="tabla-scroll"><table><thead><tr><th>Día</th><th>Empleado</th><th>Aviso</th><th>Motivo</th><th>Horario</th><th>Certificado</th><th>Estado</th><th></th></tr></thead><tbody id="aAv"></tbody></table></div>
+    <div class="msg" id="mAv"></div>
+  </div>
+
+  <div class="hoja oculto" data-p="mes">
+    <div class="filtros">
+      <div><label for="aMes">Mes</label><input type="month" id="aMes"></div>
+      <button class="sec" onclick="exportarMes()">Resumen en CSV</button>
+      <button class="sec" onclick="exportarDetalle(true)">Detalle día por día de todos (CSV)</button>
+      <button class="sec" onclick="imprimirDetalle(true)">Imprimir todos</button>
+    </div>
+    <div class="tabla-scroll"><table><thead><tr><th>Empleado</th><th class="num">Días</th><th class="num">Horas</th><th class="num">Extras</th><th class="num">Recuperado</th><th class="num">Permisos</th><th class="num">Faltantes</th><th class="num">Saldo</th><th class="num">Ausencias</th><th class="num">Sin justificar</th><th>Presentismo</th></tr></thead><tbody id="aMesT"></tbody></table></div>
+    <div class="msg" id="mMes"></div>
+    <p class="muted" style="margin:16px 0 0">Recuperado: tiempo que se quedó de más (o llegó antes) para compensar una llegada tarde, un retiro antes o un permiso; no cuenta como hora extra. Faltantes: tiempo que faltó para completar la jornada en los días trabajados, sin contar días justificados. Saldo: extras menos faltantes del mes. Presentismo: cumple si, después de compensar con las horas extra, quedan como máximo 30 minutos faltantes y no hay ausencias sin justificar.</p>
+  </div>
+
+  <div class="hoja oculto" data-p="det">
+    <div class="filtros">
+      <div><label for="aDetEmp">Empleado</label><select id="aDetEmp"></select></div>
+      <div><label for="aDetMes">Mes</label><input type="month" id="aDetMes"></div>
+      <button class="sec" onclick="exportarDetalle(false)">Descargar CSV</button>
+      <button class="sec" onclick="imprimirDetalle(false)">Imprimir</button>
+    </div>
+    <div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Estado</th><th>Llegada</th><th>Salida</th><th class="num">Trabajado</th><th class="num">Extra</th><th>Notas</th></tr></thead><tbody id="aDet"></tbody></table></div>
+
+    <h4>Marcas del mes</h4>
+    <div class="tabla-scroll"><table><thead><tr><th>N.º</th><th>Fecha y hora</th><th>Tipo</th><th>Origen</th><th>Observación</th><th></th></tr></thead><tbody id="aFich"></tbody></table></div>
+
+    <h4>Cargar una marca olvidada</h4>
+    <div class="fila">
+      <div style="max-width:170px"><label for="aManTipo">Tipo</label><select id="aManTipo"><option value="entrada">Llegada</option><option value="salida">Salida</option></select></div>
+      <div style="max-width:250px"><label for="aManTs">Fecha y hora</label><input type="datetime-local" id="aManTs"></div>
+      <div><label for="aManMot">Motivo (obligatorio)</label><input id="aManMot" maxlength="200"></div>
+    </div>
+    <button style="margin-top:14px" onclick="cargarManual()">Guardar marca</button>
+
+    <h4>Novedad del día</h4>
+    <div class="fila">
+      <div style="max-width:180px"><label for="aNovFecha">Fecha</label><input type="date" id="aNovFecha"></div>
+      <div style="max-width:170px"><label for="aNovEstado">Estado</label><select id="aNovEstado"><option value="">Sin cambio</option><option>Presente</option><option>Ausente</option><option>Tarde</option></select></div>
+      <div style="max-width:150px"><label for="aNovJust">Justificada</label><select id="aNovJust"><option value="">—</option><option value="true">Sí</option><option value="false">No</option></select></div>
+      <div><label for="aNovMotivo">Justificación o motivo</label><input id="aNovMotivo" maxlength="200"></div>
+    </div>
+    <div class="fila">
+      <div style="max-width:180px"><label for="aNovTipo">Tipo de ausencia</label><select id="aNovTipo"><option value="">—</option><option>Enfermedad</option><option>Licencia</option><option>Vacaciones</option><option>Estudio</option><option>Personal</option><option>Otro</option></select></div>
+      <div style="max-width:160px"><label for="aNovSP">Salida por permiso</label><input type="time" id="aNovSP"></div>
+      <div style="max-width:160px"><label for="aNovRP">Regreso del permiso</label><input type="time" id="aNovRP"></div>
+      <div><label for="aNovObs">Observación</label><input id="aNovObs" maxlength="200"></div>
+    </div>
+    <button style="margin-top:14px" onclick="guardarNovedad()">Guardar novedad</button>
+    <div class="msg" id="mDet"></div>
+  </div>
+
+  <div class="hoja oculto" data-p="indu">
+    <div class="filtros"><div><label for="aInduEmp">Empleado</label><select id="aInduEmp"></select></div></div>
+    <div class="tabla-scroll"><table><thead><tr><th>Prenda</th><th class="num">Total entregado</th><th>Última entrega</th></tr></thead><tbody id="aInduTot"></tbody></table></div>
+    <h4>Historial</h4>
+    <div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Prenda</th><th class="num">Cantidad</th><th>Estado</th><th>Origen</th><th>Comentario</th></tr></thead><tbody id="aInduHist"></tbody></table></div>
+    <h4>Cargar una entrega</h4>
+    <p class="intro">Las que cargás acá quedan confirmadas.</p>
+    <div class="fila">
+      <div><label for="aInduPrenda">Prenda</label><select id="aInduPrenda"></select></div>
+      <div style="max-width:130px"><label for="aInduCant">Cantidad</label><input id="aInduCant" type="number" min="1" max="50" value="1"></div>
+      <div><label for="aInduObs">Comentario</label><input id="aInduObs" maxlength="200"></div>
+    </div>
+    <button style="margin-top:14px" onclick="adminEntrega()">Guardar entrega</button>
+    <div class="msg" id="mIndu"></div>
+  </div>
+
+  <div class="hoja oculto" data-p="emp">
+    <h3>Empleados y accesos</h3>
+    <p class="intro">Cada empleado entra en la tablet con su usuario y la contraseña que le asignes acá.</p>
+    <div class="tabla-scroll"><table><thead><tr><th>ID</th><th>Nombre</th><th>Puesto</th><th>Jornada</th><th>Ingreso</th><th>Usuario</th><th>Acceso</th><th></th></tr></thead><tbody id="aEmp"></tbody></table></div>
+    <div class="msg" id="mEmp"></div>
+  </div>
+</section>
+
 <script>
-  /* Qué pantalla abre cada puesto. Para sumar un sector: agregar su línea acá
-     y crear el usuario <sector>@biofix.com en Supabase. */
-  var PANTALLA_DE = {
-    deposito:   'deposito.html',
-    mecanizado: 'mecanizado.html',
-    lavado:     'lavado.html',
-    lavados:    'lavados.html',
-    blasting:   'blasting.html',
-    control:    'control.html',
-    envasado:   'envasado-primsec.html',
-    limpieza:   'limpieza.html'
-  };
+/* ===================== Configuración ===================== */
+var SB_URL = 'https://zsxuyalnxwedqsfqvgsl.supabase.co';
+var SB_KEY = 'sb_publishable_c56JEbSgS2REWtI-abCDpw_M4nrUMJ_';
+var DOMINIO_EMPLEADOS = 'personal.biofix.com';
+var DOMINIO_ADMIN = 'biofix.com';
+var ADMINS_USUARIO = ['tecnica'];          // se escriben sin @
+var SEG_CIERRE_AUTO = 60;                  // kiosco: se cierra la sesión sola tras N segundos sin uso
 
-  var NUEVAS = [
-    { t: 'Supervisión',            d: 'Auditoría, historia de lote y estadística de cotas', href: 'supervision.html' },
-    { t: 'Predicción',             d: 'Cuándo sale cada lote, carga por sector, quiebre de stock, cuánto producir y alerta de cotas', href: 'prediccion.html' },
-    { t: 'Gráficos',               d: 'Indicadores y gráficos de todos los sectores', href: 'graficos.html' },
-    { t: 'Depósito',               d: 'Semielaborado, Sala Blanca y Componentes', href: 'deposito.html' },
-    { t: 'Depósito — Lavado Final',d: 'Envío a Lavado Final',                     href: 'depositolf.html' },
-    { t: 'Mecanizado',             d: 'Máquina, cierres y control de piezas',     href: 'mecanizado.html' },
-    { t: 'Lavado',                 d: 'Primario, Abrillantado, Vaporeado, Secundario', href: 'lavado.html' },
-    { t: 'Lavados Grueso / Final', d: 'Lavado Grueso y Lavado Final',             href: 'lavados.html' },
-    { t: 'Control de Calidad',     d: 'Control por cotas',                        href: 'control.html' },
-    { t: 'Blasting',               d: 'Bandejas, blastinado y control',           href: 'blasting.html' },
-    { t: 'Envasado — Paso 1',      d: 'Carga de lotes desde Sala Blanca',         href: 'envasado.html' },
-    { t: 'Envasado — Prim. / Sec.',d: 'Cierre del Primario y Secundario (PDF)',  href: 'envasado-primsec.html' },
-    { t: 'Depósito — Ingreso y revisión', d: 'Pendientes Salida a Depósito y fallas en revisión (IPA)', href: 'movimientos.html' },
-    { t: 'Envasado — Anexo',       d: 'Anexo, Orden de Fabricación y Registro Histórico', href: 'envasado-anexo.html' },
-    { t: 'Control de Limpieza',    d: 'Instalaciones, Baños y registro diario de baño', href: 'limpieza.html' },
-    { t: 'Mantenimiento',          d: 'Pantallas ON / OFF (cartel de mantenimiento)', href: 'mantenimiento.html' }
-  ];
+var sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+var EMP_ID = null, ES_ADMIN = false, EMPLEADOS = [], PRENDAS = [], timerAuto = null, segAuto = 0;
 
-  BIOFIX.sesion.then(function (session) {
-    var u = BIOFIX.sectorDe(session);
-    var admins = (BIOFIX_CFG.admins || []);
+/* ===================== Utilidades ===================== */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]; }); }
+function msg(id, texto, ok) { var m = $(id); m.textContent = texto; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+function limpiarMsg(id) { $(id).className = 'msg'; $(id).textContent = ''; }
+function errTxt(e) { return (e && (e.message || e.error_description || e.error)) || String(e); }
+function hhmm(intervalo) {               // "09:25:00" / "1 day 02:00:00" -> "9:25"
+  if (!intervalo) return '';
+  var m = String(intervalo).match(/(?:(\d+) days? )?(-)?(\d+):(\d+)/); if (!m) return String(intervalo);
+  var h = (m[1] ? Number(m[1]) * 24 : 0) + Number(m[3]);
+  return (m[2] || '') + h + ':' + m[4];
+}
+function minutos(intervalo) {
+  if (!intervalo) return 0;
+  var m = String(intervalo).match(/(?:(\d+) days? )?(-)?(\d+):(\d+)/); if (!m) return 0;
+  var v = ((m[1] ? Number(m[1]) * 24 : 0) + Number(m[3])) * 60 + Number(m[4]);
+  return m[2] ? -v : v;
+}
+function minAHora(mins) { var s = mins < 0 ? '-' : ''; mins = Math.abs(Math.round(mins)); return s + Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0'); }
+function fechaAR(d) { return d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }); }
+function horaAR(d) { return d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }); }
+var ORIGENES = { kiosco: 'Tablet', manual: 'Corrección manual', planilla: 'Planilla en papel', migracion: 'Sistema anterior', admin: 'Administración', empleado: 'Empleado' };
+function hoyISO() { return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }); }
+function mesActual() { return hoyISO().slice(0, 7); }
+function rangoMes(ym) { var p = ym.split('-').map(Number); var fin = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(); return [ym + '-01', ym + '-' + String(fin).padStart(2, '0')]; }
+function fmtFecha(iso) { var p = String(iso).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
 
-    if (admins.indexOf(u) >= 0) {
-      document.getElementById('estado').classList.add('hide');
-      document.getElementById('menu').classList.remove('hide');
-      document.getElementById('nuevas').innerHTML = NUEVAS.map(function (x) {
-        return '<a class="card" href="' + x.href + '"><div class="t">' + x.t + '</div><div class="d">' + x.d + '</div><span class="tag nuevo">GitHub</span></a>';
-      }).join('');
-      return;
-    }
+function tic() {
+  var d = new Date();
+  var hm = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false });
+  var s = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', second: '2-digit' }).slice(-2).padStart(2, '0');
+  $('horaGrande').innerHTML = hm + '<span class="seg">' + s + '</span>';
+  var f = d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  $('fechaGrande').textContent = f.charAt(0).toUpperCase() + f.slice(1);
+  $('reloj').textContent = fechaAR(d) + '  ' + hm;
+}
+tic(); setInterval(tic, 1000);
 
-    if (PANTALLA_DE[u]) { location.replace(PANTALLA_DE[u]); return; }
+/* ===================== Sesión ===================== */
+function emailDe(usuario) {
+  usuario = String(usuario || '').trim().toLowerCase();
+  if (usuario.indexOf('@') >= 0) return usuario;
+  return usuario + '@' + (ADMINS_USUARIO.indexOf(usuario) >= 0 ? DOMINIO_ADMIN : DOMINIO_EMPLEADOS);
+}
+async function ingresar(ev) {
+  ev.preventDefault(); limpiarMsg('mLogin');
+  $('btnIngresar').disabled = true;
+  try {
+    var r = await sb.auth.signInWithPassword({ email: emailDe($('lUsuario').value), password: $('lPass').value });
+    if (r.error) throw new Error('Usuario o contraseña incorrectos.');
+    $('lPass').value = '';
+    await arrancar();
+  } catch (e) { msg('mLogin', errTxt(e), false); }
+  $('btnIngresar').disabled = false;
+}
+async function salir() {
+  clearInterval(timerAuto); timerAuto = null;
+  await sb.auth.signOut();
+  ['vEmpleado', 'vRopa', 'vAdmin', 'eAuto', 'reloj', 'btnSalir'].forEach(function (v) { $(v).classList.add('oculto'); });
+  $('vKiosco').classList.remove('oculto'); $('vLogin').classList.remove('oculto');
+  ['mFichar', 'mAviso', 'mEntrega'].forEach(limpiarMsg);
+  $('lUsuario').value = ''; $('lUsuario').focus();
+}
+async function arrancar() {
+  var s = (await sb.auth.getSession()).data.session;
+  if (!s) return;
+  var a = await sb.from('rrhh_admins').select('user_id').eq('user_id', s.user.id).maybeSingle();
+  ES_ADMIN = !!(a.data);
+  var pr = await sb.from('rrhh_prendas').select('nombre').order('orden');
+  PRENDAS = (pr.data || []).map(function (x) { return x.nombre; });
+  $('vLogin').classList.add('oculto'); $('btnSalir').classList.remove('oculto');
+  if (ES_ADMIN) {
+    $('vKiosco').classList.add('oculto'); $('reloj').classList.remove('oculto');
+    $('vAdmin').classList.remove('oculto'); await iniciarAdmin();
+  } else {
+    ['vEmpleado', 'vRopa', 'eAuto'].forEach(function (v) { $(v).classList.remove('oculto'); });
+    prepararAviso(); MES_VISTO = null; await cargarEmpleado(); cargarMisHorarios(); reiniciarAuto();
+  }
+}
 
-    document.getElementById('estado').innerHTML =
-      'El puesto <b>' + u + '</b> todavía no tiene una pantalla asignada. Avisale al área técnica.';
+/* ===================== Kiosco (empleado) ===================== */
+function reiniciarAuto() {
+  segAuto = SEG_CIERRE_AUTO;
+  if (!timerAuto) timerAuto = setInterval(function () {
+    segAuto--;
+    $('eAuto').textContent = 'Por seguridad, la sesión se cierra sola en ' + segAuto + ' segundos.';
+    if (segAuto <= 0) salir();
+  }, 1000);
+}
+['click', 'keydown', 'touchstart'].forEach(function (ev) { document.addEventListener(ev, function () { if (timerAuto) segAuto = SEG_CIERRE_AUTO; }); });
+
+var MES_VISTO = null;
+var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var DIAS_SEM = ['dom','lun','mar','mié','jue','vie','sáb'];
+function moverMes(n) {
+  var p = (MES_VISTO || mesActual()).split('-'), d = new Date(Number(p[0]), Number(p[1]) - 1 + n, 1);
+  var m = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  if (m > mesActual()) return;
+  MES_VISTO = m; cargarMisHorarios();
+}
+async function cargarMisHorarios() {
+  var mes = MES_VISTO || mesActual(), p = mes.split('-');
+  $('hMes').textContent = MESES[Number(p[1]) - 1].charAt(0).toUpperCase() + MESES[Number(p[1]) - 1].slice(1) + ' ' + p[0];
+  $('hSig').disabled = mes >= mesActual();
+  var r = await sb.rpc('rrhh_mis_horarios', { p_mes: mes });
+  if (r.error) { $('hDias').innerHTML = '<tr><td colspan="5" class="vacio">' + esc(errTxt(r.error)) + '</td></tr>'; return; }
+  var d = r.data || {}, hoy = hoyISO();
+  $('hDias').innerHTML = (d.dias || []).map(function (x) {
+    var f = new Date(x.fecha + 'T12:00:00'), dia = DIAS_SEM[f.getDay()] + ' ' + f.getDate();
+    var sinMarca = !x.entrada && !x.salida;
+    var est = sinMarca ? '<span class="falta">' + esc(x.estado || 'Sin marcas') + (x.justificada ? ', justificado' : '') + '</span>' : '';
+    return '<tr' + (x.fecha === hoy ? ' class="hoy"' : '') + '><td>' + dia + '</td>' +
+      (sinMarca ? '<td colspan="2">' + est + '</td>' : '<td>' + esc(x.entrada || '—') + '</td><td>' + esc(x.salida || (x.fecha === hoy ? 'en planta' : '—')) + '</td>') +
+      '<td class="num">' + esc(x.trabajado || '') + '</td><td class="num">' + esc(x.extra && x.extra !== '00:00' ? x.extra : '') + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="vacio">No hay registros en este mes.</td></tr>';
+  $('hTot').textContent = d.total || '0:00';
+  $('hExt').textContent = d.total_extra && d.total_extra !== '0:00' ? d.total_extra : '';
+}
+async function cargarEmpleado() {
+  var r = await sb.rpc('rrhh_mi_estado');
+  if (r.error || !r.data) {
+    $('eNombre').textContent = 'Tu usuario no está asociado a un empleado.';
+    $('btnLlegada').disabled = $('btnSalida').disabled = true; return;
+  }
+  var d = r.data;
+  EMP_ID = d.id;
+  $('eNombre').textContent = 'Hola, ' + d.nombre.split(' ')[0];
+  $('ePuesto').textContent = d.nombre + (d.puesto ? ', ' + d.puesto : '');
+  var hoy = d.hoy || [];
+  $('eHoy').innerHTML = hoy.length ? hoy.map(function (f) { return '<span class="marca-hoy ' + f.tipo + '">' + (f.tipo === 'entrada' ? 'Llegada ' : 'Salida ') + esc(f.hora) + '</span>'; }).join('') : '<span class="muted">Todavía no marcaste hoy.</span>';
+  var ult = hoy.length ? hoy[hoy.length - 1].tipo : null;
+  $('btnLlegada').disabled = (ult === 'entrada');
+  $('btnSalida').disabled = (ult !== 'entrada');
+  $('eIndu').innerHTML = (d.indumentaria || []).map(function (i) { return '<li><span>' + esc(i.prenda) + '</span><span class="cant">' + i.cantidad + '</span><span class="cuando">' + esc(i.ultima) + '</span></li>'; }).join('') || '<li class="muted">Todavía no hay entregas registradas.</li>';
+  var p = d.pendientes || [];
+  $('ePendWrap').classList.toggle('oculto', !p.length);
+  $('ePend').innerHTML = p.map(function (i) { return esc(i.cantidad + ' × ' + i.prenda) + ' <span style="opacity:.75">(' + esc(i.fecha) + ')</span>'; }).join('<br>');
+  var EST = { pendiente: 'pend', aprobado: 'ok', rechazado: 'no' };
+  $('eAvisos').innerHTML = (d.avisos || []).map(function (a) {
+    return '<li><span>' + esc(TIPOS_AVISO[a.tipo] || a.tipo) + '<br><span class="muted">' + esc(a.motivo) + (a.foto ? ', con certificado' : '') + '</span></span><span class="cuando">' + esc(a.fecha) + '</span><span><span class="estado ' + (EST[a.estado] || '') + '">' + esc(a.estado) + '</span></span></li>';
+  }).join('') || '<li class="muted">No enviaste avisos.</li>';
+  $('ePrenda').innerHTML = PRENDAS.map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('');
+}
+async function fichar(tipo) {
+  limpiarMsg('mFichar');
+  $('btnLlegada').disabled = $('btnSalida').disabled = true;
+  var r = await sb.rpc('rrhh_fichar', { p_tipo: tipo });
+  if (r.error) msg('mFichar', errTxt(r.error), false);
+  else msg('mFichar', (tipo === 'entrada' ? 'Llegada' : 'Salida') + ' registrada: ' + r.data.fecha + ' ' + r.data.hora + ' h.', true);
+  await cargarEmpleado(); MES_VISTO = null; cargarMisHorarios();
+  segAuto = 15;   // después de marcar, se cierra a los pocos segundos
+}
+async function registrarEntrega() {
+  limpiarMsg('mEntrega');
+  var cant = Number($('eCant').value);
+  if (!(cant >= 1 && cant <= 50)) { msg('mEntrega', 'Cantidad inválida.', false); return; }
+  var r = await sb.rpc('rrhh_registrar_entrega', { p_prenda: $('ePrenda').value, p_cantidad: cant, p_obs: $('eObs').value });
+  if (r.error) { msg('mEntrega', errTxt(r.error), false); return; }
+  msg('mEntrega', 'Entrega registrada. Queda pendiente hasta que la confirme administración.', true);
+  $('eCant').value = 1; $('eObs').value = '';
+  await cargarEmpleado();
+}
+
+/* ===================== Administración ===================== */
+async function iniciarAdmin() {
+  document.querySelectorAll('#aTabs button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('#aTabs button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+      document.querySelectorAll('#vAdmin [data-p]').forEach(function (p) { p.classList.toggle('oculto', p.getAttribute('data-p') !== b.getAttribute('data-t')); });
+      ({ hoy: cargarHoy, pend: cargarPend, avisos: cargarAvisos, plan: cargarPlanilla, mes: cargarMes, det: cargarDetalle, indu: cargarIndu, emp: cargarEmpleados })[b.getAttribute('data-t')]();
+    };
   });
+  var e = await sb.from('rrhh_empleados').select('*').order('id');
+  EMPLEADOS = e.data || [];
+  var opts = EMPLEADOS.filter(function (x) { return x.estado === 'Activo'; }).map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.nombre) + '</option>'; }).join('');
+  $('aDetEmp').innerHTML = opts; $('aInduEmp').innerHTML = opts;
+  $('aInduPrenda').innerHTML = PRENDAS.map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('');
+  $('aMes').value = $('aDetMes').value = mesActual();
+  $('aMes').onchange = cargarMes; $('aDetMes').onchange = cargarDetalle; $('aDetEmp').onchange = cargarDetalle; $('aInduEmp').onchange = cargarIndu;
+  $('aNovFecha').value = hoyISO();
+  $('aAvFiltro').onchange = cargarAvisos;
+  $('aPlFecha').onchange = cargarPlanilla;
+  await cargarHoy(); await contarPend();
+}
+async function cargarHoy() {
+  var h = hoyISO();
+  $('aHoyFecha').textContent = 'Hoy, ' + fmtFecha(h);
+  var r = await sb.from('rrhh_v_dias').select('*').eq('fecha', h);
+  var por = {}; (r.data || []).forEach(function (x) { por[x.empleado_id] = x; });
+  $('aHoy').innerHTML = EMPLEADOS.filter(function (x) { return x.estado === 'Activo'; }).map(function (e) {
+    var d = por[e.id] || {};
+    var est = d.estado || (d.hora_entrada ? 'Presente' : '');
+    var tag = d.hora_salida ? '<span class="estado azul">Se retiró</span>' : d.hora_entrada ? '<span class="estado ok">En planta</span>' : est === 'Ausente' ? '<span class="estado no">Ausente</span>' : '<span class="estado pend">Sin marcar</span>';
+    return '<tr><td>' + esc(e.nombre) + '</td><td>' + esc(d.hora_entrada || '') + '</td><td>' + esc(d.hora_salida || '') + '</td><td>' + tag + (d.tiene_correccion ? ' <span class="estado">Corregido</span>' : '') + '</td></tr>';
+  }).join('');
+}
+async function contarPend() {
+  var r = await sb.from('rrhh_entregas').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente');
+  $('aPendN').textContent = r.count ? r.count : '';
+  var a = await sb.from('rrhh_avisos').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente');
+  $('aAvN').textContent = a.count ? a.count : '';
+}
+async function cargarPend() {
+  limpiarMsg('mPend');
+  var r = await sb.from('rrhh_entregas').select('*').eq('estado', 'pendiente').order('fecha');
+  var nom = {}; EMPLEADOS.forEach(function (e) { nom[e.id] = e.nombre; });
+  $('aPend').innerHTML = (r.data || []).map(function (x) {
+    return '<tr><td>' + fechaAR(new Date(x.fecha)) + ' ' + horaAR(new Date(x.fecha)) + '</td><td>' + esc(nom[x.empleado_id]) + '</td><td>' + esc(x.prenda) + '</td><td class="num">' + x.cantidad + '</td><td>' + esc(x.obs || '') + '</td>' +
+      '<td><button class="chico verde" onclick="resolver(' + x.id + ',true)">Confirmar</button> <button class="chico rojo" onclick="resolver(' + x.id + ',false)">Rechazar</button></td></tr>';
+  }).join('') || '<tr><td colspan="6" class="vacio">No hay entregas pendientes.</td></tr>';
+}
+async function resolver(id, aprobar) {
+  var obs = aprobar ? '' : (prompt('Motivo del rechazo:') || '');
+  if (!aprobar && !obs) return;
+  var r = await sb.rpc('rrhh_resolver_entrega', { p_id: id, p_aprobar: aprobar, p_obs: obs });
+  if (r.error) msg('mPend', errTxt(r.error), false); else msg('mPend', aprobar ? 'Entrega confirmada.' : 'Entrega rechazada.', true);
+  await cargarPend(); await contarPend();
+}
+var DATOS_MES = [];
+/* Nota del día: llegada tarde / retiro antes y cuánto recuperó (no cuenta como extra). */
+function txtRecup(d) {
+  var t = minutos(d.llegada_tarde), a = minutos(d.salida_anticipada), r = minutos(d.recuperado), p = [];
+  if (t > 0) p.push('Llegó ' + minAHora(t) + ' tarde');
+  if (a > 0) p.push('se retiró ' + minAHora(a) + ' antes');
+  if (r > 0) p.push('recuperó ' + minAHora(r));
+  return p.join(', ');
+}
+async function cargarMes() {
+  var rg = rangoMes($('aMes').value || mesActual());
+  var r = await sb.from('rrhh_v_dias').select('*').gte('fecha', rg[0]).lte('fecha', rg[1]);
+  var res = {};
+  EMPLEADOS.filter(function (x) { return x.estado === 'Activo'; }).forEach(function (e) { res[e.id] = { nombre: e.nombre, dias: 0, trab: 0, extra: 0, rec: 0, perm: 0, falt: 0, aus: 0, inj: 0 }; });
+  (r.data || []).forEach(function (d) {
+    var x = res[d.empleado_id]; if (!x) return;
+    if (d.hora_entrada) x.dias++;
+    x.trab += minutos(d.trabajado); x.extra += minutos(d.horas_extra); x.rec += minutos(d.recuperado); x.perm += minutos(d.horas_permiso);
+    if (d.estado === 'Ausente') { x.aus++; if (d.justificada !== true) x.inj++; }
+    if (d.trabajado && d.justificada !== true) {
+      var f = d.jornada_min - minutos(d.trabajado) - minutos(d.horas_permiso);
+      if (f > 0) x.falt += f;
+    }
+  });
+  DATOS_MES = Object.keys(res).map(function (k) { var x = res[k]; x.id = k; x.saldo = x.extra - x.falt; x.neto = Math.max(0, x.falt - x.extra); x.presentismo = (x.neto <= 30 && x.inj === 0); return x; });
+  $('aMesT').innerHTML = DATOS_MES.map(function (x) {
+    return '<tr><td>' + esc(x.nombre) + '</td><td class="num">' + x.dias + '</td><td class="num">' + minAHora(x.trab) + '</td><td class="num">' + minAHora(x.extra) + '</td><td class="num">' + minAHora(x.rec) + '</td><td class="num">' + minAHora(x.perm) + '</td><td class="num">' + minAHora(x.falt) + '</td><td class="num">' + (x.saldo < 0 ? '−' : '+') + minAHora(Math.abs(x.saldo)) + '</td><td class="num">' + x.aus + '</td><td class="num">' + x.inj + '</td><td>' + (x.presentismo ? '<span class="estado ok">Cumple</span>' : '<span class="estado no">No cumple</span>') + '</td></tr>';
+  }).join('');
+}
+function exportarMes() {
+  var filas = [['ID', 'Empleado', 'Dias', 'Horas', 'Extras', 'Recuperado', 'Permisos', 'Faltantes', 'Saldo', 'Ausencias', 'Injustificadas', 'Presentismo']];
+  DATOS_MES.forEach(function (x) { filas.push([x.id, x.nombre, x.dias, minAHora(x.trab), minAHora(x.extra), minAHora(x.rec), minAHora(x.perm), minAHora(x.falt), (x.saldo < 0 ? '-' : '') + minAHora(Math.abs(x.saldo)), x.aus, x.inj, x.presentismo ? 'Si' : 'No']); });
+  bajarCSV(filas, 'RRHH_resumen_' + ($('aMes').value || mesActual()) + '.csv');
+}
+function bajarCSV(filas, nombre) {
+  var csv = '\ufeff' + filas.map(function (f) { return f.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+}
+/* Detalle día por día: devuelve filas para un empleado (o todos) en el mes */
+async function filasDetalle(empId, mes) {
+  var rg = rangoMes(mes);
+  var q = sb.from('rrhh_v_dias').select('*').gte('fecha', rg[0]).lte('fecha', rg[1]).order('empleado_id').order('fecha');
+  if (empId) q = q.eq('empleado_id', empId);
+  var r = await q; if (r.error) throw r.error;
+  return (r.data || []).map(function (d) {
+    var perm = d.salida_permiso ? (String(d.salida_permiso).slice(0, 5) + (d.regreso_permiso ? ' a ' + String(d.regreso_permiso).slice(0, 5) : '')) : '';
+    var notas = [d.justificada === true ? 'Justificada' : '', d.justificacion, d.tipo_ausencia, d.motivo_permiso, txtRecup(d), d.obs].filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(', ');
+    var f = new Date(d.fecha + 'T12:00:00');
+    return { id: d.empleado_id, nombre: d.nombre, fecha: fmtFecha(d.fecha), dia: DIAS_SEM[f.getDay()], estado: d.estado || '', entrada: d.hora_entrada || '', salida: d.hora_salida || '',
+      trabajado: hhmm(d.trabajado), extra: hhmm(d.horas_extra), permiso: perm, notas: notas, corregido: d.tiene_correccion ? 'Sí' : '' };
+  });
+}
+var CAB_DET = ['ID', 'Empleado', 'Fecha', 'Día', 'Estado', 'Llegada', 'Salida', 'Trabajado', 'Extra', 'Permiso', 'Notas', 'Marca manual'];
+function aFila(x) { return [x.id, x.nombre, x.fecha, x.dia, x.estado, x.entrada, x.salida, x.trabajado, x.extra, x.permiso, x.notas, x.corregido]; }
+async function exportarDetalle(todos) {
+  var mes = todos ? ($('aMes').value || mesActual()) : ($('aDetMes').value || mesActual());
+  var emp = todos ? null : $('aDetEmp').value;
+  try {
+    var xs = await filasDetalle(emp, mes);
+    var nom = todos ? 'todos' : (xs[0] ? xs[0].nombre : emp).replace(/\s+/g, '_');
+    bajarCSV([CAB_DET].concat(xs.map(aFila)), 'RRHH_detalle_' + nom + '_' + mes + '.csv');
+  } catch (e) { msg(todos ? 'mMes' : 'mDet', errTxt(e), false); }
+}
+async function imprimirDetalle(todos) {
+  var w = window.open('', '_blank');   // se abre ya para que el navegador no lo bloquee
+  var mes = todos ? ($('aMes').value || mesActual()) : ($('aDetMes').value || mesActual());
+  var emp = todos ? null : $('aDetEmp').value;
+  try {
+    var xs = await filasDetalle(emp, mes), grupos = {};
+    xs.forEach(function (x) { (grupos[x.id] = grupos[x.id] || []).push(x); });
+    var p = mes.split('-'), titMes = MESES[Number(p[1]) - 1] + ' ' + p[0];
+    var res = {}; (DATOS_MES || []).forEach(function (r) { res[r.id] = r; });
+    var html = Object.keys(grupos).map(function (id) {
+      var g = grupos[id], tot = 0, ext = 0;
+      g.forEach(function (x) { tot += minutos(x.trabajado); ext += minutos(x.extra); });
+      return '<section><h2>' + esc(g[0].nombre) + '</h2><p class="sub">Registro de asistencia, ' + titMes + '</p>' +
+        '<table><thead><tr><th>Fecha</th><th>Día</th><th>Estado</th><th>Llegada</th><th>Salida</th><th class="n">Trabajado</th><th class="n">Extra</th><th>Permiso</th><th>Notas</th></tr></thead><tbody>' +
+        g.map(function (x) { return '<tr><td>' + x.fecha + '</td><td>' + x.dia + '</td><td>' + esc(x.estado) + '</td><td>' + esc(x.entrada) + '</td><td>' + esc(x.salida) + '</td><td class="n">' + x.trabajado + '</td><td class="n">' + x.extra + '</td><td>' + esc(x.permiso) + '</td><td>' + esc(x.notas) + (x.corregido ? ' (marca manual)' : '') + '</td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><td colspan="5">Total del mes</td><td class="n">' + minAHora(tot) + '</td><td class="n">' + minAHora(ext) + '</td><td colspan="2"></td></tr></tfoot></table>' +
+        '<div class="firmas"><div>Firma del empleado</div><div>Firma de administración</div></div></section>';
+    }).join('') || '<p>No hay registros en ese mes.</p>';
+    w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Asistencia ' + titMes + '</title><style>' +
+      'body{font-family:Onest,Arial,sans-serif;color:#18252B;margin:24px;font-size:12px}h1{font-size:13px;color:#5B6B70;font-weight:500;margin:0 0 18px}' +
+      'h2{font-size:18px;margin:0}.sub{margin:2px 0 12px;color:#5B6B70}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid #D6DEDA}' +
+      'th{font-size:11px;color:#5B6B70;font-weight:600}.n{text-align:right;font-variant-numeric:tabular-nums}tfoot td{font-weight:700;border-top:2px solid #18252B;border-bottom:0}' +
+      '.firmas{display:flex;gap:60px;margin-top:50px}.firmas div{flex:1;border-top:1px solid #18252B;padding-top:4px;text-align:center;color:#5B6B70}' +
+      'section{page-break-after:always}section:last-child{page-break-after:auto}@page{size:A4;margin:14mm}</style></head><body>' +
+      '<h1>Bio-Fix, registro de personal. Impreso el ' + fmtFecha(hoyISO()) + '</h1>' + html + '</body></html>');
+    w.document.close(); w.focus(); setTimeout(function () { w.print(); }, 400);
+  } catch (e) { w.close(); msg(todos ? 'mMes' : 'mDet', errTxt(e), false); }
+}
+async function cargarDetalle() {
+  limpiarMsg('mDet');
+  var emp = $('aDetEmp').value, rg = rangoMes($('aDetMes').value || mesActual());
+  var r = await sb.from('rrhh_v_dias').select('*').eq('empleado_id', emp).gte('fecha', rg[0]).lte('fecha', rg[1]).order('fecha');
+  $('aDet').innerHTML = (r.data || []).map(function (d) {
+    var perm = '';
+    if (d.salida_permiso && d.regreso_permiso) perm = 'Permiso de ' + String(d.salida_permiso).slice(0, 5) + ' a ' + String(d.regreso_permiso).slice(0, 5);
+    else if (d.salida_permiso) perm = 'Se retiró a las ' + String(d.salida_permiso).slice(0, 5);
+    var notas = [d.justificada === true ? 'Justificada' : '', d.justificacion, d.tipo_ausencia, perm, d.motivo_permiso, txtRecup(d), d.obs, d.tiene_correccion ? 'Con marca cargada a mano' : '']
+      .filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(', ');
+    return '<tr><td>' + fmtFecha(d.fecha) + '</td><td>' + esc(d.estado || '') + '</td><td>' + esc(d.hora_entrada || '') + '</td><td>' + esc(d.hora_salida || '') + '</td><td class="num">' + hhmm(d.trabajado) + '</td><td class="num">' + hhmm(d.horas_extra) + '</td><td class="muted">' + esc(notas) + '</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="vacio">Sin registros en el mes.</td></tr>';
+  var desde = new Date(rg[0] + 'T00:00:00-03:00').toISOString(), hasta = new Date(rg[1] + 'T23:59:59-03:00').toISOString();
+  var f = await sb.from('rrhh_fichadas').select('*').eq('empleado_id', emp).gte('ts', desde).lte('ts', hasta).order('ts');
+  $('aFich').innerHTML = (f.data || []).map(function (x) {
+    var t = new Date(x.ts);
+    return '<tr style="' + (x.anulada ? 'text-decoration:line-through;color:#94a3b8' : '') + '"><td>' + x.id + '</td><td>' + fechaAR(t) + ' ' + horaAR(t) + '</td><td>' + (x.tipo === 'entrada' ? 'Llegada' : 'Salida') + '</td><td>' + esc(ORIGENES[x.origen] || x.origen) + '</td><td>' + esc(x.anulada ? ('Anulada: ' + x.anulada_motivo) : (x.obs || '')) + '</td><td>' + (x.anulada ? '' : '<button class="chico sec" onclick="anular(' + x.id + ')">Anular</button>') + '</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="vacio">Sin fichadas.</td></tr>';
+}
+async function anular(id) {
+  var m = prompt('Motivo para anular la fichada #' + id + ':'); if (!m) return;
+  var r = await sb.rpc('rrhh_anular_fichada', { p_id: id, p_motivo: m });
+  if (r.error) msg('mDet', errTxt(r.error), false); else msg('mDet', 'Fichada anulada.', true);
+  await cargarDetalle();
+}
+async function cargarManual() {
+  limpiarMsg('mDet');
+  var v = $('aManTs').value; if (!v) { msg('mDet', 'Elegí fecha y hora.', false); return; }
+  var ts = new Date(v + ':00-03:00').toISOString();
+  var r = await sb.rpc('rrhh_admin_fichar', { p_empleado: $('aDetEmp').value, p_tipo: $('aManTipo').value, p_ts: ts, p_motivo: $('aManMot').value });
+  if (r.error) { msg('mDet', errTxt(r.error), false); return; }
+  msg('mDet', 'Marca guardada (queda registrada como corrección manual).', true);
+  $('aManMot').value = ''; await cargarDetalle();
+}
+async function guardarNovedad() {
+  limpiarMsg('mDet');
+  var fila = { empleado_id: $('aDetEmp').value, fecha: $('aNovFecha').value, origen: 'manual', actualizado: new Date().toISOString() };
+  if (!fila.fecha) { msg('mDet', 'Elegí la fecha.', false); return; }
+  if ($('aNovEstado').value) fila.estado = $('aNovEstado').value;
+  if ($('aNovJust').value) fila.justificada = $('aNovJust').value === 'true';
+  if ($('aNovMotivo').value) fila.justificacion = $('aNovMotivo').value;
+  if ($('aNovTipo').value) fila.tipo_ausencia = $('aNovTipo').value;
+  if ($('aNovSP').value) fila.salida_permiso = $('aNovSP').value;
+  if ($('aNovRP').value) fila.regreso_permiso = $('aNovRP').value;
+  if (fila.salida_permiso && fila.justificacion) fila.motivo_permiso = fila.justificacion;
+  if ($('aNovObs').value) fila.obs = $('aNovObs').value;
+  var r = await sb.from('rrhh_dias').upsert(fila, { onConflict: 'empleado_id,fecha' });
+  if (r.error) { msg('mDet', errTxt(r.error), false); return; }
+  msg('mDet', 'Novedad guardada.', true);
+  ['aNovEstado', 'aNovJust', 'aNovMotivo', 'aNovTipo', 'aNovSP', 'aNovRP', 'aNovObs'].forEach(function (i) { $(i).value = ''; });
+  await cargarDetalle();
+}
+async function cargarIndu() {
+  limpiarMsg('mIndu');
+  var emp = $('aInduEmp').value;
+  var r = await sb.from('rrhh_entregas').select('*').eq('empleado_id', emp).order('fecha', { ascending: false });
+  var tot = {};
+  (r.data || []).filter(function (x) { return x.estado === 'aprobada'; }).forEach(function (x) {
+    var t = tot[x.prenda] || (tot[x.prenda] = { cant: 0, ult: null });
+    t.cant += x.cantidad; if (!t.ult || x.fecha > t.ult) t.ult = x.fecha;
+  });
+  $('aInduTot').innerHTML = PRENDAS.map(function (p) { var t = tot[p]; return '<tr><td>' + esc(p) + '</td><td class="num">' + (t ? t.cant : 0) + '</td><td>' + (t ? fechaAR(new Date(t.ult)) : '') + '</td></tr>'; }).join('');
+  $('aInduHist').innerHTML = (r.data || []).map(function (x) {
+    var tag = x.estado === 'aprobada' ? 'ok' : x.estado === 'rechazada' ? 'no' : 'pend';
+    return '<tr><td>' + fechaAR(new Date(x.fecha)) + '</td><td>' + esc(x.prenda) + '</td><td class="num">' + x.cantidad + '</td><td><span class="estado ' + tag + '">' + esc(x.estado) + '</span></td><td>' + esc(x.origen) + '</td><td>' + esc([x.obs, x.resuelto_obs].filter(Boolean).join(' · ')) + '</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="vacio">Sin entregas.</td></tr>';
+}
+async function adminEntrega() {
+  var cant = Number($('aInduCant').value);
+  if (!(cant >= 1 && cant <= 50)) { msg('mIndu', 'Cantidad inválida.', false); return; }
+  var r = await sb.rpc('rrhh_admin_entrega', { p_empleado: $('aInduEmp').value, p_prenda: $('aInduPrenda').value, p_cantidad: cant, p_obs: $('aInduObs').value });
+  if (r.error) { msg('mIndu', errTxt(r.error), false); return; }
+  $('aInduObs').value = ''; $('aInduCant').value = 1;
+  await cargarIndu(); msg('mIndu', 'Entrega guardada.', true);
+}
+async function cargarEmpleados() {
+  var e = await sb.from('rrhh_empleados').select('*').order('id');
+  EMPLEADOS = e.data || [];
+  $('aEmp').innerHTML = EMPLEADOS.map(function (x) {
+    return '<tr><td>' + esc(x.id) + '</td><td>' + esc(x.nombre) + '</td><td>' + esc(x.puesto || '') + '</td><td>' + minAHora(x.jornada_min) + ' × ' + x.dias_semana + '</td><td>' + esc(x.fecha_ingreso || '') + '</td><td><b>' + esc(x.usuario || '') + '</b></td><td>' +
+      (x.user_id ? '<span class="estado ok">Activo</span>' : '<span class="estado pend">Sin usuario</span>') + '</td><td><button class="chico" onclick="clave(\'' + esc(x.id) + '\')">' + (x.user_id ? 'Cambiar contraseña' : 'Crear usuario') + '</button></td></tr>';
+  }).join('');
+}
+async function clave(id) {
+  limpiarMsg('mEmp');
+  var emp = EMPLEADOS.filter(function (x) { return x.id === id; })[0];
+  var p = prompt('Contraseña para ' + emp.nombre + ' (usuario: ' + emp.usuario + '). Mínimo 6 caracteres:');
+  if (!p) return;
+  var r = await sb.functions.invoke('rrhh-usuarios', { body: { accion: 'clave', empleado_id: id, password: p } });
+  var data = r.data || {};
+  if (r.error || data.error) {
+    var t = data.error;
+    if (!t && r.error && r.error.context && r.error.context.json) { try { t = (await r.error.context.json()).error; } catch (e) {} }
+    msg('mEmp', t || errTxt(r.error), false); return;
+  }
+  msg('mEmp', data.msg, true);
+  await cargarEmpleados();
+}
+
+/* ===================== Avisos y certificados ===================== */
+var TIPOS_AVISO = { llegada_tarde: 'Llegada tarde', retiro_anticipado: 'Retiro antes de hora', ausencia: 'Ausencia', permiso: 'Permiso', otro: 'Otro' };
+function prepararAviso() { $('avFecha').value = hoyISO(); limpiarFoto(); ajustarAviso(); }
+function abrirAviso(tipo) {
+  $('avTipo').value = tipo; $('avFecha').value = hoyISO(); ajustarAviso();
+  $('pAviso').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(function () { $('avMotivo').focus(); }, 400);
+}
+function ajustarAviso() {
+  var t = $('avTipo').value;
+  $('avHoras').classList.toggle('oculto', t === 'ausencia' || t === 'otro');
+  $('avHastaWrap').classList.toggle('oculto', t !== 'permiso');
+  $('avDesdeLbl').textContent = t === 'llegada_tarde' ? 'Hora a la que llegué' : t === 'retiro_anticipado' ? 'Hora a la que me retiro' : 'Hora de salida';
+  $('avMotivoOtroWrap').classList.toggle('oculto', $('avMotivo').value !== '__otro');
+}
+function limpiarFoto() { $('avFoto').value = ''; $('avFotoPrev').classList.add('oculto'); $('avFotoTxt').textContent = 'Sacar foto o elegir archivo'; }
+function previsualizarFoto() {
+  var f = $('avFoto').files[0]; if (!f) { limpiarFoto(); return; }
+  $('avFotoTxt').textContent = f.name;
+  if (/^image\//.test(f.type)) { $('avFotoPrev').src = URL.createObjectURL(f); $('avFotoPrev').classList.remove('oculto'); }
+  else $('avFotoPrev').classList.add('oculto');
+}
+// Las fotos se achican antes de subir (máx. 1800 px, JPEG) para que suban rápido desde la tablet
+function achicarImagen(file) {
+  return new Promise(function (ok) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { ok(file); return; }
+    var img = new Image();
+    img.onload = function () {
+      var max = 1800, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(function (b) { ok(b || file); }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function () { ok(file); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function enviarAviso() {
+  limpiarMsg('mAviso');
+  var t = $('avTipo').value;
+  var motivo = $('avMotivo').value === '__otro' ? $('avMotivoOtro').value.trim() : $('avMotivo').value;
+  if (!motivo) { msg('mAviso', 'Escribí el motivo.', false); return; }
+  var desde = $('avDesde').value || null, hasta = $('avHasta').value || null;
+  if ((t === 'llegada_tarde' || t === 'retiro_anticipado' || t === 'permiso') && !desde) { msg('mAviso', 'Completá la hora.', false); return; }
+  if (t === 'permiso' && !hasta) { msg('mAviso', 'Completá la hora de regreso.', false); return; }
+  $('btnAviso').disabled = true;
+  try {
+    var ruta = null, f = $('avFoto').files[0];
+    if (f) {
+      if (f.size > 25 * 1024 * 1024) throw new Error('El archivo es muy grande.');
+      var blob = await achicarImagen(f);
+      var ext = blob.type === 'application/pdf' ? 'pdf' : (blob.type === 'image/png' ? 'png' : 'jpg');
+      ruta = EMP_ID + '/' + $('avFecha').value + '-' + Date.now() + '.' + ext;
+      var up = await sb.storage.from('rrhh-certificados').upload(ruta, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+      if (up.error) throw new Error('No se pudo subir la foto: ' + up.error.message);
+    }
+    var r = await sb.rpc('rrhh_registrar_aviso', { p_tipo: t, p_fecha: $('avFecha').value, p_motivo: motivo, p_detalle: $('avDetalle').value,
+      p_hora_desde: (t === 'ausencia' || t === 'otro') ? null : desde, p_hora_hasta: t === 'permiso' ? hasta : null, p_archivo: ruta });
+    if (r.error) throw r.error;
+    msg('mAviso', 'Aviso enviado. Administración lo va a revisar.', true);
+    ['avDesde', 'avHasta', 'avDetalle', 'avMotivoOtro'].forEach(function (i) { $(i).value = ''; });
+    limpiarFoto(); await cargarEmpleado();
+  } catch (e) { msg('mAviso', errTxt(e), false); }
+  $('btnAviso').disabled = false;
+}
+
+async function cargarAvisos() {
+  limpiarMsg('mAv');
+  var q = sb.from('rrhh_avisos').select('*').order('fecha', { ascending: false }).order('creado', { ascending: false });
+  if ($('aAvFiltro').value === 'pendiente') q = q.eq('estado', 'pendiente');
+  else { var d = new Date(); d.setDate(d.getDate() - 60); q = q.gte('fecha', d.toISOString().slice(0, 10)); }
+  var r = await q;
+  var nom = {}; EMPLEADOS.forEach(function (e) { nom[e.id] = e.nombre; });
+  var EST = { pendiente: 'pend', aprobado: 'ok', rechazado: 'no' };
+  $('aAv').innerHTML = (r.data || []).map(function (a) {
+    var horario = a.hora_desde ? String(a.hora_desde).slice(0, 5) + (a.hora_hasta ? ' a ' + String(a.hora_hasta).slice(0, 5) : '') : '';
+    return '<tr><td>' + fmtFecha(a.fecha) + '</td><td>' + esc(nom[a.empleado_id] || a.empleado_id) + '</td><td>' + esc(TIPOS_AVISO[a.tipo] || a.tipo) + '</td><td>' + esc(a.motivo) + (a.detalle ? '<br><span class="muted">' + esc(a.detalle) + '</span>' : '') + '</td><td>' + horario + '</td>' +
+      '<td>' + (a.archivo ? '<button class="sec chico" onclick="verCertificado(\'' + esc(a.archivo) + '\')">Ver</button>' : '<span class="muted">No</span>') + '</td>' +
+      '<td><span class="estado ' + (EST[a.estado] || '') + '">' + esc(a.estado) + '</span>' + (a.resuelto_obs ? '<br><span class="muted">' + esc(a.resuelto_obs) + '</span>' : '') + '</td>' +
+      '<td>' + (a.estado === 'pendiente' ? '<div class="acciones-tabla"><button class="chico" onclick="resolverAviso(' + a.id + ',true)">Aprobar</button><button class="chico peligro" onclick="resolverAviso(' + a.id + ',false)">Rechazar</button></div>' : '') + '</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="vacio">No hay avisos para mostrar.</td></tr>';
+}
+async function verCertificado(ruta) {
+  var r = await sb.storage.from('rrhh-certificados').createSignedUrl(ruta, 300);
+  if (r.error) { msg('mAv', 'No se pudo abrir el archivo: ' + r.error.message, false); return; }
+  window.open(r.data.signedUrl, '_blank', 'noopener');
+}
+async function resolverAviso(id, aprobar) {
+  var obs = aprobar ? '' : (prompt('Motivo del rechazo:') || '');
+  if (!aprobar && !obs) return;
+  var r = await sb.rpc('rrhh_resolver_aviso', { p_id: id, p_aprobar: aprobar, p_obs: obs });
+  if (r.error) msg('mAv', errTxt(r.error), false); else msg('mAv', aprobar ? 'Aviso aprobado. El día quedó justificado.' : 'Aviso rechazado.', true);
+  await cargarAvisos(); await contarPend();
+}
+
+/* ===================== Carga de planilla en papel ===================== */
+function ayerISO() { var d = new Date(Date.now() - 86400000); return d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }); }
+async function cargarPlanilla() {
+  limpiarMsg('mPl');
+  if (!$('aPlFecha').value) $('aPlFecha').value = ayerISO();
+  $('aPlFecha').max = hoyISO();
+  var f = $('aPlFecha').value;
+  var desde = new Date(f + 'T00:00:00-03:00'), hasta = new Date(desde.getTime() + 86400000);
+  var r = await sb.from('rrhh_fichadas').select('*').eq('anulada', false).gte('ts', desde.toISOString()).lt('ts', hasta.toISOString()).order('ts');
+  var dd = await sb.from('rrhh_dias').select('empleado_id,estado').eq('fecha', f);
+  var por = {}; (r.data || []).forEach(function (x) { (por[x.empleado_id] = por[x.empleado_id] || []).push(x); });
+  var aus = {}; (dd.data || []).forEach(function (x) { if (x.estado === 'Ausente') aus[x.empleado_id] = true; });
+  $('aPl').innerHTML = EMPLEADOS.filter(function (e) { return e.estado === 'Activo'; }).map(function (e) {
+    var fs = por[e.id] || [];
+    var kiosco = fs.some(function (x) { return x.origen === 'kiosco'; });
+    var ent = fs.filter(function (x) { return x.tipo === 'entrada'; })[0], sal = fs.filter(function (x) { return x.tipo === 'salida'; }).slice(-1)[0];
+    var hE = ent ? horaAR(new Date(ent.ts)).slice(0, 5) : '', hS = sal ? horaAR(new Date(sal.ts)).slice(0, 5) : '';
+    var dis = kiosco ? ' disabled' : '';
+    var ya = kiosco ? '<span class="estado ok">Marcó en tablet</span>' : (fs.length ? '<span class="estado">Planilla/manual</span>' : (aus[e.id] ? '<span class="estado no">Ausente</span>' : '<span class="muted">No</span>'));
+    return '<tr data-emp="' + e.id + '"' + (kiosco ? ' data-k="1"' : '') + '><td>' + esc(e.nombre) + '</td>' +
+      '<td><input type="time" class="plE" value="' + hE + '"' + dis + ' style="min-width:110px"></td>' +
+      '<td><input type="time" class="plS" value="' + hS + '"' + dis + ' style="min-width:110px"></td>' +
+      '<td><input type="checkbox" class="plA"' + (aus[e.id] ? ' checked' : '') + dis + ' style="width:auto"></td>' +
+      '<td><input class="plO" maxlength="200"' + dis + '></td><td>' + ya + '</td></tr>';
+  }).join('');
+}
+async function guardarPlanilla() {
+  limpiarMsg('mPl');
+  var filas = [];
+  document.querySelectorAll('#aPl tr[data-emp]').forEach(function (tr) {
+    if (tr.dataset.k) return;
+    var e = tr.querySelector('.plE').value, s = tr.querySelector('.plS').value, a = tr.querySelector('.plA').checked, o = tr.querySelector('.plO').value;
+    if (!e && !s && !a) return;
+    filas.push({ empleado: tr.dataset.emp, entrada: e || null, salida: s || null, ausente: a, obs: o });
+  });
+  if (!filas.length) { msg('mPl', 'No hay nada para guardar. Completá las horas o marcá quién faltó.', false); return; }
+  $('btnPl').disabled = true;
+  var r = await sb.rpc('rrhh_cargar_planilla', { p_fecha: $('aPlFecha').value, p_filas: filas });
+  $('btnPl').disabled = false;
+  if (r.error) { msg('mPl', errTxt(r.error), false); return; }
+  msg('mPl', 'Día guardado: ' + r.data.guardados + ' empleado(s).' + (r.data.omitidos.length ? ' Sin cambios para quienes ya marcaron en la tablet.' : ''), true);
+  await cargarPlanilla();
+}
+
+arrancar();
 </script>
 </body>
 </html>
