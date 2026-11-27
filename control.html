@@ -143,11 +143,19 @@ window.BIOFIX_CACHE = ['ctlObtenerTolerancias'];</script>
     return out;
   }
   function lotesParaControl(d) {                    // = ctlObtenerLotesParaControl
-    var cLote = colDe(d.h, ['Lote']), enBorrador = {};
-    (d.filas || []).forEach(function (f) { enBorrador[txt((f.v || [])[cLote])] = true; });
+    /* 27/11/2026: un lote puede tener varias asignaciones (ej. 1209J: 50 Basal + 50 a convertir en
+     * Basal Tratado). Antes se ocultaba TODO el lote apenas se abría un control de cualquiera de ellas;
+     * ahora se oculta solo la asignación del mismo Lote + Producto (ya convertido) + Medida. */
+    var cLote = colDe(d.h, ['Lote']), cProd = colDe(d.h, ['Producto']), cMed = colDe(d.h, ['Medida']);
+    var clave = function (lote, prod, med) { return norm(lote) + '|' + norm(prod) + '|' + norm(med); };
+    var enBorrador = {};
+    (d.filas || []).forEach(function (f) {
+      var v = f.v || [];
+      enBorrador[clave(v[cLote], cProd >= 0 ? v[cProd] : '', cMed >= 0 ? v[cMed] : '')] = true;
+    });
     var out = [];
     (d.asig || []).forEach(function (a) {
-      if (enBorrador[txt(a.lote)]) return;
+      if (enBorrador[clave(a.lote, a.conversion || a.producto, a.medida)]) return;
       out.push({ producto: a.conversion || a.producto, productoOriginal: a.producto, teton: a.teton,
                  medida: a.medida, lote: a.lote, disponible: Number(a.cantidad) || 0 });
     });
